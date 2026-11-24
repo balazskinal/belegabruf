@@ -1,0 +1,49 @@
+name: Release
+
+# Bei jedem Versions-Tag (z. B. v1.0.0) wird ein ZIP gebaut und als
+# Release-Datei angehängt. Der Link "neueste Version" zeigt immer darauf:
+# https://github.com/<besitzer>/belegabruf/releases/latest
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version im Tag und in pyproject.toml vergleichen
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VERSION=$(grep -m1 '^version' pyproject.toml | cut -d'"' -f2)
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "Tag $TAG passt nicht zu pyproject.toml ($VERSION)"; exit 1
+          fi
+
+      - uses: astral-sh/setup-uv@v6
+      - name: Tests
+        run: uv run --group dev pytest -q
+
+      - name: ZIP bauen
+        run: |
+          NAME="belegabruf-${GITHUB_REF_NAME}"
+          mkdir -p "dist/$NAME"
+          cp -r belegabruf pyproject.toml uv.lock README.md LICENSE \
+            "Belege holen.command" "Belege holen.cmd" \
+            "Einrichten.command" "Einrichten.cmd" "dist/$NAME/"
+          find "dist/$NAME" -name "__pycache__" -type d -prune -exec rm -rf {} +
+          chmod +x "dist/$NAME/"*.command
+          (cd dist && zip -r -X "$NAME.zip" "$NAME")
+
+      - name: Release anlegen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "dist/belegabruf-${GITHUB_REF_NAME}.zip" \
+            --title "Belegabruf ${GITHUB_REF_NAME}" \
+            --notes "Herunterladen: belegabruf-${GITHUB_REF_NAME}.zip. Update: alten Programmordner löschen, dieses ZIP auspacken. Einstellungen und Anmeldungen bleiben erhalten."

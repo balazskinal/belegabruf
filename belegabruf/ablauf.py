@@ -85,7 +85,7 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, protokoll: Proto
     except (BrowserFehlt, ProfilBelegt) as fehler:
         ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=str(fehler))
     except Exception as fehler:  # noqa: BLE001 - nie abstürzen, immer melden
-        ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=f"{type(fehler).__name__}: {fehler}")
+        ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=f"{type(fehler).__name__}: {str(fehler).splitlines()[0][:200]}")
     if ergebnis.status == "ok":
         zustand.lauf_merken(konto.quelle, konto.name)
     return ergebnis
