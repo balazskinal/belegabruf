@@ -1,0 +1,23 @@
+# Python / uv
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# Niemals ins Repo: Browser-Sitzungen, Einstellungen, Belege, Protokolle
+profile/
+profiles/
+einstellungen.toml
+zustand.json
+protokoll.csv
+Belege/
+*.pdf
+
+# System
+.DS_Store
+Thumbs.db
+desktop.ini
