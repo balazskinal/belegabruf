@@ -232,7 +232,17 @@ class Airbnb(Quelle):
         # Die Werte der Auswahl ändern sich bei jedem Öffnen; die Beschriftung nicht.
         dialog = self._dialog_oeffnen(seite)
         dialog.locator("select").select_option(label=beschriftung)
-        dialog.locator("input[value=PDF]").check(force=True)
+        pdf = dialog.locator("input[value=PDF]")
+        for _ in range(3):
+            if pdf.is_checked():
+                break
+            try:
+                dialog.get_by_text("PDF-Datei").first.click(timeout=5000)
+            except Exception:  # noqa: BLE001 - dann direkt das Auswahlfeld anklicken
+                pdf.evaluate("e => e.click()")
+            seite.wait_for_timeout(500)
+        if not pdf.is_checked():
+            raise RuntimeError("PDF-Auswahl im Dialog nicht möglich")
         try:
             with seite.expect_download(timeout=90000) as warten:
                 dialog.locator("button", has_text="Herunterladen").click()
@@ -275,7 +285,13 @@ class Airbnb(Quelle):
                 else:
                     browser.pause()
                     try:
-                        inhalt = self._monats_pdf_laden(seite, text)
+                        try:
+                            inhalt = self._monats_pdf_laden(seite, text)
+                        except SitzungAbgelaufen:
+                            raise
+                        except Exception:  # noqa: BLE001 - einmal in Ruhe wiederholen
+                            browser.pause(5, 10)
+                            inhalt = self._monats_pdf_laden(seite, text)
                     except SitzungAbgelaufen:
                         erg.status = "abgelaufen"
                         break
