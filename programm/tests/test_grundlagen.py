@@ -10,9 +10,11 @@ import pytest
 
 from belegabruf import aktualisierung, einstellungen, pfade, pruefung, zustand
 from belegabruf.einstellungen import Einstellungen, Konto
+from belegabruf import ablauf, quellen
+from belegabruf import protokoll as protokoll_modul
 from belegabruf.protokoll import Protokoll
 from belegabruf.quellen import airbnb
-from belegabruf.quellen.basis import Beleg
+from belegabruf.quellen.basis import Beleg, Ergebnis, Quelle
 from belegabruf.ziele.ordner import Ordner
 
 
@@ -124,21 +126,94 @@ def test_einstellungen_liegen_nicht_im_programmordner(datenordner):
     assert pfade.profilordner("airbnb", "Mein Konto").name == "airbnb-mein-konto"
 
 
-def test_protokoll_verhindert_doppelte(tmp_path):
-    ordner = Ordner(tmp_path)
-    protokoll = Protokoll(tmp_path / "protokoll.csv")
-    beleg = Beleg(
-        quelle="airbnb", konto="privat", art="rechnung", schluessel="rechnung:abc",
-        dateiname="2026-10-27_HMAAAA1111_AIUC-1-DE-2.pdf", inhalt=b"%PDF-1.4 test", jahr=2026,
+def _beleg(schluessel="rechnung:abc", inhalt=b"%PDF-1.4 test"):
+    return Beleg(
+        quelle="airbnb", konto="Mein Konto", art="rechnung", schluessel=schluessel,
+        dateiname=f"2026-10-27_HMAAAA1111_{schluessel[-3:]}.pdf", inhalt=inhalt, jahr=2026,
         rechnungsdatum=date(2026, 10, 27), rechnungsnummer="AIUC-1-DE-2", buchungscode="HMAAAA1111",
     )
-    ort = ordner.abliefern(beleg)
-    assert ort == tmp_path / "airbnb" / "2026" / beleg.dateiname
-    protokoll.eintragen(beleg, ort, ["ordner"])
-    assert Protokoll(tmp_path / "protokoll.csv").bekannt("airbnb", "privat", "rechnung:abc")
-    # Datei gelöscht → wird beim nächsten Lauf neu geholt
+
+
+def test_protokoll_liegt_im_datenordner(tmp_path, datenordner):
+    protokoll = Protokoll("airbnb", "Mein Konto", tmp_path / "Belege")
+    assert protokoll.datei == datenordner / "protokolle" / "airbnb" / "mein-konto.csv"
+    assert "profile" not in protokoll.datei.parts
+
+
+def test_protokoll_entscheidet_nicht_der_ordner(tmp_path):
+    belege = tmp_path / "Belege"
+    beleg = _beleg()
+    ort = Ordner(belege).abliefern(beleg)
+    assert ort == belege / "airbnb" / "2026" / beleg.dateiname
+    Protokoll("airbnb", "Mein Konto", belege).eintragen(beleg, ort, ["ordner"])
+    # Datei gelöscht (z. B. an die Buchhaltung weitergegeben) → bleibt "schon geholt"
     ort.unlink()
-    assert not Protokoll(tmp_path / "protokoll.csv").bekannt("airbnb", "privat", "rechnung:abc")
+    protokoll = Protokoll("airbnb", "Mein Konto", belege)
+    assert protokoll.bekannt("rechnung:abc")
+    assert protokoll.fehlende() == ["rechnung:abc"]
+
+
+def test_altes_protokoll_wird_uebernommen(tmp_path):
+    belege = tmp_path / "Belege"
+    belege.mkdir()
+    alt = belege / "protokoll.csv"
+    alt.write_text(
+        "zeitpunkt;quelle;konto;art;schluessel;rechnungsdatum;buchungscode;rechnungsnummer;datei;ziele\n"
+        "2026-11-24T16:38:00;airbnb;Mein Konto;kontrolle;monat:2026-10;;;;airbnb/kontrolle/2026-10_mein-konto.pdf;ordner\n"
+        "2026-11-24T16:39:00;airbnb;Mein Konto;rechnung;rechnung:abc;2026-10-27;HMAAAA1111;AIUC-1-DE-2;airbnb/2026/x.pdf;ordner\n",
+        encoding="utf-8",
+    )
+    assert protokoll_modul.altes_protokoll_uebernehmen(belege) == 2
+    assert not alt.exists()
+    assert (belege / "protokoll.csv.uebernommen").exists()
+    protokoll = Protokoll("airbnb", "Mein Konto", belege)
+    assert protokoll.bekannt("rechnung:abc") and protokoll.bekannt("monat:2026-10")
+    # Zweiter Start: nichts mehr zu tun
+    assert protokoll_modul.altes_protokoll_uebernehmen(belege) == 0
+
+
+class _Probequelle(Quelle):
+    """Tut so, als böte der Anbieter zwei Rechnungen an."""
+
+    name = "probe"
+    anzeigename = "Probe"
+
+    def sitzung_pruefen(self):
+        return True
+
+    def anmelden_lassen(self, melden):
+        return True
+
+    def belege_holen(self, umgebung):
+        erg = Ergebnis(self.name, self.konto.name)
+        for schluessel in ("rechnung:aaa", "rechnung:bbb"):
+            if umgebung.bekannt(schluessel):
+                erg.schon_da += 1
+                continue
+            b = _beleg(schluessel, inhalt=b"%PDF-" + schluessel.encode())
+            b.quelle = self.name
+            umgebung.abliefern(b)
+            erg.neu += 1
+        return erg
+
+
+def test_geloeschte_datei_kommt_nur_auf_wunsch_wieder(tmp_path, monkeypatch):
+    monkeypatch.setitem(quellen.QUELLEN, "probe", ("Probe", lambda: _Probequelle))
+    einst = Einstellungen(belegordner=tmp_path / "Belege", konten=[Konto("probe", "Mein Konto")])
+    konto = einst.konten[0]
+    assert ablauf.abrufen(einst, konto, lambda t: None).neu == 2
+    assert ablauf.abrufen(einst, konto, lambda t: None).neu == 0
+    datei = tmp_path / "Belege" / "probe" / "2026" / "2026-10-27_HMAAAA1111_aaa.pdf"
+    datei.unlink()
+    # Normaler Lauf: kommt NICHT wieder, aber Hinweis
+    erg = ablauf.abrufen(einst, konto, lambda t: None)
+    assert erg.neu == 0 and not datei.exists()
+    assert any("Fehlende Dateien neu holen" in h for h in erg.hinweise)
+    assert ablauf.fehlende_dateien(einst, konto) == 1
+    # Auf Wunsch: genau diese Datei kommt wieder
+    erg = ablauf.abrufen(einst, konto, lambda t: None, nachholen=True)
+    assert erg.neu == 1 and datei.exists()
+    assert ablauf.fehlende_dateien(einst, konto) == 0
 
 
 def test_gleicher_name_ueberschreibt_nicht(tmp_path):

@@ -9,7 +9,7 @@ from belegabruf import pfade, quellen, zustand
 from belegabruf import ziele as ziel_verzeichnis
 from belegabruf.browser import BrowserFehlt, ProfilBelegt
 from belegabruf.einstellungen import Einstellungen, Konto
-from belegabruf.protokoll import Protokoll
+from belegabruf.protokoll import Protokoll, altes_protokoll_uebernehmen
 from belegabruf.quellen.basis import Beleg, Ergebnis, Quelle, SitzungAbgelaufen, Umgebung
 
 Melden = Callable[[str], None]
@@ -20,8 +20,18 @@ def quelle_fuer(konto: Konto) -> Quelle:
     return klasse(konto, pfade.profilordner(konto.quelle, konto.name))
 
 
-def protokoll_fuer(einst: Einstellungen) -> Protokoll:
-    return Protokoll(einst.belegordner / "protokoll.csv")
+def protokoll_fuer(einst: Einstellungen, konto: Konto) -> Protokoll:
+    return Protokoll(konto.quelle, konto.name, einst.belegordner)
+
+
+def uebernahme(einst: Einstellungen) -> int:
+    """Einmalig das protokoll.csv aus Version 1 übernehmen (siehe protokoll.py)."""
+    return altes_protokoll_uebernehmen(einst.belegordner)
+
+
+def fehlende_dateien(einst: Einstellungen, konto: Konto) -> int:
+    """Wie viele geholte Einzelrechnungen fehlen im Belegordner?"""
+    return len(protokoll_fuer(einst, konto).fehlende("rechnung"))
 
 
 def sitzung_pruefen(konto: Konto) -> str:
@@ -42,9 +52,14 @@ def anmelden(konto: Konto, melden: Melden) -> bool:
         return False
 
 
-def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, protokoll: Protokoll | None = None) -> Ergebnis:
-    """Holt die Belege eines Kontos. Stürzt nie ab, sondern meldet im Ergebnis."""
-    protokoll = protokoll or protokoll_fuer(einst)
+def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool = False) -> Ergebnis:
+    """Holt die Belege eines Kontos. Stürzt nie ab, sondern meldet im Ergebnis.
+
+    nachholen=True: zusätzlich alles neu holen, was im Protokoll steht, aber im
+    Belegordner fehlt (Menüpunkt „Fehlende Dateien neu holen“).
+    """
+    uebernahme(einst)
+    protokoll = protokoll_fuer(einst, konto)
     try:
         ziele = [ziel_verzeichnis.erstellen(name, einst.belegordner) for name in einst.ziele]
         quelle = quelle_fuer(konto)
@@ -52,14 +67,13 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, protokoll: Proto
         return Ergebnis(konto.quelle, konto.name, status="fehler", fehler=str(fehler).strip("'\""))
 
     def bekannt(schluessel: str) -> bool:
-        return protokoll.bekannt(konto.quelle, konto.name, schluessel)
+        if nachholen and schluessel.startswith("rechnung:") and protokoll.fehlt_lokal(schluessel):
+            return False
+        return protokoll.bekannt(schluessel)
 
     def vorhandene_datei(schluessel: str) -> Path | None:
-        zeile = protokoll.eintrag(konto.quelle, konto.name, schluessel)
-        if not zeile or not zeile.get("datei"):
-            return None
-        datei = einst.belegordner / zeile["datei"]
-        return datei if datei.exists() else None
+        datei = protokoll.lokale_datei(schluessel)
+        return datei if datei is not None and datei.exists() else None
 
     def abliefern(beleg: Beleg) -> list[str]:
         lokal: Path | None = None
@@ -67,7 +81,7 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, protokoll: Proto
             ort = ziel.abliefern(beleg)
             if ort is not None and lokal is None:
                 lokal = ort
-        if protokoll.eintrag(beleg.quelle, beleg.konto, beleg.schluessel) is None or beleg.art == "rechnung":
+        if protokoll.eintrag(beleg.schluessel) is None or beleg.art == "rechnung":
             protokoll.eintragen(beleg, lokal, [z.name for z in ziele])
         return [str(lokal)] if lokal else []
 
@@ -88,6 +102,12 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, protokoll: Proto
         ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=f"{type(fehler).__name__}: {str(fehler).splitlines()[0][:200]}")
     if ergebnis.status in {"ok", "unvollstaendig"}:
         zustand.lauf_merken(konto.quelle, konto.name)
+    fehlen = len(protokoll.fehlende("rechnung"))
+    if fehlen:
+        ergebnis.hinweise.append(
+            f"{fehlen} schon geholte Rechnung(en) liegen nicht mehr im Belegordner. Das ist in Ordnung, "
+            "wenn du sie weitergegeben hast. Sonst: E → „Fehlende Dateien neu holen“."
+        )
     return ergebnis
 
 
@@ -114,7 +134,7 @@ def zusammenfassung(ergebnisse: list[Ergebnis], belegordner: Path) -> str:
                 passt = "✓ passt" if erg.erwartet == erg.vorhanden else "✗ ABWEICHUNG"
                 zeilen.append(
                     f"  Kontrolle: Monatsübersichten nennen {erg.erwartet} Rechnungen, "
-                    f"im Ordner liegen {erg.vorhanden} — {passt}"
+                    f"davon geholt: {erg.vorhanden} — {passt}"
                 )
         for abw in erg.abweichungen:
             zeilen.append(f"  ! {abw}")
