@@ -1,0 +1,28 @@
+[project]
+name = "belegabruf"
+version = "1.0.0"
+description = "Holt Rechnungen aus eingeloggten Anbieter-Konten per Doppelklick auf den eigenen Rechner."
+license = "MIT"
+authors = [{ name = "Balázs Kinál" }]
+requires-python = ">=3.12"
+dependencies = [
+    "playwright>=1.48",
+    "pymupdf>=1.24",
+]
+
+[project.scripts]
+belege = "belegabruf.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["belegabruf"]
+
+[tool.uv]
+# Eine feste Python-Version, damit Mac und Windows gleich laufen.
+python-preference = "managed"
