@@ -33,7 +33,7 @@ def _exit_code(ergebnisse: list) -> int:
     status = {e.status for e in ergebnisse}
     if "fehler" in status:
         return 1
-    if status & {"anmeldung_noetig", "abgelaufen"}:
+    if status & {"anmeldung_noetig", "abgelaufen", "unvollstaendig"}:
         return 2
     return 0
 

@@ -86,7 +86,7 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, protokoll: Proto
         ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=str(fehler))
     except Exception as fehler:  # noqa: BLE001 - nie abstürzen, immer melden
         ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=f"{type(fehler).__name__}: {str(fehler).splitlines()[0][:200]}")
-    if ergebnis.status == "ok":
+    if ergebnis.status in {"ok", "unvollstaendig"}:
         zustand.lauf_merken(konto.quelle, konto.name)
     return ergebnis
 
@@ -95,6 +95,7 @@ STATUS_TEXT = {
     "ok": "fertig",
     "anmeldung_noetig": "nicht angemeldet — beim nächsten Start anmelden",
     "abgelaufen": "Anmeldung mittendrin abgelaufen — der nächste Lauf holt den Rest nach",
+    "unvollstaendig": "nicht alles geholt — einfach später noch einmal starten, der Rest wird nachgeholt",
     "fehler": "Fehler",
     "uebersprungen": "übersprungen",
 }
@@ -105,7 +106,7 @@ def zusammenfassung(ergebnisse: list[Ergebnis], belegordner: Path) -> str:
     for erg in ergebnisse:
         name = f"{quellen.anzeigename(erg.quelle)} ({erg.konto})"
         zeilen.append(f"{name}: {STATUS_TEXT.get(erg.status, erg.status)}")
-        if erg.status in {"ok", "abgelaufen"} or erg.neu or erg.schon_da:
+        if erg.status in {"ok", "abgelaufen", "unvollstaendig"} or erg.neu or erg.schon_da:
             zeilen.append(f"  {erg.neu} neu, {erg.schon_da} schon vorhanden")
             if erg.kontrolle_neu:
                 zeilen.append(f"  {erg.kontrolle_neu} Monatsübersicht(en) neu (Ordner kontrolle)")

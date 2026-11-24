@@ -45,6 +45,25 @@ def _ist_anmeldeseite(url: str) -> bool:
     return any(t in url for t in ("/login", "signup_login", "/authenticate", "/account-verification"))
 
 
+def _kurz(fehler: Exception) -> str:
+    return f"{type(fehler).__name__}: {str(fehler).splitlines()[0][:120]}" if str(fehler) else type(fehler).__name__
+
+
+def _aufrufen(seite, url: str):
+    """Seite laden. Airbnb ist manchmal langsam (über 15 Sekunden): großzügig warten,
+    bei Zeitüberschreitung ein zweites Mal versuchen."""
+    for versuch in (1, 2):
+        try:
+            antwort = seite.goto(url, wait_until="commit", timeout=60000)
+            seite.wait_for_load_state("domcontentloaded", timeout=60000)
+            return antwort
+        except Exception:  # noqa: BLE001
+            if versuch == 2:
+                raise
+            browser.pause(5, 10)
+    return None
+
+
 def monat_aus_text(text: str) -> tuple[int, int] | None:
     """'Oktober 2026' → (2026, 10)."""
     teile = text.strip().lower().split()
@@ -67,7 +86,8 @@ class Zeile:
 @dataclass
 class Monatsuebersicht:
     zeilen: list[Zeile] = field(default_factory=list)
-    anzahl_zeilen: int = 0  # gezählt am Text (Rechnungsnummern), unabhängig von den Links
+    anzahl_zeilen: int = 0  # gezählt am Text (Buchungscodes), unabhängig von den Links
+    ohne_link: list[str] = field(default_factory=list)  # Buchungscodes von Zeilen ohne Link
 
 
 def monats_pdf_lesen(inhalt: bytes) -> Monatsuebersicht:
@@ -81,8 +101,9 @@ def monats_pdf_lesen(inhalt: bytes) -> Monatsuebersicht:
     with pymupdf.open(stream=inhalt, filetype="pdf") as dok:
         for seite in dok:
             text = seite.get_text()
-            # Rechnungsnummern können umbrechen ("AIUC-123-DE-" / "4567"): ohne Umbrüche zählen.
-            ergebnis.anzahl_zeilen += len(RE_RECHNUNGSNUMMER.findall(re.sub(r"-\s*\n\s*", "-", text)))
+            # Jede Zeile hat genau einen Buchungscode — so wird unabhängig von den Links gezählt.
+            codes_im_text = RE_BUCHUNGSCODE.findall(text)
+            ergebnis.anzahl_zeilen += len(codes_im_text)
             woerter = seite.get_text("words")
             for link in seite.get_links():
                 uri = link.get("uri") or ""
@@ -115,6 +136,9 @@ def monats_pdf_lesen(inhalt: bytes) -> Monatsuebersicht:
                 if kennung not in gesehen:
                     gesehen[kennung] = zeile
                     ergebnis.zeilen.append(zeile)
+            # Ältere Rechnungen (anderes Nummernformat) haben im PDF keinen Link.
+            verlinkt = {z.buchungscode for z in gesehen.values()}
+            ergebnis.ohne_link += [c for c in codes_im_text if c not in verlinkt]
     return ergebnis
 
 
@@ -175,10 +199,16 @@ class Airbnb(Quelle):
 
     # 3. Belege holen --------------------------------------------------------
     def _dialog_oeffnen(self, seite):
-        seite.goto(self._adresse() + DOKUMENTE_PFAD, wait_until="networkidle")
-        if _ist_anmeldeseite(seite.url):
-            raise SitzungAbgelaufen()
-        seite.locator("button", has_text="Lade mehrere Steuerrechnungen").first.click()
+        # Nicht auf "networkidle" warten: Airbnb hält im Hintergrund Verbindungen offen.
+        _aufrufen(seite, self._adresse() + DOKUMENTE_PFAD)
+        knopf = seite.locator("button", has_text="Lade mehrere Steuerrechnungen").first
+        try:
+            knopf.wait_for(timeout=60000)
+        except Exception:  # noqa: BLE001
+            if _ist_anmeldeseite(seite.url):
+                raise SitzungAbgelaufen() from None
+            raise
+        knopf.click()
         dialog = seite.locator("[role=dialog]")
         dialog.locator("select").wait_for(timeout=20000)
         return dialog
@@ -241,8 +271,13 @@ class Airbnb(Quelle):
                     except SitzungAbgelaufen:
                         erg.status = "abgelaufen"
                         break
+                    except Exception as fehler:  # noqa: BLE001 - ein Monat darf scheitern
+                        erg.abweichungen.append(f"{text}: Monatsübersicht nicht geladen ({_kurz(fehler)}).")
+                        erg.status = "unvollstaendig"
+                        continue
                     if inhalt is None or not pruefung.ist_pdf(inhalt):
                         erg.abweichungen.append(f"{text}: Monatsübersicht kam nicht an.")
+                        erg.status = "unvollstaendig"
                         continue
                     neu = not umgebung.bekannt(schluessel)
                     umgebung.abliefern(Beleg(
@@ -257,7 +292,14 @@ class Airbnb(Quelle):
                 except Exception:  # noqa: BLE001
                     erg.abweichungen.append(f"{text}: Monatsübersicht nicht lesbar.")
                     continue
-                if uebersicht.anzahl_zeilen != len(uebersicht.zeilen):
+                for code in uebersicht.ohne_link:
+                    erg.abweichungen.append(
+                        f"{text}: Rechnung zur Buchung {code} hat in der Monatsübersicht keinen Link "
+                        "(älteres Format) — Airbnb bietet dafür keine Einzelrechnung an. "
+                        "Beleg ist dann die Monatsübersicht im Ordner kontrolle."
+                    )
+                rest = uebersicht.anzahl_zeilen - len(uebersicht.zeilen) - len(uebersicht.ohne_link)
+                if rest:
                     erg.abweichungen.append(
                         f"{text}: {uebersicht.anzahl_zeilen} Rechnungszeilen, aber "
                         f"{len(uebersicht.zeilen)} Links in der Monatsübersicht."
@@ -269,9 +311,10 @@ class Airbnb(Quelle):
             # Schritt 3: Einzelrechnungen
             offen = [z for z in alle_zeilen if not umgebung.bekannt(f"rechnung:{z.kennung}")]
             erg.schon_da = len(alle_zeilen) - len(offen)
-            if offen and erg.status == "ok":
+            weiter = erg.status != "abgelaufen"
+            if offen and weiter:
                 melden(f"{len(offen)} neue Einzelrechnung(en) werden geholt …")
-            for nr, zeile in enumerate(offen if erg.status == "ok" else [], 1):
+            for nr, zeile in enumerate(offen if weiter else [], 1):
                 browser.pause()
                 try:
                     grund = self._einzelrechnung(seite, zeile, umgebung, erg)
@@ -279,26 +322,39 @@ class Airbnb(Quelle):
                     erg.status = "abgelaufen"
                     melden("Die Anmeldung ist abgelaufen. Der nächste Lauf holt den Rest nach.")
                     break
+                except Exception as fehler:  # noqa: BLE001 - eine Rechnung darf scheitern
+                    grund = _kurz(fehler)
                 if grund:
+                    erg.status = "unvollstaendig"
                     erg.abweichungen.append(
                         f"Rechnung {zeile.rechnungsnummer or zeile.kennung}: nicht gespeichert ({grund})."
                     )
                 elif nr % 10 == 0:
                     melden(f"… {nr} von {len(offen)}")
 
-        # Schritt 4: Kontrolle
-        erg.erwartet = text_zeilen
+        # Schritt 4: Kontrolle (Zeilen ohne Link gibt es nicht einzeln, die zählen nicht mit)
+        erg.erwartet = len(alle_zeilen)
+        if text_zeilen != erg.erwartet:
+            erg.hinweise.append(
+                f"Die Monatsübersichten haben {text_zeilen} Zeilen, davon {erg.erwartet} mit Einzelrechnung."
+            )
         erg.vorhanden = sum(1 for z in alle_zeilen if umgebung.bekannt(f"rechnung:{z.kennung}"))
         return erg
 
     def _einzelrechnung(self, seite, zeile: Zeile, umgebung: Umgebung, erg: Ergebnis) -> str | None:
         """Holt eine Einzelrechnung. Gibt None bei Erfolg zurück, sonst den Grund."""
         url = zeile.url if zeile.url.startswith("http") else self._adresse() + zeile.url
-        antwort = seite.goto(url, wait_until="networkidle")
+        antwort = _aufrufen(seite, url)
         if _ist_anmeldeseite(seite.url):
             raise SitzungAbgelaufen()
         if antwort is not None and antwort.status >= 400:
             return f"Fehlerseite {antwort.status}"
+        try:
+            seite.get_by_text("Rechnungsnummer").first.wait_for(timeout=20000)
+            seite.wait_for_timeout(800)  # Schriften und Logo fertig laden lassen
+        except Exception:  # noqa: BLE001 - die Prüfung unten sagt, was fehlt
+            if _ist_anmeldeseite(seite.url):
+                raise SitzungAbgelaufen() from None
         seitentext = seite.inner_text("body")
         pflicht = ["Rechnungsnummer", zeile.rechnungsnummer, zeile.buchungscode]
         grund = pruefung.seite_ist_beleg(seitentext, pflicht)

@@ -61,6 +61,16 @@ def test_monats_pdf_lesen():
     assert erste.datum == "2026-10-27"
 
 
+def test_zeile_ohne_link_wird_gemeldet():
+    inhalt = _monats_pdf([("AIUC-111111111-DE-2222222", "2026-10-27", "HMAAAA1111", "abc123")])
+    dok = pymupdf.open(stream=inhalt, filetype="pdf")
+    dok[0].insert_text((42, 300), "123456789012345678  2025-11-03  HMCCCC3333  Rechnung", fontsize=8)
+    uebersicht = airbnb.monats_pdf_lesen(dok.tobytes())
+    assert uebersicht.anzahl_zeilen == 2
+    assert len(uebersicht.zeilen) == 1
+    assert uebersicht.ohne_link == ["HMCCCC3333"]
+
+
 def test_monat_aus_text():
     assert airbnb.monat_aus_text("Oktober 2026") == (2026, 10)
     assert airbnb.monat_aus_text("März 2025") == (2025, 3)

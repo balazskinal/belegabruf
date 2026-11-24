@@ -49,7 +49,7 @@ class Ergebnis:
 
     quelle: str
     konto: str
-    status: str = "ok"  # ok | anmeldung_noetig | abgelaufen | fehler | uebersprungen
+    status: str = "ok"  # ok | unvollstaendig | anmeldung_noetig | abgelaufen | fehler
     neu: int = 0
     schon_da: int = 0
     kontrolle_neu: int = 0
