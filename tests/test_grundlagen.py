@@ -34,7 +34,7 @@ def _monats_pdf(zeilen: list[tuple[str, str, str, str]]) -> bytes:
         seite.insert_text((42, y + 10), teil2, fontsize=8)
         seite.insert_text((170, y), datum, fontsize=8)
         seite.insert_text((273, y), code, fontsize=8)
-        seite.insert_text((340, y), "Rechnung", fontsize=8)
+        seite.insert_text((340, y), "Gutschrift" if kennung.startswith("g") else "Rechnung", fontsize=8)
         for dy in (0, 10):
             seite.insert_link({
                 "kind": pymupdf.LINK_URI,
@@ -59,6 +59,7 @@ def test_monats_pdf_lesen():
     assert erste.rechnungsnummer == "AIUC-111111111-DE-2222222"
     assert erste.buchungscode == "HMAAAA1111"
     assert erste.datum == "2026-10-27"
+    assert erste.dokumentart == "Rechnung"
 
 
 def test_zeile_ohne_link_wird_gemeldet():
@@ -138,6 +139,20 @@ def test_protokoll_verhindert_doppelte(tmp_path):
     # Datei gelöscht → wird beim nächsten Lauf neu geholt
     ort.unlink()
     assert not Protokoll(tmp_path / "protokoll.csv").bekannt("airbnb", "privat", "rechnung:abc")
+
+
+def test_gleicher_name_ueberschreibt_nicht(tmp_path):
+    ordner = Ordner(tmp_path)
+    def beleg(inhalt):
+        return Beleg(quelle="airbnb", konto="privat", art="rechnung", schluessel=inhalt.decode(),
+                     dateiname="x.pdf", inhalt=inhalt, jahr=2026)
+    a = ordner.abliefern(beleg(b"%PDF-a"))
+    b = ordner.abliefern(beleg(b"%PDF-b"))
+    assert a != b and a.read_bytes() == b"%PDF-a" and b.name == "x-2.pdf"
+
+
+def test_gutschrift_im_dateinamen():
+    assert airbnb.dateiname("2026-06-01", "HMAAAA1111", "AIUC-1-DE-2", gutschrift=True).endswith("_Gutschrift.pdf")
 
 
 def test_kontrolle_liegt_im_kontrollordner(tmp_path):

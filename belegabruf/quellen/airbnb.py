@@ -81,6 +81,7 @@ class Zeile:
     rechnungsnummer: str = ""
     buchungscode: str = ""
     datum: str = ""
+    dokumentart: str = ""  # "Rechnung" oder "Gutschrift" (Spalte DOKUMENTART)
 
 
 @dataclass
@@ -133,6 +134,9 @@ def monats_pdf_lesen(inhalt: bytes) -> Monatsuebersicht:
                 if not zeile.datum:
                     m = RE_DATUM.search(zeilentext)
                     zeile.datum = m.group(1) if m else ""
+                if not zeile.dokumentart:
+                    m = re.search(r"\b(Gutschrift|Rechnung|Credit note|Invoice)\b", zeilentext)
+                    zeile.dokumentart = m.group(1) if m else ""
                 if kennung not in gesehen:
                     gesehen[kennung] = zeile
                     ergebnis.zeilen.append(zeile)
@@ -162,8 +166,12 @@ def rechnungsseite_lesen(text: str) -> Rechnungsdaten:
     )
 
 
-def dateiname(datum: str, buchungscode: str, rechnungsnummer: str) -> str:
+def dateiname(datum: str, buchungscode: str, rechnungsnummer: str, gutschrift: bool = False) -> str:
+    """<Rechnungsdatum>_<Buchungscode>_<Rechnungsnummer>.pdf — Gutschriften tragen dieselbe
+    Nummer wie ihre Rechnung und bekommen deshalb den Zusatz _Gutschrift."""
     teile = [datum or "ohne-datum", buchungscode or "ohne-buchungscode", rechnungsnummer or "ohne-nummer"]
+    if gutschrift:
+        teile.append("Gutschrift")
     return "_".join(re.sub(r"[^A-Za-z0-9-]", "", t) for t in teile) + ".pdf"
 
 
@@ -379,7 +387,10 @@ class Airbnb(Quelle):
             konto=self.konto.name,
             art="rechnung",
             schluessel=f"rechnung:{zeile.kennung}",
-            dateiname=dateiname(datum, daten.buchungscode or zeile.buchungscode, nummer),
+            dateiname=dateiname(
+                datum, daten.buchungscode or zeile.buchungscode, nummer,
+                gutschrift=zeile.dokumentart.lower() in {"gutschrift", "credit note"},
+            ),
             inhalt=inhalt,
             jahr=rechnungsdatum.year if rechnungsdatum else date.today().year,
             rechnungsdatum=rechnungsdatum,
