@@ -25,8 +25,11 @@ Anmeldung oder deine Belege. Es gibt keinen Server, kein Konto bei uns, keinen S
 4. Am Ende steht eine Zusammenfassung: wie viele neu, wie viele schon da, und ob die Anzahl zu den
    Monatsübersichten passt.
 
-Was schon da ist, wird nicht noch einmal geholt (das merkt sich die Datei `protokoll.csv` im
-Belegordner). Gastnamen kommen nirgends vor — weder in Dateinamen noch im Protokoll.
+Was einmal geholt wurde, wird nicht noch einmal geholt — **auch wenn du die Datei aus dem
+Belegordner löschst oder verschiebst.** Das merkt sich ein **Protokoll** bei den Einstellungen (nicht
+im Belegordner). Den Belegordner darfst du also jederzeit leeren oder an die Buchhaltung bzw. den
+Steuerberater weiterreichen, ohne dass alles wiederkommt. Gastnamen kommen nirgends vor — weder in
+Dateinamen noch im Protokoll.
 
 **Wichtig:** Airbnb zeigt nur die **letzten 12 Monate**. Was älter ist, ist weg. Am besten einmal
 im Monat laufen lassen. Liegt der letzte Lauf über zwei Monate zurück, warnt das Programm beim Start.
@@ -86,7 +89,9 @@ Doppelklick auf **„Belege holen“**: auf dem Mac `Start Mac/Belege holen.comm
 `Start Windows/Belege holen.cmd`.
 
 - **Enter** = los
-- **E** = Einstellungen ändern (die Fragen von oben noch einmal)
+- **E** = Einstellungen:
+  - **1** = Einstellungen ändern (die Fragen von oben noch einmal)
+  - **2** = Fehlende Dateien neu holen (siehe unten)
 - **Q** = beenden
 
 Während des Abrufs musst du nichts tun und kannst den Rechner normal weiterbenutzen.
@@ -95,7 +100,10 @@ Während des Abrufs musst du nichts tun und kannst den Rechner normal weiterbenu
 meldet das Programm das in der Zusammenfassung. Beim nächsten Start kommt das Anmeldefenster, und
 der Rest wird nachgeholt.
 
-**Eine Datei noch einmal holen:** einfach die PDF-Datei löschen — beim nächsten Lauf kommt sie neu.
+**Eine Datei noch einmal holen:** Einfach löschen reicht nicht — das Protokoll weiß, dass sie schon
+geholt wurde. Stattdessen beim Start **E** und dann **2 „Fehlende Dateien neu holen“** wählen. Dann
+kommt alles wieder, was im Protokoll steht, aber im Belegordner fehlt — soweit Airbnb es noch anbietet
+(die letzten 12 Monate).
 
 ## Wo was liegt
 
@@ -103,14 +111,23 @@ der Rest wird nachgeholt.
 |---|---|
 | Deine Belege | der Belegordner, den du beim Einrichten angegeben hast |
 | Einstellungen | Mac: `~/Library/Application Support/belegabruf/einstellungen.toml` · Windows: `%APPDATA%\belegabruf\einstellungen.toml` |
-| Anmeldungen (Browserprofile) | im selben Ordner unter `profile/` |
+| Anmeldungen (Browserprofile) | im selben Ordner unter `profile/` — **darf man jederzeit löschen** |
+| Protokolle (was schon geholt ist) | im selben Ordner unter `protokolle/<anbieter>/<konto>.csv` — **nie löschen** |
 
 Die Einstellungsdatei ist eine Textdatei mit Erklärungen und lässt sich mit jedem Texteditor
 ändern. Ein Konto lässt sich dort mit `aktiv = "nein"` vorübergehend ausschalten.
 
 Der Ordner `profile/` enthält deine eingeloggten Sitzungen — **wie ein offener Browser, in dem du
 angemeldet bist.** Gib ihn nicht weiter und leg ihn nicht in eine Cloud-Freigabe. Zum Abmelden
-reicht es, ihn zu löschen.
+reicht es, ihn zu löschen; beim nächsten Start kommt dann das Anmeldefenster.
+
+Der Ordner `protokolle/` dagegen **bitte nie löschen.** Darin steht, was schon geholt wurde. Ohne
+ihn holt das Programm beim nächsten Lauf alle 12 Monate noch einmal — und wer die Belege schon
+weitergegeben hat, hätte sie dann doppelt in der Buchhaltung.
+
+**Umstieg von Version 1.0:** Dort lag das Protokoll als `protokoll.csv` im Belegordner. Beim ersten
+Start von Version 1.1 wird es automatisch übernommen und danach in `protokoll.csv.uebernommen`
+umbenannt (nicht gelöscht). Danach kannst du die alte Datei wegwerfen.
 
 ## Neue Version installieren (Update)
 
@@ -120,7 +137,8 @@ Beim Start steht ein Hinweis, wenn es eine neuere Version gibt. Dann:
 2. Die neue ZIP-Datei von [Neueste Version](https://github.com/balazskinal/belegabruf/releases/latest) laden und auspacken.
 3. „Einrichten“ doppelklicken (lädt eventuell neue Bausteine; deine Antworten bleiben als Vorschlag stehen).
 
-Einstellungen, Anmeldungen und Belege bleiben dabei erhalten — sie liegen nicht im Programmordner.
+Einstellungen, Anmeldungen, Protokolle und Belege bleiben dabei erhalten — sie liegen nicht im
+Programmordner.
 Ein automatisches Selbst-Update gibt es bewusst nicht.
 
 ## Rechtliches
@@ -145,6 +163,7 @@ uv run belege einrichten
 uv run belege pruefen --json                    # sind die Konten angemeldet?
 uv run belege anmelden --quelle airbnb --konto privat
 uv run belege holen --quelle airbnb --json      # unbeaufsichtigt, öffnet nie ein Fenster
+uv run belege holen --fehlende                  # dazu Fehlendes neu holen
 ```
 
 `belege holen` gibt mit `--json` ein maschinenlesbares Ergebnis aus (Fortschritt geht nach stderr).
@@ -164,7 +183,7 @@ programm/
     quellen/          ein Baustein je Anbieter (Version 1: airbnb.py)
       basis.py        die feste Schnittstelle für Bausteine
     ziele/            wohin Belege geliefert werden (Version 1: ordner.py)
-    protokoll.py      protokoll.csv — verhindert Doppelte
+    protokoll.py      Protokoll je Anbieter und Konto — entscheidet, was schon geholt ist
     pruefung.py       nie eine Anmelde-, 404- oder leere Seite als Beleg speichern
 ```
 

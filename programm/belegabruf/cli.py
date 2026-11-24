@@ -4,7 +4,7 @@
     belege einrichten           Fragen beantworten, Einstellungsdatei schreiben
     belege pruefen [--json]     Sind die Konten angemeldet?
     belege anmelden --quelle airbnb [--konto NAME]
-    belege holen [--quelle airbnb] [--konto NAME] [--json]
+    belege holen [--quelle airbnb] [--konto NAME] [--json] [--fehlende]
                                 Unbeaufsichtigt holen, öffnet nie ein Fenster
                                 (für spätere Automatisierung, z. B. n8n)
 
@@ -55,6 +55,14 @@ def start() -> int:
         print("Belegabruf ist noch nicht eingerichtet — das machen wir jetzt.")
         einst = einrichtung.einrichten()
 
+    uebernommen = ablauf.uebernahme(einst)
+    if uebernommen:
+        print(
+            f"\nDas Protokoll aus Version 1 ist übernommen ({uebernommen} Einträge). Es liegt jetzt bei den\n"
+            "Einstellungen (Ordner protokolle) und nicht mehr im Belegordner."
+        )
+
+    nachholen = False
     while True:
         konten = einst.aktive_konten()
         print(f"\nBelegabruf {__version__}")
@@ -70,7 +78,7 @@ def start() -> int:
         if neuer:
             print(f"\nHinweis: Es gibt eine neuere Version ({neuer}). Herunterladen unter")
             print(f"  {aktualisierung.NEUESTE_SEITE}")
-            print("  (Programmordner löschen, neues ZIP auspacken — Einstellungen bleiben erhalten.)")
+            print("  (alten Ordner belegabruf-v… löschen, neues ZIP auspacken — Einstellungen, Anmeldungen\n   und Protokolle bleiben erhalten.)")
 
         for k in konten:
             zuletzt = zustand.zu_lange_her(k.quelle, k.name)
@@ -82,25 +90,51 @@ def start() -> int:
                 )
 
         try:
-            wahl = input("\nEnter = los · E = Einstellungen ändern · Q = beenden: ").strip().lower()
+            wahl = input("\nEnter = los · E = Einstellungen · Q = beenden: ").strip().lower()
         except EOFError:
             wahl = ""
         if wahl in {"q", "x"}:
             return 0
         if wahl == "e":
-            einst = einrichtung.einrichten()
-            continue
+            auswahl = _einstellungsmenue(einst, konten)
+            if auswahl == "fragen":
+                einst = einrichtung.einrichten()
+                continue
+            if auswahl != "nachholen":
+                continue
+            nachholen = True
         if not konten:
             print("Ohne eingeschaltetes Konto gibt es nichts zu tun. Mit E kannst du eins eintragen.")
             continue
         break
 
-    code = lauf(einst, konten)
+    code = lauf(einst, konten, nachholen=nachholen)
     _warte_enter()
     return code
 
 
-def lauf(einst, konten) -> int:
+def _einstellungsmenue(einst, konten) -> str:
+    fehlen = sum(ablauf.fehlende_dateien(einst, k) for k in konten)
+    print("\nEinstellungen")
+    print("─────────────")
+    print("  1) Einstellungen ändern (Anbieter, Konten, Belegordner)")
+    print(f"  2) Fehlende Dateien neu holen — {fehlen} schon geholte Rechnung(en) fehlen im Belegordner")
+    print("     (geht nur, solange Airbnb sie noch anbietet: die letzten 12 Monate)")
+    try:
+        wahl = input("Nummer, oder Enter = zurück: ").strip()
+    except EOFError:
+        wahl = ""
+    if wahl == "1":
+        return "fragen"
+    if wahl == "2":
+        if not fehlen:
+            print("Es fehlt nichts — alle geholten Rechnungen liegen im Belegordner.")
+            return ""
+        return "nachholen"
+    return ""
+
+
+def lauf(einst, konten, nachholen: bool = False) -> int:
     melden = print
 
     # 1. Alle Konten prüfen
@@ -127,10 +161,11 @@ def lauf(einst, konten) -> int:
             ausgelassen.add(k.name + "\0" + k.quelle)
 
     # 3. Abruf unbeaufsichtigt, nacheinander
+    if nachholen:
+        print("\nFehlende Dateien werden neu geholt (dazu auch alles, was neu ist).")
     print("\nJetzt werden die Belege geholt. Das dauert ein paar Minuten —")
     print("du musst nichts tun und kannst den Rechner nebenbei normal benutzen.")
     ergebnisse = []
-    protokoll = ablauf.protokoll_fuer(einst)
     for k in konten:
         if k.name + "\0" + k.quelle in ausgelassen:
             from belegabruf.quellen.basis import Ergebnis
@@ -138,7 +173,7 @@ def lauf(einst, konten) -> int:
             ergebnisse.append(Ergebnis(k.quelle, k.name, status="anmeldung_noetig"))
             continue
         print(f"\n{quellen.anzeigename(k.quelle)} ({k.name}):")
-        ergebnisse.append(ablauf.abrufen(einst, k, lambda t: print("  " + t), protokoll))
+        ergebnisse.append(ablauf.abrufen(einst, k, lambda t: print("  " + t), nachholen=nachholen))
 
     # 4. Zusammenfassung
     print(ablauf.zusammenfassung(ergebnisse, einst.belegordner))
@@ -161,14 +196,14 @@ def befehl_holen(args) -> int:
     # Bei --json geht der Fortschritt nach stderr, stdout bleibt reines JSON.
     ausgabe = sys.stderr if args.json else sys.stdout
     ergebnisse = []
-    protokoll = ablauf.protokoll_fuer(einst)
     for k in konten:
         if ablauf.sitzung_pruefen(k) != "angemeldet":
             from belegabruf.quellen.basis import Ergebnis
 
             ergebnisse.append(Ergebnis(k.quelle, k.name, status="anmeldung_noetig"))
             continue
-        ergebnisse.append(ablauf.abrufen(einst, k, lambda t: print(t, file=ausgabe), protokoll))
+        ergebnisse.append(ablauf.abrufen(
+            einst, k, lambda t: print(t, file=ausgabe), nachholen=args.fehlende))
     if args.json:
         print(json.dumps(
             {"version": __version__, "belegordner": str(einst.belegordner),
@@ -216,6 +251,9 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--konto", help="nur dieses Konto (Name aus den Einstellungen)")
         if name != "anmelden":
             p.add_argument("--json", action="store_true", help="Ergebnis als JSON ausgeben")
+        if name == "holen":
+            p.add_argument("--fehlende", action="store_true",
+                           help="auch geholte Rechnungen neu holen, die im Belegordner fehlen")
     args = parser.parse_args(argv)
 
     try:
