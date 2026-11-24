@@ -16,7 +16,7 @@ Anmeldung oder deine Belege. Es gibt keinen Server, kein Konto bei uns, keinen S
 
 ## Was das Programm macht
 
-1. Du doppelklickst **„Belege holen“**.
+1. Du doppelklickst **„Belege holen“** (im Ordner `Start Mac` bzw. `Start Windows`).
 2. Es prüft, ob du bei Airbnb noch angemeldet bist. Wenn nicht, öffnet sich ein Browserfenster
    und **du** meldest dich ganz normal an (auch mit Zwei-Faktor). Dein Passwort steht nirgends.
 3. Danach holt es alles allein und unsichtbar, in ruhigem, menschlichem Tempo:
@@ -33,6 +33,24 @@ im Monat laufen lassen. Liegt der letzte Lauf über zwei Monate zurück, warnt d
 
 ---
 
+## Was im Ordner liegt
+
+```
+belegabruf-v…/
+  Start Mac/          ← nur das hier benutzen, wenn du einen Mac hast
+    Einrichten.command
+    Belege holen.command
+  Start Windows/      ← nur das hier benutzen, wenn du Windows hast
+    Einrichten.cmd
+    Belege holen.cmd
+  programm/           ← das eigentliche Programm, hier musst du nichts anfassen
+  README.md           ← diese Anleitung
+  LICENSE
+```
+
+Du brauchst nur den Start-Ordner für dein System. Den Ordner `programm` nicht verschieben oder
+umbenennen — die Startdateien suchen ihn direkt daneben.
+
 ## Einrichten (einmalig, ca. 5 Minuten)
 
 Du brauchst eine Internetverbindung. Installiert wird nur in deinem Benutzerkonto, keine
@@ -42,7 +60,8 @@ Administratorrechte nötig.
    die Datei `belegabruf-v….zip` laden.
 2. **Auspacken:** Doppelklick auf die ZIP-Datei. Den entstandenen Ordner `belegabruf-v…` an einen
    Ort legen, wo er bleiben darf (z. B. in deinen Dokumenten-Ordner).
-3. **„Einrichten“ doppelklicken** — auf dem Mac `Einrichten.command`, unter Windows `Einrichten.cmd`.
+3. **„Einrichten“ doppelklicken** — auf dem Mac `Start Mac/Einrichten.command`, unter Windows
+   `Start Windows/Einrichten.cmd`.
 
    **Beim ersten Mal fragt dein Rechner einmal nach, ob du das wirklich öffnen willst.** Das ist
    normal bei Programmen, die nicht aus einem App-Store kommen:
@@ -63,7 +82,8 @@ Administratorrechte nötig.
 
 ## Benutzen
 
-Doppelklick auf **„Belege holen“** (`Belege holen.command` bzw. `Belege holen.cmd`).
+Doppelklick auf **„Belege holen“**: auf dem Mac `Start Mac/Belege holen.command`, unter Windows
+`Start Windows/Belege holen.cmd`.
 
 - **Enter** = los
 - **E** = Einstellungen ändern (die Fragen von oben noch einmal)
@@ -96,7 +116,7 @@ reicht es, ihn zu löschen.
 
 Beim Start steht ein Hinweis, wenn es eine neuere Version gibt. Dann:
 
-1. Den **alten Programmordner löschen.**
+1. Den **alten Ordner `belegabruf-v…` komplett löschen** (mit Start-Ordnern und `programm`).
 2. Die neue ZIP-Datei von [Neueste Version](https://github.com/balazskinal/belegabruf/releases/latest) laden und auspacken.
 3. „Einrichten“ doppelklicken (lädt eventuell neue Bausteine; deine Antworten bleiben als Vorschlag stehen).
 
@@ -117,7 +137,7 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 
 ### Kommandozeile
 
-Im Programmordner (mit installiertem [uv](https://docs.astral.sh/uv/)):
+Im Ordner `programm` (mit installiertem [uv](https://docs.astral.sh/uv/)):
 
 ```bash
 uv run belege                                   # wie Doppelklick
@@ -134,14 +154,18 @@ Bausteine später auch aus einer Automatisierung (z. B. n8n) aufrufen.
 ### Aufbau
 
 ```
-belegabruf/
-  cli.py            Kommandozeile und Ablauf beim Doppelklick
-  ablauf.py         Gerüst: prüfen, anmelden lassen, holen, abliefern
-  quellen/          ein Baustein je Anbieter (Version 1: airbnb.py)
-    basis.py        die feste Schnittstelle für Bausteine
-  ziele/            wohin Belege geliefert werden (Version 1: ordner.py)
-  protokoll.py      protokoll.csv — verhindert Doppelte
-  pruefung.py       nie eine Anmelde-, 404- oder leere Seite als Beleg speichern
+Start Mac/, Start Windows/   Startdateien (wechseln nach programm/ und rufen "belege" auf)
+programm/
+  pyproject.toml, uv.lock    Abhängigkeiten (Python, Playwright, PyMuPDF)
+  tests/
+  belegabruf/
+    cli.py            Kommandozeile und Ablauf beim Doppelklick
+    ablauf.py         Gerüst: prüfen, anmelden lassen, holen, abliefern
+    quellen/          ein Baustein je Anbieter (Version 1: airbnb.py)
+      basis.py        die feste Schnittstelle für Bausteine
+    ziele/            wohin Belege geliefert werden (Version 1: ordner.py)
+    protokoll.py      protokoll.csv — verhindert Doppelte
+    pruefung.py       nie eine Anmelde-, 404- oder leere Seite als Beleg speichern
 ```
 
 Ein **Baustein (Quelle)** kann genau drei Dinge: `sitzung_pruefen()`, `anmelden_lassen()` und
@@ -149,7 +173,7 @@ Ein **Baustein (Quelle)** kann genau drei Dinge: `sitzung_pruefen()`, `anmelden_
 Ziel „ordner“ legt Dateien ab; weitere Ziele (z. B. Upload an eine Buchhaltungssoftware) kommen als
 eigene Datei in `ziele/` dazu, ohne dass sich die Quellen ändern.
 
-Tests: `uv run --group dev pytest`
+Tests (im Ordner `programm`): `uv run --group dev pytest`
 
 ### Neue Bausteine beitragen
 
@@ -164,7 +188,7 @@ jeder fremde Beitrag vor einem Release vollständig geprüft. Regeln für Bauste
 
 ### Neue Version veröffentlichen (Maintainer)
 
-Version in `pyproject.toml` erhöhen, committen, dann Tag setzen und pushen:
+Version in `programm/pyproject.toml` erhöhen, committen, dann Tag setzen und pushen:
 
 ```bash
 git tag v1.0.1

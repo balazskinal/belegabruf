@@ -1,7 +1,8 @@
 @echo off
 rem Belege holen (Windows). Per Doppelklick starten.
 chcp 65001 >nul
-cd /d "%~dp0"
+rem Das eigentliche Programm liegt im Ordner "programm" daneben.
+cd /d "%~dp0..\programm"
 set "PATH=%USERPROFILE%\.local\bin;%PATH%"
 set PYTHONUTF8=1
 

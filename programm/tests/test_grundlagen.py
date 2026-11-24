@@ -174,7 +174,7 @@ def test_versionsvergleich():
 
 
 def test_keine_hive_homes_bezuege_im_repo():
-    wurzel = Path(__file__).resolve().parents[1]
+    wurzel = Path(__file__).resolve().parents[2]  # ganzes Repo
     verboten = ["hive" + " homes", "hive" + "-homes", "hive" + "homes"]
     for datei in wurzel.rglob("*"):
         if any(t in datei.parts for t in (".git", ".venv", "__pycache__")) or not datei.is_file():

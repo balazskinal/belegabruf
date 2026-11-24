@@ -1,6 +1,7 @@
 #!/bin/bash
 # Belegabruf einrichten (macOS). Per Doppelklick starten.
-cd "$(dirname "$0")" || exit 1
+# Das eigentliche Programm liegt im Ordner "programm" daneben.
+cd "$(dirname "$0")/../programm" || exit 1
 export PATH="$HOME/.local/bin:$PATH"
 
 echo "Belegabruf wird eingerichtet. Das dauert beim ersten Mal ein paar Minuten."
