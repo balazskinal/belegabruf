@@ -151,6 +151,50 @@ def dateiname(datum: date | None, gruppe: str, kennung: str) -> str:
     return "_".join(re.sub(r"[^A-Za-z0-9_-]", "", t) or "x" for t in teile) + ".pdf"
 
 
+# Nur für diese eine Seite im Browser, nie in Skool gespeichert: Klassen und Attribute,
+# mit denen Seiten ein dunkles Design schalten, auf hell setzen. localStorage und die
+# Kontoeinstellung bei Skool bleiben unberührt.
+_HELL_JS = """() => {
+  for (const e of [document.documentElement, document.body]) {
+    if (!e) continue;
+    for (const k of [...e.classList]) if (/dark/i.test(k)) e.classList.remove(k);
+    for (const a of ['data-theme', 'data-color-mode', 'data-mode', 'data-color-scheme', 'theme'])
+      if (e.hasAttribute(a)) e.setAttribute(a, 'light');
+    e.style.colorScheme = 'light';
+  }
+}"""
+
+# Hintergrund des Rumpfs (oder des ersten Elements mit Hintergrund) als Helligkeit 0…255.
+_HELLIGKEIT_JS = """() => {
+  const farbe = e => getComputedStyle(e).backgroundColor;
+  let e = document.body, f = farbe(e);
+  const leer = f => !f || f === 'transparent' || /rgba\(.*,\s*0\)$/.test(f);
+  if (leer(f)) f = farbe(document.documentElement);
+  if (leer(f)) {
+    const kinder = [...document.body.querySelectorAll('*')].slice(0, 200);
+    const mit = kinder.find(k => !leer(farbe(k)) && k.offsetWidth > window.innerWidth / 2);
+    f = mit ? farbe(mit) : 'rgb(255, 255, 255)';
+  }
+  const [r, g, b] = (f.match(/\d+(\.\d+)?/g) || [255, 255, 255]).map(Number);
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}"""
+
+# Letzter Ausweg, falls die Seite trotzdem dunkel bleibt: helle Druckfarben erzwingen.
+_HELL_CSS = """@media print { html, body, body * {
+  background-color: #fff !important; color: #000 !important; border-color: #ccc !important; } }"""
+
+
+def hell_machen(seite) -> None:
+    """Vor dem PDF: helles Design, gut zum Drucken und für die Texterkennung in
+    Buchhaltungsprogrammen — auch wenn das Skool-Konto auf Dunkel steht."""
+    seite.emulate_media(color_scheme="light", media="print")
+    seite.evaluate(_HELL_JS)
+    seite.wait_for_timeout(300)
+    if seite.evaluate(_HELLIGKEIT_JS) < 128:
+        seite.add_style_tag(content=_HELL_CSS)
+        seite.wait_for_timeout(200)
+
+
 def _aufrufen(seite, url: str):
     """Seite laden, bei Zeitüberschreitung ein zweites Mal versuchen."""
     for versuch in (1, 2):
@@ -298,6 +342,7 @@ class Skool(Quelle):
         if grund:
             return grund
         daten = rechnungsseite_lesen(seitentext)
+        hell_machen(seite)
         inhalt = seite.pdf(format="A4", print_background=True)
         # Auch das fertige PDF prüfen: Steht die Rechnung wirklich drin?
         grund = rechnung_pruefen(pruefung.pdf_text(inhalt))

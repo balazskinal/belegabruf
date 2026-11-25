@@ -117,10 +117,29 @@ UEBERSICHT_HTML = """<!doctype html><html><body><h1>Einstellungen</h1><h2>Zahlun
 </body></html>"""
 
 
-def _rechnung_html(nummer: str) -> str:
+DUNKEL = {  # verschiedene Arten, wie eine Seite dunkel sein kann
+    "hell": ("", "", ""),
+    "medienabfrage": ("<style>@media (prefers-color-scheme: dark) "
+                      "{ body { background: #1e1e1e; color: #eee; } }</style>", "", ""),
+    "klasse": ("<style>html.dark body { background: #1e1e1e; color: #eee; }</style>", " class='dark'", ""),
+    "fest": ("", "", " style='background:#1e1e1e;color:#eee'"),
+}
+
+
+def _rechnung_html(nummer: str, design: str = "hell") -> str:
+    stil, html_attr, body_attr = DUNKEL[design]
     zeilen = RECHNUNG_DE.replace("1A2B3C4D-0007", nummer).splitlines()
-    return "<!doctype html><html><head><title>Rechnung · Skool</title></head><body>" + "".join(
-        f"<p>{z}</p>" for z in zeilen) + "</body></html>"
+    return (f"<!doctype html><html{html_attr}><head><meta charset=utf-8><title>Rechnung · Skool</title>"
+            f"{stil}</head><body{body_attr}>" + "".join(f"<p>{z}</p>" for z in zeilen) + "</body></html>")
+
+
+def _helligkeit(pdf: bytes) -> float:
+    """Mittlere Helligkeit der ersten PDF-Seite, 0 (schwarz) bis 255 (weiß)."""
+    import pymupdf
+
+    with pymupdf.open(stream=pdf, filetype="pdf") as dok:
+        bild = dok[0].get_pixmap(dpi=20, colorspace=pymupdf.csGRAY)
+        return sum(bild.samples) / len(bild.samples)
 
 
 def _chromium_da() -> bool:
@@ -140,7 +159,7 @@ def falsches_skool(monkeypatch):
     if not _chromium_da():
         pytest.skip("Chromium nicht installiert")
     aufrufe: list[str] = []
-    seiten = {"verhalten": "ok"}
+    seiten = {"verhalten": "ok", "design": "hell"}
     original = browser.profil_oeffnen
 
     def antworten(route):
@@ -158,12 +177,15 @@ def falsches_skool(monkeypatch):
             kennung = pfad.split("/--/inv/")[1].split("?")[0]
             if seiten["verhalten"] == "leer" and kennung == "in_1BBB222":
                 return route.fulfill(content_type="text/html", body="<html><body></body></html>")
-            return route.fulfill(content_type="text/html", body=_rechnung_html(f"TEST{kennung[-3:]}-0001"))
+            return route.fulfill(content_type="text/html; charset=utf-8",
+                                 body=_rechnung_html(f"TEST{kennung[-3:]}-0001", seiten["design"]))
         return route.fulfill(status=404, body="404 Page not found")
 
     @contextmanager
     def profil_mit_umleitung(profil, sichtbar):
         with original(profil, sichtbar=False) as kontext:
+            if seiten.get("dunkel_eingestellt"):  # wie ein Browser, der auf Dunkel steht
+                browser.neue_seite(kontext).emulate_media(color_scheme="dark")
             kontext.route("https://www.skool.com/**", antworten)
             yield kontext
 
@@ -236,3 +258,35 @@ def test_zusammenfassung_spricht_von_uebersicht():
     text = ablauf.zusammenfassung([erg], Path("/x"))
     assert "Skool (test): fertig" in text
     assert "Kontrolle: Übersicht nennt 2 Rechnungen, davon geholt: 2 — ✓ passt" in text
+
+
+@pytest.mark.parametrize("design", ["medienabfrage", "klasse", "fest"])
+def test_pdf_immer_hell(tmp_path, falsches_skool, design):
+    """Steht Skool auf Dunkel, kommt das PDF trotzdem hell heraus."""
+    _, seiten = falsches_skool
+    seiten["design"] = design
+    seiten["dunkel_eingestellt"] = True
+    quelle = skool.Skool(Konto("skool", "test"), tmp_path / "profil")
+    abgeliefert = []
+    erg = quelle.belege_holen(_umgebung(set(), abgeliefert))
+    assert erg.neu == 3
+    for beleg in abgeliefert:
+        assert _helligkeit(beleg.inhalt) > 200, design
+        assert "Gesamt" in pruefung.pdf_text(beleg.inhalt)
+
+
+def test_dunkle_seite_waere_ohne_aufhellen_dunkel(tmp_path):
+    """Gegenprobe: Die nachgebaute dunkle Seite ist ohne hell_machen() wirklich dunkel."""
+    if not _chromium_da():
+        pytest.skip("Chromium nicht installiert")
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(channel="chromium")
+        seite = b.new_page(color_scheme="dark")
+        seite.set_content(_rechnung_html("TEST-0001", "medienabfrage"))
+        dunkel = seite.pdf(format="A4", print_background=True)
+        skool.hell_machen(seite)
+        hell = seite.pdf(format="A4", print_background=True)
+        b.close()
+    assert _helligkeit(dunkel) < 100 < 200 < _helligkeit(hell)
