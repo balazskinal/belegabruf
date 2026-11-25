@@ -199,6 +199,12 @@ mehr als verschickt markiert: Dann geht alles raus, was in der Zwischenzeit geho
 zwischendurch von Hand verschicken will, schaltet den Versand deshalb nicht aus** — sonst kommen diese
 Rechnungen beim Wiedereinschalten doppelt an.
 
+**Achtung bei Neuinstallation oder neuem Konto:** Ist der Mailversand schon eingeschaltet, wenn ein
+Konto zum ersten Mal abgerufen wird (neuer Rechner ohne die alten Protokolle, oder ein neu
+hinzugefügtes Konto), gibt es noch nichts, was als verschickt gelten könnte. Dann gehen beim ersten Lauf
+**alle verfügbaren Rechnungen** raus — bei Airbnb bis zu 12 Monate. Wer das nicht will, ruft zuerst
+einmal ohne Mailversand ab und schaltet die Mail erst danach ein.
+
 **Nie doppelt:** Das Protokoll merkt sich je Adresse, was verschickt ist. Klappt der Versand nicht
 (kein Internet, falsches Passwort, der Server lehnt ab), bleibt die Rechnung im Belegordner, die
 Zusammenfassung zeigt die Meldung des Servers, und der **nächste Lauf versucht es erneut**. Kommt

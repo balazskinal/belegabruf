@@ -15,6 +15,7 @@ und erscheint nie in Ausgaben, Dateien oder Protokollen.
 from __future__ import annotations
 
 import hashlib
+import re
 import smtplib
 import socket
 import ssl
@@ -182,11 +183,19 @@ def anmeldung_pruefen(einst, passwort: str, smtp_klassen=None) -> str | None:
 # ── Die Mail ─────────────────────────────────────────────────────────────────
 
 
+def einzeilig(text: str) -> str:
+    """Zeilenumbrüche und andere Steuerzeichen entfernen. In Kopfzeilen würden sie eine
+    ValueError auslösen — und damit bei jedem Lauf den Versand des ganzen Kontos aufhalten."""
+    return re.sub(r"[\x00-\x1f\x7f]+", " ", str(text or "")).strip()
+
+
 def nachricht(absender: str, empfaenger: str, sendung: Sendung) -> EmailMessage:
-    anbieter = QUELLEN_NAMEN.get(sendung.quelle, sendung.quelle.capitalize())
+    anbieter = einzeilig(QUELLEN_NAMEN.get(sendung.quelle, sendung.quelle.capitalize()))
+    nummer = einzeilig(sendung.rechnungsnummer)
+    dateiname = einzeilig(sendung.dateiname) or "rechnung.pdf"
     datum = sendung.rechnungsdatum.strftime("%d.%m.%Y") if sendung.rechnungsdatum else ""
     art = "Gutschrift" if sendung.gutschrift else "Rechnung"
-    betreff = f"Beleg {anbieter} {sendung.rechnungsnummer}" + (f" vom {datum}" if datum else "")
+    betreff = f"Beleg {anbieter} {nummer}" + (f" vom {datum}" if datum else "")
     if sendung.gutschrift:
         betreff += " (Gutschrift)"
     m = EmailMessage(policy=SMTP_REGELN)
@@ -200,10 +209,10 @@ def nachricht(absender: str, empfaenger: str, sendung: Sendung) -> EmailMessage:
     domain = absender.rpartition("@")[2] or "belegabruf.invalid"
     m["Message-ID"] = f"<{kennung}.belegabruf@{domain}>"
     m.set_content(
-        f"Im Anhang: {art} {sendung.rechnungsnummer}" + (f" vom {datum}" if datum else "")
+        f"Im Anhang: {art} {nummer}" + (f" vom {datum}" if datum else "")
         + f" von {anbieter}.\n\nAutomatisch verschickt von Belegabruf.\n"
     )
-    m.add_attachment(sendung.inhalt, maintype="application", subtype="pdf", filename=sendung.dateiname)
+    m.add_attachment(sendung.inhalt, maintype="application", subtype="pdf", filename=dateiname)
     return m
 
 
@@ -240,14 +249,29 @@ class MailZiel(Lieferziel):
                             "noch bevor etwas verschickt wurde.", alle_anhalten=True) from fehler
         vor_senden()
         try:
-            smtp.data(rumpf)
+            # smtplib.data() wirft nur, wenn schon der DATA-Befehl abgelehnt wird. Lehnt der
+            # Server erst nach dem Inhalt ab (z. B. 554 Spam, 552 zu groß, 451 später), kommt
+            # das als Rückgabewert — deshalb hier selbst prüfen.
+            code, antwort = smtp.data(rumpf)
         except smtplib.SMTPDataError as fehler:
-            # Der Server hat geantwortet und nicht angenommen.
+            self._zuruecksetzen(smtp)
             raise Abgelehnt(f"Der Mailserver nimmt die Mail nicht an: {fehler.smtp_code} "
                             f"{p.sauber(fehler.smtp_error)}") from fehler
         except (smtplib.SMTPServerDisconnected, OSError, socket.timeout) as fehler:
             p.kaputt()
             raise Unklar(f"Nach dem Senden kam vom Mailserver keine Antwort ({type(fehler).__name__}).") from fehler
+        if code != 250:
+            # Der Server hat geantwortet und nicht angenommen — sicher nicht verschickt.
+            self._zuruecksetzen(smtp)
+            raise Abgelehnt(f"Der Mailserver nimmt die Mail nicht an: {code} {p.sauber(antwort)}")
+
+    def _zuruecksetzen(self, smtp) -> None:
+        """Nach einer Ablehnung: RSET, damit der nächste Empfänger auf derselben
+        Verbindung sauber anfängt. Klappt das nicht, gilt die Verbindung als verloren."""
+        try:
+            smtp.rset()
+        except Exception:  # noqa: BLE001
+            self.postausgang.kaputt()
 
     def schliessen(self) -> None:
         self.postausgang.schliessen()
