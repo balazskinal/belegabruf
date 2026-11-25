@@ -67,6 +67,7 @@
   .meldung.warn { background: var(--warn-grund); color: var(--warn); }
   .leise { color: var(--leise); font-size: 13px; }
   .versteckt { display: none; }
+  .unsichtbar { visibility: hidden; }
   .oben10 { margin-top: 10px; }
   .oben14 { margin-top: 14px; }
   .oben16 { margin-top: 16px; }
@@ -124,7 +125,7 @@
 
         <h2 class="oben18">Konten</h2>
         <p class="leise">Mehrere Konten beim selben Anbieter sind möglich (z. B. ein Zugang als Co-Gastgeber).
-          Der Name ist nur für dich.</p>
+          Ein Name ist erst nötig, wenn es beim selben Anbieter ein zweites Konto gibt — er ist nur für dich.</p>
         <div id="kontenliste"></div>
         <button type="button" id="konto-dazu">Konto hinzufügen</button>
 
@@ -218,7 +219,7 @@ function kontenZeigen() {
   koerper.replaceChildren();
   for (const k of zustand.konten) {
     const zeile = element("tr", undefined, k.aktiv ? "" : "aus");
-    zeile.append(element("td", k.anzeige), element("td", k.name + (k.aktiv ? "" : " (aus)")));
+    zeile.append(element("td", k.anzeige), element("td", (k.titel || "–") + (k.aktiv ? "" : " (aus)")));
     const zelle = element("td");
     zelle.append(element("span", ZUSTAND_TEXT[k.zustand] || k.zustand, "marke " + k.zustand));
     zeile.append(zelle);
@@ -248,23 +249,41 @@ function kontozeile(k) {
     if (q.name === k.quelle) o.selected = true;
     wahl.append(o);
   }
-  const name = element("input"); name.type = "text"; name.value = k.name || ""; name.placeholder = "Name, z. B. privat";
+  const name = element("input"); name.type = "text"; name.value = k.titel || ""; name.placeholder = "Name, z. B. privat";
   name.setAttribute("aria-label", "Kontoname");
+  wahl.addEventListener("change", namenZeigen);
   const an = element("label", undefined, "ankreuzen"); an.style.margin = "0";
   const box = element("input"); box.type = "checkbox"; box.checked = k.aktiv !== false;
   an.append(box, " an");
   const weg = element("button", "Entfernen"); weg.type = "button";
-  weg.addEventListener("click", () => zeile.remove());
+  weg.addEventListener("click", () => { zeile.remove(); namenZeigen(); });
   zeile.append(wahl, name, an, weg);
-  zeile.lesen = () => ({ quelle: wahl.value, name: name.value, aktiv: box.checked });
+  // kennung: woran Anmeldung und Protokoll hängen — bleibt beim Umbenennen gleich.
+  zeile.lesen = () => ({ quelle: wahl.value, name: name.value, aktiv: box.checked,
+                         kennung: wahl.value === k.quelle ? (k.name || null) : null });
+  zeile.anbieter = () => wahl.value;
+  zeile.namensfeld = name;
   return zeile;
+}
+
+// Ein Name ist erst nötig, wenn es beim selben Anbieter ein zweites Konto gibt.
+function namenZeigen() {
+  const zeilen = [...$("kontenliste").children].filter((z) => z.lesen);
+  for (const z of zeilen) {
+    const mehrere = zeilen.filter((a) => a.anbieter() === z.anbieter()).length > 1;
+    const feld = z.namensfeld;
+    feld.classList.toggle("unsichtbar", !mehrere && !feld.value.trim());
+    feld.required = mehrere;
+    feld.placeholder = mehrere ? "Name (nötig), z. B. privat" : "Name, z. B. privat";
+  }
 }
 
 function formularFuellen() {
   $("belegordner").value = zustand.belegordner;
   const liste = $("kontenliste");
   liste.replaceChildren(...zustand.konten.map(kontozeile));
-  if (!zustand.konten.length) liste.append(kontozeile({ quelle: zustand.quellen[0].name, name: "privat" }));
+  if (!zustand.konten.length) liste.append(kontozeile({ quelle: zustand.quellen[0].name }));
+  namenZeigen();
   const m = zustand.mail;
   $("mail-an").checked = zustand.mail_an;
   $("server").value = m.server; $("port").value = m.port; $("verschluesselung").value = m.verschluesselung;
@@ -351,7 +370,10 @@ function beobachten() {
 $("holen").addEventListener("click", () => starten("/api/holen", { fehlende: false }));
 $("fehlende").addEventListener("click", () => starten("/api/holen", { fehlende: true }));
 $("alle-pruefen").addEventListener("click", () => starten("/api/pruefen", {}));
-$("konto-dazu").addEventListener("click", () => $("kontenliste").append(kontozeile({ quelle: zustand.quellen[0].name, name: "" })));
+$("konto-dazu").addEventListener("click", () => {
+  $("kontenliste").append(kontozeile({ quelle: zustand.quellen[0].name }));
+  namenZeigen();
+});
 $("mail-an").addEventListener("change", mailFelderZeigen);
 
 $("formular").addEventListener("submit", async (ereignis) => {
@@ -360,7 +382,7 @@ $("formular").addEventListener("submit", async (ereignis) => {
   $("gespeichert").classList.add("versteckt");
   const daten = {
     belegordner: $("belegordner").value,
-    konten: [...$("kontenliste").children].filter((z) => z.lesen).map((z) => z.lesen()).filter((k) => k.name.trim()),
+    konten: [...$("kontenliste").children].filter((z) => z.lesen).map((z) => z.lesen()),
     mail_an: $("mail-an").checked,
     mail: { server: $("server").value, port: $("port").value, verschluesselung: $("verschluesselung").value,
             benutzer: $("benutzer").value, absender: $("absender").value,

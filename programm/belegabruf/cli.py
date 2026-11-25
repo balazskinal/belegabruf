@@ -73,7 +73,7 @@ def start() -> int:
         print("═" * (11 + len(__version__)))
         if konten:
             print("Heute werden geholt: " + ", ".join(
-                f"{quellen.anzeigename(k.quelle)} ({k.name})" for k in konten))
+                k.anzeige for k in konten))
         else:
             print("Es ist kein Konto eingeschaltet.")
         print(f"Belegordner: {einst.belegordner}")
@@ -90,7 +90,7 @@ def start() -> int:
             zuletzt = zustand.zu_lange_her(k.quelle, k.name)
             if zuletzt:
                 print(
-                    f"\n⚠ Achtung: {quellen.anzeigename(k.quelle)} ({k.name}) lief zuletzt am "
+                    f"\n⚠ Achtung: {k.anzeige} lief zuletzt am "
                     f"{zuletzt:%d.%m.%Y}. Airbnb zeigt nur die letzten 12 Monate —\n"
                     "  ältere Rechnungen sind sonst irgendwann weg. Am besten jeden Monat holen."
                 )
@@ -148,7 +148,7 @@ def lauf(einst, konten, nachholen: bool = False) -> int:
     nicht_angemeldet = []
     for k in konten:
         status = ablauf.sitzung_pruefen(k)
-        anzeige = f"{quellen.anzeigename(k.quelle)} ({k.name})"
+        anzeige = k.anzeige
         if status == "angemeldet":
             print(f"  ✓ {anzeige}: angemeldet")
         else:
@@ -158,7 +158,7 @@ def lauf(einst, konten, nachholen: bool = False) -> int:
     # 2. Erst alle Anmeldefenster
     ausgelassen = set()
     for k in nicht_angemeldet:
-        anzeige = f"{quellen.anzeigename(k.quelle)} ({k.name})"
+        anzeige = k.anzeige
         print(f"\nAnmeldung für {anzeige}: Gleich öffnet sich ein Browserfenster.")
         if ablauf.anmelden(k, melden):
             print(f"  ✓ {anzeige}: angemeldet")
@@ -176,9 +176,9 @@ def lauf(einst, konten, nachholen: bool = False) -> int:
         if k.name + "\0" + k.quelle in ausgelassen:
             from belegabruf.quellen.basis import Ergebnis
 
-            ergebnisse.append(Ergebnis(k.quelle, k.name, status="anmeldung_noetig"))
+            ergebnisse.append(Ergebnis(k.quelle, k.name, status="anmeldung_noetig", anzeige=k.anzeige))
             continue
-        print(f"\n{quellen.anzeigename(k.quelle)} ({k.name}):")
+        print(f"\n{k.anzeige}:")
         ergebnisse.append(ablauf.abrufen(einst, k, lambda t: print("  " + t), nachholen=nachholen))
 
     # 4. Zusammenfassung
@@ -206,7 +206,7 @@ def befehl_holen(args) -> int:
         if ablauf.sitzung_pruefen(k) != "angemeldet":
             from belegabruf.quellen.basis import Ergebnis
 
-            ergebnisse.append(Ergebnis(k.quelle, k.name, status="anmeldung_noetig"))
+            ergebnisse.append(Ergebnis(k.quelle, k.name, status="anmeldung_noetig", anzeige=k.anzeige))
             continue
         ergebnisse.append(ablauf.abrufen(
             einst, k, lambda t: print(t, file=ausgabe), nachholen=args.fehlende))
@@ -224,13 +224,14 @@ def befehl_holen(args) -> int:
 def befehl_pruefen(args) -> int:
     _, konten = _konten_oder_fehler(args)
     ergebnis = [
-        {"quelle": k.quelle, "konto": k.name, "status": ablauf.sitzung_pruefen(k)} for k in konten
+        {"quelle": k.quelle, "konto": k.name, "anzeige": k.anzeige, "status": ablauf.sitzung_pruefen(k)}
+        for k in konten
     ]
     if args.json:
         print(json.dumps(ergebnis, ensure_ascii=False, indent=2))
     else:
         for e in ergebnis:
-            print(f"{quellen.anzeigename(e['quelle'])} ({e['konto']}): {e['status']}")
+            print(f"{e['anzeige']}: {e['status']}")
     return 0 if all(e["status"] == "angemeldet" for e in ergebnis) else 2
 
 
@@ -238,7 +239,7 @@ def befehl_anmelden(args) -> int:
     _, konten = _konten_oder_fehler(args)
     ok = True
     for k in konten:
-        print(f"Anmeldung für {quellen.anzeigename(k.quelle)} ({k.name}):")
+        print(f"Anmeldung für {k.anzeige}:")
         ok = ablauf.anmelden(k, print) and ok
     return 0 if ok else 2
 
@@ -275,7 +276,7 @@ def main(argv: list[str] | None = None) -> int:
             konten = einst.aktive_konten()
             if konten and einrichtung._ja("\nJetzt gleich die Anmeldungen prüfen?", True):
                 for k in konten:
-                    anzeige = f"{quellen.anzeigename(k.quelle)} ({k.name})"
+                    anzeige = k.anzeige
                     if ablauf.sitzung_pruefen(k) == "angemeldet":
                         print(f"  ✓ {anzeige}: angemeldet")
                         continue

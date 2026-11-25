@@ -187,7 +187,8 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
                  for name in einst.ziele if name not in ziel_verzeichnis.LIEFERZIELE]
         quelle = quelle_fuer(konto)
     except KeyError as fehler:
-        return Ergebnis(konto.quelle, konto.name, status="fehler", fehler=str(fehler).strip("'\""))
+        return Ergebnis(konto.quelle, konto.name, status="fehler", fehler=str(fehler).strip("'\""),
+                        anzeige=konto.anzeige)
 
     def bekannt(schluessel: str) -> bool:
         if nachholen and schluessel.startswith("rechnung:") and protokoll.fehlt_lokal(schluessel):
@@ -225,6 +226,7 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
         ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=str(fehler))
     except Exception as fehler:  # noqa: BLE001 - nie abstürzen, immer melden
         ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=f"{type(fehler).__name__}: {str(fehler).splitlines()[0][:200]}")
+    ergebnis.anzeige = ergebnis.anzeige or konto.anzeige
     if ergebnis.status in {"ok", "unvollstaendig"}:
         zustand.lauf_merken(konto.quelle, konto.name)
     try:
@@ -255,7 +257,7 @@ STATUS_TEXT = {
 def zusammenfassung(ergebnisse: list[Ergebnis], belegordner: Path) -> str:
     zeilen = ["", "Zusammenfassung", "───────────────"]
     for erg in ergebnisse:
-        name = f"{quellen.anzeigename(erg.quelle)} ({erg.konto})"
+        name = erg.anzeige or f"{quellen.anzeigename(erg.quelle)} ({erg.konto})"
         zeilen.append(f"{name}: {STATUS_TEXT.get(erg.status, erg.status)}")
         if erg.status in {"ok", "abgelaufen", "unvollstaendig"} or erg.neu or erg.schon_da:
             zeilen.append(f"  {erg.neu} neu, {erg.schon_da} schon vorhanden")

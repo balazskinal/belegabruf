@@ -179,7 +179,7 @@ def _speichern(s, tmp_path, mail_an=False):
     ({"belegordner": "/tmp/x\u0000y"}, "ungültig"),
     ({"konten": [{"quelle": "gibtsnicht", "name": "a"}]}, "gibt es nicht"),
     ({"konten": [{"quelle": "airbnb", "name": "a\nb"}]}, "ungültig"),
-    ({"konten": [{"quelle": "airbnb", "name": "a"}, {"quelle": "airbnb", "name": "A"}]}, "schon"),
+    ({"konten": [{"quelle": "airbnb", "name": "a"}, {"quelle": "airbnb", "name": "A"}]}, "dasselbe"),
     ({"mail_an": True, "mail": {"server": "smtp.example.com", "port": 70000}}, "Port"),
     ({"mail_an": True, "mail": {"server": "smtp.example.com; rm -rf /", "port": 465}}, "Postausgangsserver"),
     ({"mail_an": True, "mail": {"server": "smtp.example.com", "verschluesselung": "keine"}}, "Verschlüsselung"),
@@ -282,11 +282,12 @@ def test_ablauf_einrichten_pruefen_anmelden_holen(seite, server, tmp_path):
 
     # Einrichten
     p.fill("#belegordner", str(tmp_path / "Belege"))
-    p.fill("#kontenliste input[type=text]", "privat")
     p.click("#speichern")
     p.wait_for_selector("#gespeichert:not(.versteckt)")
     assert p.is_hidden("#willkommen")
-    assert p.inner_text("#konten").count("privat") == 1
+    # Ein einzelnes Konto braucht keinen Namen: Anzeige nur „Airbnb“.
+    assert p.is_hidden("#kontenliste input[type=text]")
+    assert p.inner_text("#konten").count("Airbnb") == 1
     assert "unbekannt" in p.inner_text("#konten")
 
     # Prüfen: abgelaufen
@@ -311,18 +312,17 @@ def test_ablauf_einrichten_pruefen_anmelden_holen(seite, server, tmp_path):
     p.wait_for_function("() => document.querySelector('#zusammenfassung').innerText.includes('2 neu')")
     assert "hole a1" in p.inner_text("#protokoll")
     zusammenfassung = p.inner_text("#zusammenfassung")
-    assert "Airbnb (privat): fertig" in zusammenfassung and "✓ passt" in zusammenfassung
+    assert "Airbnb: fertig" in zusammenfassung and "✓ passt" in zusammenfassung
     assert (tmp_path / "Belege" / "airbnb" / "2026" / "2026-11-03_a1.pdf").exists()
 
     # Neu laden geht (Schlüssel bleibt in der Adresse des App-Fensters)
     p.reload()
-    p.wait_for_function("() => document.querySelector('#konten').innerText.includes('privat')")
+    p.wait_for_function("() => document.querySelector('#konten').innerText.includes('Airbnb')")
 
 
 def test_fehlende_dateien_und_beenden(seite, server, tmp_path):
     p = seite
     p.fill("#belegordner", str(tmp_path / "Belege"))
-    p.fill("#kontenliste input[type=text]", "privat")
     p.click("#speichern")
     p.wait_for_selector("#gespeichert:not(.versteckt)")
     p.click("#holen")
@@ -344,7 +344,6 @@ def test_mail_passwort_und_pruefen_in_der_seite(seite, server, tmp_path, umgebun
     monkeypatch.setattr(mail, "anmeldung_pruefen", lambda einst, pw: geprueft.append(pw == GEHEIM) or None)
     p = seite
     p.fill("#belegordner", str(tmp_path / "Belege"))
-    p.fill("#kontenliste input[type=text]", "privat")
     p.check("#mail-an")
     p.fill("#server", "smtp.example.com")
     p.select_option("#verschluesselung", "starttls")
@@ -418,7 +417,6 @@ def test_knoepfe_in_der_seite_gesperrt(seite, server, tmp_path, monkeypatch):
     LangsameAttrappe.tor.clear()
     p = seite
     p.fill("#belegordner", str(tmp_path / "Belege"))
-    p.fill("#kontenliste input[type=text]", "privat")
     p.click("#speichern")
     p.wait_for_selector("#gespeichert:not(.versteckt)")
     p.click("#holen")
@@ -526,7 +524,6 @@ def test_warnung_steht_vor_dem_speichern_in_der_seite(server, tmp_path, monkeypa
         p.wait_for_selector("#version:not(:empty)")
         p.click("#einstellungen summary")
         assert "eigene Kommentare" in p.inner_text("#fremd-hinweis")
-        p.fill("#kontenliste input[type=text]", "privat")
         p.click("#speichern")
         p.wait_for_selector("#gespeichert:not(.versteckt)")
         assert "einstellungen.toml.vorher" in p.inner_text("#gespeichert")
@@ -540,7 +537,7 @@ def test_warnung_steht_vor_dem_speichern_in_der_seite(server, tmp_path, monkeypa
 def test_aehnliche_kontonamen_abgelehnt_formular(server, tmp_path, namen):
     konten = [{"quelle": "airbnb", "name": n} for n in namen]
     antwort, inhalt = _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path, konten=konten))
-    assert antwort.status == 400 and "schon" in json.loads(inhalt)["fehler"]
+    assert antwort.status == 400 and "dasselbe" in json.loads(inhalt)["fehler"]
 
 
 def test_gleicher_name_bei_verschiedenen_quellen_erlaubt(server, tmp_path):
@@ -565,7 +562,7 @@ def test_aehnliche_kontonamen_im_terminal_einrichten(monkeypatch, capsys):
     monkeypatch.setattr(builtins, "input", lambda text="": next(eingaben))
     konten = einrichtung._konten_abfragen("airbnb", [])
     assert [k.name for k in konten] == ["Privat", "Geschäft"]
-    assert "gibt es schon" in capsys.readouterr().out
+    assert "dasselbe" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("port", [0, True, "abc", "4.5", -1, 70000, [465]])
@@ -651,3 +648,105 @@ def test_schluessel_nicht_in_der_kommandozeile(monkeypatch):
         s.server_close()
     assert not any(s.schluessel in str(a) for a in gestartet["args"])
     assert gestartet["goto"] == s.adresse
+
+
+# ── Anmerkungen aus dem Test 2.0.0: Kontoname optional ───────────────────────
+
+
+def _toml(tmp_path, text):
+    datei = tmp_path / "e.toml"
+    datei.write_text(f'belegordner = "{tmp_path / "Belege"}"\n' + text, encoding="utf-8")
+    return datei
+
+
+def test_bisheriges_konto_mit_namen_behaelt_pfade(tmp_path):
+    from belegabruf.protokoll import Protokoll
+
+    einst = einstellungen.laden(_toml(tmp_path, '[[konto]]\nquelle = "airbnb"\nname = "Co-Host"\n'))
+    k = einst.konten[0]
+    assert k.name == "Co-Host" and k.anzeigetitel == "Co-Host" and k.anzeige == "Airbnb (Co-Host)"
+    assert ablauf.quelle_fuer(k).profil == pfade.datenordner() / "profile" / "airbnb-co-host"
+    assert Protokoll(k.quelle, k.name, einst.belegordner).datei == \
+        pfade.datenordner() / "protokolle" / "airbnb" / "co-host.csv"
+    text = einstellungen.als_text(einst)
+    assert 'name = "Co-Host"' in text and "kennung" not in text.replace("# kennung", "")
+
+
+def test_konto_ohne_namen(tmp_path):
+    einst = einstellungen.laden(_toml(tmp_path, '[[konto]]\nquelle = "airbnb"\n'))
+    k = einst.konten[0]
+    assert k.name == "standard" and k.anzeigetitel == "" and k.anzeige == "Airbnb"
+    assert ablauf.quelle_fuer(k).profil.name == "airbnb-standard"
+    wieder = einstellungen.aus_text(einstellungen.als_text(einst))
+    assert (wieder.konten[0].name, wieder.konten[0].anzeigetitel) == ("standard", "")
+    assert "Airbnb: fertig" in ablauf.zusammenfassung(
+        [Ergebnis("airbnb", "standard", anzeige=k.anzeige)], einst.belegordner)
+
+
+def test_mehrere_konten_brauchen_namen(tmp_path):
+    with pytest.raises(einstellungen.EinstellungsFehler, match="braucht jedes einen Namen"):
+        einstellungen.laden(_toml(tmp_path, '[[konto]]\nquelle = "airbnb"\n\n[[konto]]\nquelle = "airbnb"\nname = "Co"\n'))
+    # bei verschiedenen Anbietern je eines ohne Namen: erlaubt
+    einst = einstellungen.laden(_toml(tmp_path, '[[konto]]\nquelle = "airbnb"\n\n[[konto]]\nquelle = "skool"\n'))
+    assert [k.anzeige for k in einst.konten] == ["Airbnb", "Skool"]
+
+
+def test_formular_ohne_namen_und_umbenennen_behaelt_kennung(server, tmp_path):
+    antwort, inhalt = _anfrage(server, "POST", "/api/einstellungen", _mit(server),
+                               _eingaben(tmp_path, konten=[{"quelle": "airbnb", "name": ""}]))
+    assert antwort.status == 200
+    konto = json.loads(inhalt)["konten"][0]
+    assert (konto["name"], konto["titel"], konto["bezeichnung"]) == ("standard", "", "Airbnb")
+
+    # zweites Konto dazu: ohne Namen geht es nicht mehr
+    zwei = [{"quelle": "airbnb", "name": "", "kennung": "standard"}, {"quelle": "airbnb", "name": "Co"}]
+    antwort, inhalt = _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path, konten=zwei))
+    assert antwort.status == 400 and "braucht jedes einen Namen" in json.loads(inhalt)["fehler"]
+
+    # das erste bekommt einen Namen: Kennung (Anmeldung, Protokoll) bleibt „standard“
+    zwei[0]["name"] = "Privat"
+    antwort, inhalt = _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path, konten=zwei))
+    assert antwort.status == 200
+    konten = {k["titel"]: k["name"] for k in json.loads(inhalt)["konten"]}
+    assert konten == {"Privat": "standard", "Co": "Co"}
+    assert 'kennung = "standard"' in pfade.einstellungsdatei().read_text(encoding="utf-8")
+    einst = einstellungen.laden()
+    assert ablauf.quelle_fuer(einst.konten[0]).profil.name == "airbnb-standard"
+
+    # umbenennen eines benannten Kontos behält dessen Kennung auch
+    zwei = [{"quelle": "airbnb", "name": "Privat", "kennung": "standard"},
+            {"quelle": "airbnb", "name": "Co-Gastgeber", "kennung": "Co"}]
+    _, inhalt = _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path, konten=zwei))
+    assert {k["titel"]: k["name"] for k in json.loads(inhalt)["konten"]} == {"Privat": "standard", "Co-Gastgeber": "Co"}
+
+
+def test_formular_fremde_kennung_wird_nicht_uebernommen(server, tmp_path):
+    konten = [{"quelle": "airbnb", "name": "", "kennung": "../../irgendwas"}]
+    _, inhalt = _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path, konten=konten))
+    assert json.loads(inhalt)["konten"][0]["name"] == "standard"
+
+
+def test_terminal_einrichten_ohne_namen_und_zweites_konto(monkeypatch):
+    import builtins
+
+    from belegabruf import einrichtung
+
+    eingaben = iter([""])
+    monkeypatch.setattr(builtins, "input", lambda text="": next(eingaben, "n"))
+    konten = einrichtung._konten_abfragen("airbnb", [])
+    assert [(k.name, k.anzeigetitel) for k in konten] == [("standard", "")]
+
+    eingaben = iter(["", "j", "Privat", "Co", "n"])
+    konten = einrichtung._konten_abfragen("airbnb", [])
+    assert [(k.name, k.anzeigetitel) for k in konten] == [("standard", "Privat"), ("Co", "Co")]
+
+
+def test_namensfeld_erscheint_erst_beim_zweiten_konto(seite, tmp_path):
+    p = seite
+    assert p.is_hidden("#kontenliste input[type=text]")
+    p.click("#konto-dazu")
+    felder = p.locator("#kontenliste input[type=text]")
+    assert felder.nth(0).is_visible() and felder.nth(1).is_visible()
+    assert felder.nth(0).evaluate("e => e.required")
+    p.locator("#kontenliste button:has-text('Entfernen')").nth(1).click()
+    assert p.is_hidden("#kontenliste input[type=text]")

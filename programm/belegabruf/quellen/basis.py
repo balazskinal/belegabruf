@@ -63,6 +63,7 @@ class Ergebnis:
     # anzeige, geliefert, offen, fehler (Klartext, nie mit Passwort), unklar
     # (Rechnungsnummern), schon_markiert (beim allerersten Einschalten).
     lieferungen: dict[str, dict] = field(default_factory=dict)
+    anzeige: str = ""  # „Airbnb“ bzw. „Airbnb (Privat)“; leer = aus quelle und konto
 
     def als_dict(self) -> dict:
         return dict(self.__dict__)

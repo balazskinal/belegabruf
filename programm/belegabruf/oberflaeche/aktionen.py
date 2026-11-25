@@ -109,8 +109,9 @@ class Steuerung:
                 fehlen = ablauf.fehlende_dateien(einst, k) if eingerichtet else 0
             except Exception:  # noqa: BLE001
                 fehlen = 0
+            # name = interne Kennung (für Prüfen/Anmelden), titel = Name für Menschen (darf leer sein)
             konten.append({"quelle": k.quelle, "anzeige": quellen.anzeigename(k.quelle), "name": k.name,
-                           "aktiv": k.aktiv, "zustand": self.kontozustand.get(schluessel, "unbekannt"),
+                           "titel": k.anzeigetitel, "bezeichnung": k.anzeige, "aktiv": k.aktiv, "zustand": self.kontozustand.get(schluessel, "unbekannt"),
                            "fehlende": fehlen})
         m = einst.mail
         return {
@@ -173,10 +174,10 @@ class Steuerung:
 
         def arbeit(a: Auftrag):
             for k in konten:
-                a.melden(f"Prüfe {quellen.anzeigename(k.quelle)} ({k.name}) …")
+                a.melden(f"Prüfe {k.anzeige} …")
                 status = ablauf.sitzung_pruefen(k)
                 self.kontozustand[f"{k.quelle}/{k.name}"] = _zustand_aus(status)
-                a.melden(f"{quellen.anzeigename(k.quelle)} ({k.name}): {_zustand_text(status)}")
+                a.melden(f"{k.anzeige}: {_zustand_text(status)}")
             a.code = 0
 
         return self.starten("pruefen", arbeit)
@@ -187,7 +188,7 @@ class Steuerung:
         k = konten[0]
 
         def arbeit(a: Auftrag):
-            a.melden(f"Anmeldung bei {quellen.anzeigename(k.quelle)} ({k.name}): Es öffnet sich ein eigenes Fenster.")
+            a.melden(f"Anmeldung bei {k.anzeige}: Es öffnet sich ein eigenes Fenster.")
             ok = ablauf.anmelden(k, a.melden)
             self.kontozustand[f"{k.quelle}/{k.name}"] = "angemeldet" if ok else "abgelaufen"
             a.melden("✓ angemeldet" if ok else "✗ Anmeldung nicht erkannt.")
@@ -208,13 +209,13 @@ class Steuerung:
                 a.melden(f"Das Protokoll aus Version 1 ist übernommen ({uebernommen} Einträge).")
             ergebnisse: list[Ergebnis] = []
             for k in konten:
-                anzeige = f"{quellen.anzeigename(k.quelle)} ({k.name})"
+                anzeige = k.anzeige
                 a.melden(f"{anzeige}: prüfe die Anmeldung …")
                 status = ablauf.sitzung_pruefen(k)
                 self.kontozustand[f"{k.quelle}/{k.name}"] = _zustand_aus(status)
                 if status != "angemeldet":
                     a.melden(f"{anzeige}: nicht angemeldet — bitte bei diesem Konto „Anmelden“ wählen.")
-                    ergebnisse.append(Ergebnis(k.quelle, k.name, status="anmeldung_noetig"))
+                    ergebnisse.append(Ergebnis(k.quelle, k.name, status="anmeldung_noetig", anzeige=k.anzeige))
                     continue
                 if nachholen:
                     a.melden(f"{anzeige}: fehlende Dateien werden neu geholt (dazu alles, was neu ist).")
@@ -308,26 +309,32 @@ def einstellungen_aus_eingaben(daten: dict) -> Einstellungen:
         alt = einstellungen.laden()
     except EinstellungsFehler:
         alt = None
-    alte_optionen = {(k.quelle, k.name): k.optionen for k in (alt.konten if alt else [])}
+    alte = {(k.quelle, k.name): k for k in (alt.konten if alt else [])}
 
     konten: list[Konto] = []
     roh_konten = daten.get("konten") or []
     if not isinstance(roh_konten, list) or len(roh_konten) > 50:
         raise Eingabefehler("Konten: ungültige Eingabe.")
-    gesehen = set()
     for eintrag in roh_konten:
         if not isinstance(eintrag, dict):
             raise Eingabefehler("Konten: ungültige Eingabe.")
         quelle = _text(eintrag.get("quelle"), "Anbieter", 40, pflicht=True).lower()
         if quelle not in quellen.QUELLEN:
             raise Eingabefehler(f"Anbieter „{quelle}“ gibt es nicht.")
-        name = _text(eintrag.get("name"), "Kontoname", 60, pflicht=True)
-        if (quelle, pfade.kurzname(name)) in gesehen:
-            raise Eingabefehler(f"Das Konto „{name}“ gibt es bei {quellen.anzeigename(quelle)} schon (oder eines, "
-                                "das sich nur in Groß-/Kleinschreibung oder Sonderzeichen unterscheidet).")
-        gesehen.add((quelle, pfade.kurzname(name)))
-        konten.append(Konto(quelle=quelle, name=name, aktiv=eintrag.get("aktiv") is not False,
-                            optionen=dict(alte_optionen.get((quelle, name), {}))))
+        titel = _text(eintrag.get("name"), "Kontoname", 60)
+        # Ein schon eingetragenes Konto behält seine Kennung (Anmeldung, Protokoll), auch
+        # wenn es umbenannt wird. Eine Kennung, die es nicht gibt, wird nicht übernommen.
+        kennung = eintrag.get("kennung")
+        if not (isinstance(kennung, str) and (quelle, kennung) in alte):
+            kennung = einstellungen.kennung_fuer(titel)
+        neu_konto = Konto(quelle=quelle, name=kennung, aktiv=eintrag.get("aktiv") is not False,
+                          optionen=dict(alte[(quelle, kennung)].optionen) if (quelle, kennung) in alte else {},
+                          titel=titel)
+        try:
+            einstellungen.konten_unterscheidbar(konten + [neu_konto])
+        except EinstellungsFehler as fehler:
+            raise Eingabefehler(str(fehler)) from None
+        konten.append(neu_konto)
 
     mail_an = daten.get("mail_an") is True
     roh_mail = daten.get("mail") or {}

@@ -29,16 +29,48 @@ def _wahrheitswert(wert: object, standard: bool = True) -> bool:
     raise EinstellungsFehler(f"'{wert}' ist weder ja noch nein.")
 
 
+#: Interne Kennung eines Kontos ohne Namen (je Anbieter höchstens eines).
+STANDARD_KENNUNG = "standard"
+
+
 @dataclass
 class Konto:
+    """Ein Konto bei einem Anbieter.
+
+    ``name`` ist die **interne Kennung**: Daran hängen Browserprofil (Anmeldung),
+    Protokoll und Zustand. Sie ändert sich nie von selbst. ``titel`` ist der Name für
+    Menschen — leer heißt „kein Name“ (Anzeige nur „Airbnb“). Bei bisherigen Konten
+    mit Namen sind beide gleich, die Pfade bleiben also, wie sie waren."""
+
     quelle: str
     name: str
     aktiv: bool = True
     optionen: dict = field(default_factory=dict)
+    titel: str | None = None  # None = wie name
+
+    @property
+    def anzeigetitel(self) -> str:
+        return self.name if self.titel is None else self.titel
 
     @property
     def bezeichnung(self) -> str:
         return f"{self.quelle} ({self.name})"
+
+    @property
+    def anzeige(self) -> str:
+        """„Airbnb“ oder „Airbnb (Privat)“."""
+        from belegabruf import quellen
+
+        return kontoanzeige(quellen.anzeigename(self.quelle), self.anzeigetitel)
+
+
+def kontoanzeige(anbieter: str, titel: str) -> str:
+    return f"{anbieter} ({titel})" if titel else anbieter
+
+
+def kennung_fuer(titel: str) -> str:
+    """Die interne Kennung eines neuen Kontos: der Name, ohne Namen „standard“."""
+    return titel.strip() or STANDARD_KENNUNG
 
 
 #: Vorgabe für den Eintrag im Passwortspeicher des Betriebssystems: "Dienst/Konto".
@@ -85,24 +117,41 @@ class Einstellungen:
             k for k in self.konten
             if k.aktiv
             and (quelle is None or k.quelle == quelle)
-            and (konto is None or k.name == konto)
+            and (konto is None or konto in (k.name, k.anzeigetitel))
         ]
 
 
 def konten_unterscheidbar(konten: list[Konto]) -> None:
-    """Zwei Konten derselben Quelle dürfen nicht denselben Ordnernamen ergeben: Profil
-    (Anmeldung) und Protokoll hängen an ``pfade.kurzname``. Sonst teilten sich „Privat“
-    und „privat!“ die Anmeldung, und das zweite hielte die Rechnungen des ersten für
-    schon geholt."""
-    gesehen: dict[tuple[str, str], str] = {}
+    """Regeln für Kontonamen je Anbieter:
+
+    * Ein einzelnes Konto braucht keinen Namen. Gibt es beim selben Anbieter mehrere,
+      braucht jedes einen Namen.
+    * Zwei Konten derselben Quelle dürfen weder denselben Ordnernamen (Kennung) noch
+      zum Verwechseln ähnliche Namen haben: Profil (Anmeldung) und Protokoll hängen an
+      ``pfade.kurzname``. Sonst teilten sich „Privat“ und „privat!“ die Anmeldung, und
+      das zweite hielte die Rechnungen des ersten für schon geholt."""
+    from belegabruf import quellen
+
+    je_quelle: dict[str, list[Konto]] = {}
     for k in konten:
-        schluessel = (k.quelle, pfade.kurzname(k.name))
-        if schluessel in gesehen:
+        je_quelle.setdefault(k.quelle, []).append(k)
+    for quelle, liste in je_quelle.items():
+        anbieter = quellen.anzeigename(quelle)
+        if len(liste) > 1 and any(not k.anzeigetitel.strip() for k in liste):
             raise EinstellungsFehler(
-                f"Die Konten „{gesehen[schluessel]}“ und „{k.name}“ bei {k.quelle} sind für das Programm "
-                f"dasselbe (beide ergeben den Ordnernamen „{schluessel[1]}“). Bitte einem der beiden einen "
-                "deutlich anderen Namen geben.")
-        gesehen[schluessel] = k.name
+                f"Bei {anbieter} sind mehrere Konten eingetragen — dann braucht jedes einen Namen.")
+        kennungen: dict[str, Konto] = {}
+        titel: dict[str, Konto] = {}
+        for k in liste:
+            for verzeichnis, wert in ((kennungen, k.name), (titel, k.anzeigetitel or k.name)):
+                kurz = pfade.kurzname(wert)
+                anderes = verzeichnis.get(kurz)
+                if anderes is not None and anderes is not k:
+                    raise EinstellungsFehler(
+                        f"Die Konten „{anderes.anzeigetitel or anderes.name}“ und „{k.anzeigetitel or k.name}“ "
+                        f"bei {anbieter} sind für das Programm dasselbe (beide ergeben den Ordnernamen "
+                        f"„{kurz}“). Bitte einem der beiden einen deutlich anderen Namen geben.")
+                verzeichnis[kurz] = k
 
 
 def laden(datei: Path | None = None) -> Einstellungen:
@@ -127,15 +176,18 @@ def aus_text(text: str, herkunft: str = "Einstellungen") -> Einstellungen:
     belegordner = Path(str(roh.get("belegordner") or pfade.standard_belegordner())).expanduser()
     konten = []
     for eintrag in roh.get("konto", []):
-        if not eintrag.get("quelle") or not eintrag.get("name"):
-            raise EinstellungsFehler("Jedes [[konto]] braucht 'quelle' und 'name'.")
-        optionen = {k: v for k, v in eintrag.items() if k not in {"quelle", "name", "aktiv"}}
+        if not isinstance(eintrag, dict) or not eintrag.get("quelle"):
+            raise EinstellungsFehler("Jedes [[konto]] braucht 'quelle'.")
+        titel = str(eintrag.get("name") or "").strip()
+        kennung = str(eintrag.get("kennung") or "").strip() or kennung_fuer(titel)
+        optionen = {k: v for k, v in eintrag.items() if k not in {"quelle", "name", "aktiv", "kennung"}}
         konten.append(
             Konto(
                 quelle=str(eintrag["quelle"]).strip().lower(),
-                name=str(eintrag["name"]).strip(),
+                name=kennung,
                 aktiv=_wahrheitswert(eintrag.get("aktiv"), True),
                 optionen=optionen,
+                titel=titel,
             )
         )
     konten_unterscheidbar(konten)
@@ -220,13 +272,20 @@ def als_text(einst: Einstellungen) -> str:
         "# Ein Block [[konto]] je Konto. Mehrere Konten bei derselben Quelle sind",
         "# erlaubt (z. B. ein eigenes und ein Co-Gastgeber-Konto) — jedes bekommt",
         "# seine eigene Anmeldung. Mit aktiv = \"nein\" wird ein Konto übersprungen.",
+        "# name darf leer bleiben, solange es nur ein Konto bei der Quelle gibt.",
+        "# kennung (falls vorhanden) bitte nicht ändern: Daran hängt die Anmeldung.",
     ]
     for konto in einst.konten:
+        titel = konto.anzeigetitel
         zeilen += [
             "",
             "[[konto]]",
             f"quelle = {_toml_text(konto.quelle)}",
-            f"name = {_toml_text(konto.name)}",
+            f"name = {_toml_text(titel)}",
+        ]
+        if konto.name != kennung_fuer(titel):
+            zeilen.append(f"kennung = {_toml_text(konto.name)}")
+        zeilen += [
             f"aktiv = {_toml_text('ja' if konto.aktiv else 'nein')}",
         ]
         for schluessel, wert in konto.optionen.items():

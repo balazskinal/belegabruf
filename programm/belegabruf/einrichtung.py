@@ -35,27 +35,46 @@ def _konten_abfragen(quelle: str, vorhanden: list[Konto]) -> list[Konto]:
     if vorhanden:
         print(f"\n  Eingetragene {anzeige}-Konten:")
         for k in vorhanden:
-            print(f"   - {k.name} ({'eingeschaltet' if k.aktiv else 'ausgeschaltet'})")
+            print(f"   - {k.anzeigetitel or '(ohne Namen)'} ({'eingeschaltet' if k.aktiv else 'ausgeschaltet'})")
         if _ja(f"  {anzeige}-Konten so lassen?", True):
             return vorhanden
+    # Wer einen bisherigen Namen wieder eingibt, behält dessen Anmeldung und Protokoll.
+    bisher = {pfade.kurzname(k.anzeigetitel or k.name): k.name for k in vorhanden}
+
+    def konto(titel: str) -> Konto:
+        return Konto(quelle=quelle, name=bisher.get(pfade.kurzname(titel or einstellungen.STANDARD_KENNUNG),
+                                                     einstellungen.kennung_fuer(titel)), titel=titel)
+
+    def passt(liste: list[Konto]) -> bool:
+        try:
+            einstellungen.konten_unterscheidbar(liste)
+            return True
+        except einstellungen.EinstellungsFehler as fehler:
+            print(f"  {fehler}")
+            return False
+
+    print(f"\n  Ein Name ist nur nötig, wenn du mehrere {anzeige}-Konten hast (z. B. \"privat\" und\n"
+          "  \"co-host\"). Bei nur einem Konto einfach Enter drücken.")
     konten: list[Konto] = []
-    print(
-        f"\n  Gib deinem {anzeige}-Konto einen Namen. Der Name ist nur für dich, damit du\n"
-        "  mehrere Konten auseinanderhalten kannst (z. B. \"privat\" oder \"co-host\")."
-    )
     while True:
-        standard = "privat" if not konten else ""
-        name = _frage(f"  Name für das {len(konten) + 1}. {anzeige}-Konto", standard)
-        if not name:
-            break
-        if any(pfade.kurzname(k.name) == pfade.kurzname(name) for k in konten):
-            print("  Diesen Namen gibt es schon (oder einen, der sich nur in Groß-/Kleinschreibung oder\n"
-                  "  Sonderzeichen unterscheidet). Bitte einen deutlich anderen Namen.")
+        if not konten:
+            neu = konto(_frage(f"  Name für das {anzeige}-Konto (leer = ohne Namen)"))
+        else:
+            name = _frage(f"  Name für das {len(konten) + 1}. {anzeige}-Konto (leer = fertig)")
+            if not name:
+                break
+            neu = konto(name)
+        if not passt(konten + [neu]):
             continue
-        konten.append(Konto(quelle=quelle, name=name))
+        konten.append(neu)
         beispiel = " (z. B. ein Zugang als Co-Gastgeber)" if quelle == "airbnb" else ""
         if not _ja(f"  Noch ein {anzeige}-Konto{beispiel}?", False):
             break
+        while not konten[0].anzeigetitel:
+            # Die Kennung (und damit die Anmeldung) des ersten Kontos bleibt dabei gleich.
+            name = _frage(f"  Dann braucht auch das 1. {anzeige}-Konto einen Namen")
+            if name and passt([Konto(quelle=quelle, name=konten[0].name, titel=name)]):
+                konten[0].titel = name
     return konten
 
 
