@@ -11,28 +11,36 @@ Stand: 25.11.2026. Begründungen stehen in den [Entscheidungen](entscheidungen/R
 - **1.3.0** — Ziel Mail: jede neue Rechnung per Mail an eine oder mehrere Belegadressen, über das
   eigene Postfach; Passwort im Passwortspeicher (ADR-003, ADR-004)
 
-## In Arbeit
-
-- [ ] **1.4.0 — Ziel sevDesk über die API:** Entwurf mit PDF, Datum, Rechnungsnummer (ADR-004)
-
-## Danach: 2.0.0 — Bedienoberfläche im Browserfenster (ADR-005)
+## In Arbeit: 2.0.0 — Bedienoberfläche im Browserfenster (ADR-005)
 
 **Fertig heißt:**
 1. Doppelklick öffnet ein Browserfenster mit der Bedienseite; niemand tippt im Terminal.
 2. Ersteinrichtung komplett über die Seite, Zugangsdaten in den Passwortspeicher.
-3. Je Konto „Anmelden“ öffnet einen Tab; die Seite zeigt danach „angemeldet“.
+3. Je Konto „Anmelden“ öffnet ein eigenes Anmeldefenster (Nachtrag ADR-005); die Seite zeigt danach
+   „angemeldet“.
 4. „Belege holen“ zeigt Fortschritt und dieselbe Zusammenfassung wie das CLI.
 5. Kein Geheimnis auf der Seite, in Server-Antworten oder Logs (Test vorhanden).
 6. Der lokale Server ist nur mit Schlüssel von `127.0.0.1` erreichbar (Test vorhanden).
 7. Auf einem Mac und einem Windows-Rechner nach Anleitung durchgespielt.
 
 **Schritte:**
-- [ ] Offene Punkte aus ADR-005 klären (Terminalfenster, Terminal-Menü, Sprache)
-- [ ] Gerüst: lokaler Server mit Schlüssel, Bedienseite als erster Tab, Startdateien öffnen das Fenster
-- [ ] Einrichten als Formular inkl. Zugangsdaten
-- [ ] Anmelden je Konto mit Zustandsanzeige
-- [ ] Belege holen mit Fortschritt und Zusammenfassung
-- [ ] Alle Szenarien durchspielen, Windows-Test, veröffentlichen
+- [x] Offene Punkte aus ADR-005 klären (Terminalfenster, Terminal-Menü, Sprache) — entschieden 25.11.2026
+- [x] Gerüst: lokaler Server mit Schlüssel, Bedienseite als App-Fenster, Startdateien öffnen das Fenster
+- [x] Einrichten als Formular inkl. Zugangsdaten
+- [x] Anmelden je Konto mit Zustandsanzeige
+- [x] Belege holen mit Fortschritt und Zusammenfassung
+- [x] Neuinstallation mit Balazs durchgespielt (Mac, 25.11.2026); acht Anmerkungen daraus eingebaut:
+  Kontoname optional, Haken „Belege holen“, Einrichtung ohne Headless Shell, Rückmeldung am
+  Speichern-Knopf, Absender vorbelegt, Port springt mit der Verschlüsselung, zwei Reiter, Ablage nach
+  Jahr und Monat
+- [x] Nachtrag dazu: Haken je Konto im Reiter „Belege holen“, Zeitraum je Konto („Belege ab“) für alle
+  drei Quellen, Headless Shell ganz weg, Mailanbieter als Auswahl
+- [ ] Erneut prüfen lassen, Windows-Test, veröffentlichen
+
+## Danach: 2.1.0 — Ziel sevDesk über die API (ADR-004)
+
+Entwurf mit PDF, Datum, Rechnungsnummer, Lieferant und Steuerregel; nur Upload-Aufrufe, Schlüssel im
+Passwortspeicher. Gebaut und geprüft in PR #3, wartet bis nach 2.0.0.
 
 ## Später / Ideen
 

@@ -1,6 +1,7 @@
 """Kommandozeile.
 
-    belege                      Start per Doppelklick: prüfen, anmelden lassen, holen
+    belege oberflaeche          Bedienseite im Browserfenster (Doppelklick auf „Belegabruf“)
+    belege start                Menü im Terminal: prüfen, anmelden lassen, holen
     belege einrichten           Fragen beantworten, Einstellungsdatei schreiben
     belege pruefen [--json]     Sind die Konten angemeldet?
     belege anmelden --quelle airbnb [--konto NAME]
@@ -18,7 +19,7 @@ import argparse
 import json
 import sys
 
-from belegabruf import __version__, ablauf, aktualisierung, einrichtung, einstellungen, quellen, zustand
+from belegabruf import __version__, ablauf, aktualisierung, einrichtung, einstellungen, zustand
 from belegabruf.einstellungen import EinstellungsFehler
 
 
@@ -72,7 +73,7 @@ def start() -> int:
         print("═" * (11 + len(__version__)))
         if konten:
             print("Heute werden geholt: " + ", ".join(
-                f"{quellen.anzeigename(k.quelle)} ({k.name})" for k in konten))
+                k.anzeige for k in konten))
         else:
             print("Es ist kein Konto eingeschaltet.")
         print(f"Belegordner: {einst.belegordner}")
@@ -81,7 +82,8 @@ def start() -> int:
         if neuer:
             print(f"\nHinweis: Es gibt eine neuere Version ({neuer}). Herunterladen unter")
             print(f"  {aktualisierung.NEUESTE_SEITE}")
-            print("  (alten Ordner belegabruf-v… löschen, neues ZIP auspacken — Einstellungen, Anmeldungen\n   und Protokolle bleiben erhalten.)")
+            print("  (alten Ordner belegabruf-v… löschen, neues ZIP auspacken, \"Belegabruf\" doppelklicken —\n"
+                  "   Einstellungen, Anmeldungen und Protokolle bleiben erhalten.)")
 
         for k in konten:
             if k.quelle != "airbnb":  # nur Airbnb zeigt bloß die letzten 12 Monate
@@ -89,7 +91,7 @@ def start() -> int:
             zuletzt = zustand.zu_lange_her(k.quelle, k.name)
             if zuletzt:
                 print(
-                    f"\n⚠ Achtung: {quellen.anzeigename(k.quelle)} ({k.name}) lief zuletzt am "
+                    f"\n⚠ Achtung: {k.anzeige} lief zuletzt am "
                     f"{zuletzt:%d.%m.%Y}. Airbnb zeigt nur die letzten 12 Monate —\n"
                     "  ältere Rechnungen sind sonst irgendwann weg. Am besten jeden Monat holen."
                 )
@@ -147,7 +149,7 @@ def lauf(einst, konten, nachholen: bool = False) -> int:
     nicht_angemeldet = []
     for k in konten:
         status = ablauf.sitzung_pruefen(k)
-        anzeige = f"{quellen.anzeigename(k.quelle)} ({k.name})"
+        anzeige = k.anzeige
         if status == "angemeldet":
             print(f"  ✓ {anzeige}: angemeldet")
         else:
@@ -157,7 +159,7 @@ def lauf(einst, konten, nachholen: bool = False) -> int:
     # 2. Erst alle Anmeldefenster
     ausgelassen = set()
     for k in nicht_angemeldet:
-        anzeige = f"{quellen.anzeigename(k.quelle)} ({k.name})"
+        anzeige = k.anzeige
         print(f"\nAnmeldung für {anzeige}: Gleich öffnet sich ein Browserfenster.")
         if ablauf.anmelden(k, melden):
             print(f"  ✓ {anzeige}: angemeldet")
@@ -175,9 +177,9 @@ def lauf(einst, konten, nachholen: bool = False) -> int:
         if k.name + "\0" + k.quelle in ausgelassen:
             from belegabruf.quellen.basis import Ergebnis
 
-            ergebnisse.append(Ergebnis(k.quelle, k.name, status="anmeldung_noetig"))
+            ergebnisse.append(Ergebnis(k.quelle, k.name, status="anmeldung_noetig", anzeige=k.anzeige))
             continue
-        print(f"\n{quellen.anzeigename(k.quelle)} ({k.name}):")
+        print(f"\n{k.anzeige}:")
         ergebnisse.append(ablauf.abrufen(einst, k, lambda t: print("  " + t), nachholen=nachholen))
 
     # 4. Zusammenfassung
@@ -205,7 +207,7 @@ def befehl_holen(args) -> int:
         if ablauf.sitzung_pruefen(k) != "angemeldet":
             from belegabruf.quellen.basis import Ergebnis
 
-            ergebnisse.append(Ergebnis(k.quelle, k.name, status="anmeldung_noetig"))
+            ergebnisse.append(Ergebnis(k.quelle, k.name, status="anmeldung_noetig", anzeige=k.anzeige))
             continue
         ergebnisse.append(ablauf.abrufen(
             einst, k, lambda t: print(t, file=ausgabe), nachholen=args.fehlende))
@@ -223,13 +225,14 @@ def befehl_holen(args) -> int:
 def befehl_pruefen(args) -> int:
     _, konten = _konten_oder_fehler(args)
     ergebnis = [
-        {"quelle": k.quelle, "konto": k.name, "status": ablauf.sitzung_pruefen(k)} for k in konten
+        {"quelle": k.quelle, "konto": k.name, "anzeige": k.anzeige, "status": ablauf.sitzung_pruefen(k)}
+        for k in konten
     ]
     if args.json:
         print(json.dumps(ergebnis, ensure_ascii=False, indent=2))
     else:
         for e in ergebnis:
-            print(f"{quellen.anzeigename(e['quelle'])} ({e['konto']}): {e['status']}")
+            print(f"{e['anzeige']}: {e['status']}")
     return 0 if all(e["status"] == "angemeldet" for e in ergebnis) else 2
 
 
@@ -237,7 +240,7 @@ def befehl_anmelden(args) -> int:
     _, konten = _konten_oder_fehler(args)
     ok = True
     for k in konten:
-        print(f"Anmeldung für {quellen.anzeigename(k.quelle)} ({k.name}):")
+        print(f"Anmeldung für {k.anzeige}:")
         ok = ablauf.anmelden(k, print) and ok
     return 0 if ok else 2
 
@@ -247,7 +250,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="belege", description="Belege aus Anbieter-Konten holen.")
     parser.add_argument("--version", action="version", version=f"belegabruf {__version__}")
     unter = parser.add_subparsers(dest="befehl")
-    unter.add_parser("start", help="wie Doppelklick auf 'Belege holen'")
+    unter.add_parser("oberflaeche", help="Bedienseite im Browserfenster öffnen")
+    unter.add_parser("start", help="Menü im Terminal (wie 'Fehlersuche/Belegabruf (Terminal)')")
     unter.add_parser("einrichten", help="Einstellungen abfragen und speichern")
     for name, hilfe in (("holen", "unbeaufsichtigt holen"), ("pruefen", "Anmeldungen prüfen"),
                         ("anmelden", "Anmeldefenster öffnen")):
@@ -262,6 +266,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        if args.befehl == "oberflaeche":
+            from belegabruf import oberflaeche
+
+            return oberflaeche.starten()
         if args.befehl in (None, "start"):
             return start()
         if args.befehl == "einrichten":
@@ -269,14 +277,14 @@ def main(argv: list[str] | None = None) -> int:
             konten = einst.aktive_konten()
             if konten and einrichtung._ja("\nJetzt gleich die Anmeldungen prüfen?", True):
                 for k in konten:
-                    anzeige = f"{quellen.anzeigename(k.quelle)} ({k.name})"
+                    anzeige = k.anzeige
                     if ablauf.sitzung_pruefen(k) == "angemeldet":
                         print(f"  ✓ {anzeige}: angemeldet")
                         continue
                     print(f"\nAnmeldung für {anzeige}: Gleich öffnet sich ein Browserfenster.")
                     ok = ablauf.anmelden(k, print)
                     print(f"  {'✓' if ok else '✗'} {anzeige}: {'angemeldet' if ok else 'nicht angemeldet'}")
-            print('\nAb jetzt reicht ein Doppelklick auf "Belege holen".')
+            print('\nAb jetzt reicht ein Doppelklick auf "Belegabruf".')
             return 0
         return {"holen": befehl_holen, "pruefen": befehl_pruefen, "anmelden": befehl_anmelden}[
             args.befehl](args)
@@ -284,7 +292,7 @@ def main(argv: list[str] | None = None) -> int:
         if getattr(args, "json", False):
             print(json.dumps({"fehler": str(fehler)}, ensure_ascii=False))
         else:
-            print(f"\n{fehler}\nTipp: \"Einrichten\" doppelklicken.")
+            print(f"\n{fehler}\nTipp: \"Belegabruf\" doppelklicken und im Reiter „Einstellungen“ einrichten.")
         return 1
     except KeyboardInterrupt:
         print("\nAbgebrochen.")

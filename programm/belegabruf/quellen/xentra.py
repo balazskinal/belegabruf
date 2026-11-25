@@ -386,6 +386,9 @@ class Xentra(Quelle):
                 erg.abweichungen.append(f"Rechnungsliste nicht geladen ({_kurz(fehler)}).")
                 return erg
             melden(f"{len(zeilen)} Rechnung(en) in der Liste.")
+            # Zeitraum: ältere Zeilen gar nicht erst anklicken und nicht vermerken.
+            erg.uebersprungen = sum(1 for z in zeilen if umgebung.zu_alt(z.datum))
+            zeilen = [z for z in zeilen if not umgebung.zu_alt(z.datum)]
             erg.erwartet = len(zeilen)
             erg.vorhanden = 0
             for zeile in zeilen:

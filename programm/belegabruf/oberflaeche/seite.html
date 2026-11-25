@@ -1,0 +1,924 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Belegabruf</title>
+<link rel="icon" href="data:,">
+<style nonce="{{NONCE}}">
+  :root {
+    --grund: #f6f7f9; --flaeche: #fff; --text: #1c2430; --leise: #5b6676; --linie: #dde2e8;
+    --akzent: #1f5fbf; --akzent-text: #fff; --gut: #1d7a3e; --warn: #a15c00; --schlecht: #b42318;
+    --gut-grund: #e7f5ec; --warn-grund: #fff4e0; --schlecht-grund: #fdecea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --grund: #15191f; --flaeche: #1e242c; --text: #e6e9ee; --leise: #9aa5b4; --linie: #313945;
+      --akzent: #5b9bff; --akzent-text: #0b1220; --gut: #5fcf86; --warn: #f0b35a; --schlecht: #ff7a6e;
+      --gut-grund: #17321f; --warn-grund: #3a2c12; --schlecht-grund: #3d1a17;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--grund); color: var(--text);
+         font: 15px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 20px 16px 60px; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 17px; margin: 0 0 12px; }
+  .version { color: var(--leise); }
+  .abstand { flex: 1; }
+  section { background: var(--flaeche); border: 1px solid var(--linie); border-radius: 10px;
+            padding: 16px; margin-bottom: 16px; }
+  button { font: inherit; border: 1px solid var(--linie); background: var(--flaeche); color: var(--text);
+           padding: 7px 14px; border-radius: 7px; cursor: pointer; }
+  button.haupt { background: var(--akzent); border-color: var(--akzent); color: var(--akzent-text); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
+  .knoepfe { display: flex; gap: 8px; flex-wrap: wrap; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--linie); vertical-align: middle; }
+  th { color: var(--leise); font-weight: 500; font-size: 13px; }
+  .marke { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 13px; }
+  .angemeldet { background: var(--gut-grund); color: var(--gut); }
+  .abgelaufen { background: var(--schlecht-grund); color: var(--schlecht); }
+  .unbekannt { background: var(--grund); color: var(--leise); border: 1px solid var(--linie); }
+  .nie, .laeuft { background: var(--warn-grund); color: var(--warn); }
+  .geprueft { display: block; font-size: 12px; color: var(--leise); margin-top: 2px; }
+  .anmeldung { display: flex; gap: 8px; align-items: center; justify-content: flex-end; white-space: nowrap; }
+  .kontozeile.hervorgehoben { outline: 2px solid var(--warn); outline-offset: 3px; border-radius: 7px; }
+  .aus { color: var(--leise); }
+  #protokoll { background: var(--grund); border: 1px solid var(--linie); border-radius: 7px; padding: 10px;
+               max-height: 240px; overflow: auto; font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace;
+               white-space: pre-wrap; margin: 0; }
+  #zusammenfassung { list-style: none; padding: 0; margin: 12px 0 0; }
+  #zusammenfassung li { padding: 3px 0 3px 18px; }
+  #zusammenfassung li.konto { padding-left: 0; font-weight: 600; margin-top: 8px; }
+  #zusammenfassung li.warnung { color: var(--warn); }
+  #zusammenfassung li.hinweis { color: var(--leise); }
+  #zusammenfassung li.ordner { padding-left: 0; color: var(--leise); margin-top: 8px; }
+  label { display: block; font-size: 13px; color: var(--leise); margin: 10px 0 3px; }
+  input[type=text], input[type=password], input[type=number], select {
+    font: inherit; width: 100%; padding: 7px 9px; border: 1px solid var(--linie); border-radius: 7px;
+    background: var(--flaeche); color: var(--text); }
+  .reihe { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 12px; }
+  .kontozeile { display: grid; grid-template-columns: 130px 1fr auto auto auto; gap: 8px; align-items: center; margin: 6px 0; }
+  .zeitraum { display: flex; gap: 6px; }
+  .zeitraum select { width: auto; }
+  input.ab-datum { width: 112px; }
+  input.holen-haken { width: 18px; height: 18px; }
+  .kontozeile input[type=checkbox] { width: 18px; height: 18px; }
+  .ankreuzen { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 15px; margin-top: 12px; }
+  .meldung { padding: 9px 12px; border-radius: 7px; margin: 10px 0 0; }
+  .meldung.gut { background: var(--gut-grund); color: var(--gut); }
+  .meldung.schlecht { background: var(--schlecht-grund); color: var(--schlecht); }
+  .meldung.warn { background: var(--warn-grund); color: var(--warn); }
+  .leise { color: var(--leise); font-size: 13px; }
+  .versteckt { display: none; }
+  .unsichtbar { visibility: hidden; }
+  a { color: var(--akzent); }
+  /* Infobox beim Drüberfahren und bei Tastaturfokus. Hängt am umgebenden Element, damit sie auch
+     bei einem grauen (disabled) Knopf erscheint; Esc schließt sie. */
+  .info-huelle { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+  .infobox { display: none; position: absolute; left: 0; top: calc(100% + 6px); z-index: 10; width: max-content;
+    max-width: 320px; padding: 8px 10px; border-radius: 7px; background: var(--text); color: var(--grund);
+    font-size: 13px; font-weight: 400; line-height: 1.4; text-align: left; white-space: normal;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .18); }
+  .info-huelle:hover .infobox, .info-huelle:focus-within .infobox { display: block; }
+  .info-huelle.zu .infobox { display: none; }
+  button.info-knopf { border: none; background: none; padding: 2px 4px; color: var(--leise); font-size: 15px;
+    line-height: 1; cursor: help; }
+  button.info-knopf:hover { color: var(--akzent); }
+  .feld-fehler, .feld-fehler:focus-visible { border-color: var(--schlecht) !important; outline: 2px solid var(--schlecht); outline-offset: 0; }
+  .feldsatz { color: var(--schlecht); font-size: 13px; margin: 3px 0 0; }
+  fieldset.erstversand { border: 1px solid var(--linie); border-radius: 7px; margin: 14px 0 0; padding: 4px 12px 10px; }
+  fieldset.erstversand legend { font-size: 13px; color: var(--leise); padding: 0 4px; }
+  fieldset.erstversand .ankreuzen { margin-top: 6px; }
+  .kontozeile + .feldsatz { margin: -2px 0 6px; }
+  .oben10 { margin-top: 10px; }
+  .oben14 { margin-top: 14px; }
+  .oben16 { margin-top: 16px; }
+  .oben18 { margin-top: 18px; }
+  .oben22 { margin-top: 22px; }
+  .reiterleiste { display: flex; gap: 4px; border-bottom: 1px solid var(--linie); margin: 0 0 16px; }
+  .reiterleiste [role=tab] { border: 1px solid transparent; border-bottom: none; border-radius: 8px 8px 0 0;
+    background: none; color: var(--leise); padding: 9px 16px; margin-bottom: -1px; font-weight: 600; }
+  .reiterleiste [role=tab][aria-selected=true] { background: var(--flaeche); color: var(--text);
+    border-color: var(--linie); border-bottom: 1px solid var(--flaeche); }
+  .reiterleiste [role=tab]:hover { color: var(--text); }
+  .knopf-verweis { border: none; background: none; color: var(--akzent); padding: 0; text-decoration: underline; }
+  @media (max-width: 560px) { .kontozeile { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Belegabruf</h1><span class="version" id="version"></span>
+    <span class="abstand"></span>
+    <button id="beenden" type="button">Beenden</button>
+  </header>
+
+  <div id="neu" class="meldung warn versteckt"></div>
+  <div id="fehler" class="meldung schlecht versteckt" role="alert"></div>
+  <div id="ende" class="meldung gut versteckt">Belegabruf ist beendet. Du kannst dieses Fenster schließen.</div>
+
+  <div class="reiterleiste" role="tablist" aria-label="Bereiche">
+    <button type="button" role="tab" id="reiter-holen" aria-controls="tafel-holen" aria-selected="true" tabindex="0">Belege holen</button>
+    <button type="button" role="tab" id="reiter-einstellungen" aria-controls="tafel-einstellungen" aria-selected="false" tabindex="-1">Einstellungen</button>
+  </div>
+
+  <div role="tabpanel" id="tafel-holen" aria-labelledby="reiter-holen" tabindex="0">
+  <section id="bereich-konten">
+    <h2>Konten</h2>
+    <table>
+      <thead><tr><th id="kopf-holen">Holen</th><th>Anbieter</th><th>Konto</th><th>Anmeldung</th></tr></thead>
+      <tbody id="konten"></tbody>
+    </table>
+    <p id="keine-konten" class="leise versteckt">Noch kein Konto eingetragen — im Reiter
+      <button type="button" class="knopf-verweis" id="zu-einstellungen">Einstellungen</button> hinzufügen.</p>
+    <div id="anmelde-hinweise"></div>
+    <div class="knoepfe oben14">
+      <button id="holen" class="haupt" type="button" aria-describedby="kein-haken">Belege holen</button>
+      <button id="fehlende" type="button">Fehlende Dateien neu holen</button>
+      <button id="alle-pruefen" type="button">Alle Anmeldungen prüfen</button>
+    </div>
+    <p id="kein-haken" class="meldung warn versteckt">Kein Konto angehakt — bitte bei mindestens einem Konto den
+      Haken „Holen“ setzen. („Alle Anmeldungen prüfen“ prüft trotzdem alle Konten.)</p>
+    <p class="leise" id="ordner-hinweis"></p>
+  </section>
+
+  <section id="bereich-lauf" class="versteckt">
+    <h2 id="lauf-titel">Fortschritt</h2>
+    <pre id="protokoll" aria-live="polite"></pre>
+    <ul id="zusammenfassung"></ul>
+  </section>
+
+  </div>
+
+  <div role="tabpanel" id="tafel-einstellungen" aria-labelledby="reiter-einstellungen" tabindex="0" hidden>
+  <section id="willkommen" class="versteckt">
+    <h2>Willkommen</h2>
+    <p>Belegabruf ist noch nicht eingerichtet. Trag unten den Belegordner und deine Konten ein und klick auf
+      „Einstellungen speichern“. Danach meldest du dich im Reiter „Belege holen“ je Konto einmal an.</p>
+  </section>
+
+  <section id="einstellungen">
+      <h2>Belegordner</h2>
+      <form id="formular" autocomplete="off" novalidate>
+        <label for="belegordner">Belegordner (hier landen die PDFs)</label>
+        <input type="text" id="belegordner" spellcheck="false">
+        <label for="ablage">Unterordner</label>
+        <select id="ablage" aria-describedby="ablage-hinweis">
+          <option value="jahr">nach Jahr (wie bisher)</option>
+          <option value="monat">nach Jahr und Monat</option>
+        </select>
+        <p class="leise" id="ablage-hinweis">Gilt für neue Belege, bereits abgelegte bleiben, wo sie sind.
+          Maßgeblich ist das Rechnungsdatum, z. B. <code>airbnb/2026/11/…pdf</code>.</p>
+
+        <h2 class="oben18">Konten</h2>
+        <p class="leise">Mehrere Konten beim selben Anbieter sind möglich (z. B. ein Zugang als Co-Gastgeber).
+          Ein Name ist erst nötig, wenn es beim selben Anbieter ein zweites Konto gibt — er ist nur für dich.
+          Welche Konten geholt werden, wählst du im Reiter „Belege holen“ mit dem Haken je Konto.
+          „Belege ab“: ältere Belege werden nicht geholt und nicht vermerkt — erweiterst du den Zeitraum später,
+          kommen sie beim nächsten Lauf. „Letzter Monat“ heißt ab dem 1. des Vormonats.</p>
+        <div id="kontenliste"></div>
+        <button type="button" id="konto-dazu">Konto hinzufügen</button>
+
+        <h2 class="oben18">Versand per Mail</h2>
+        <p class="leise" id="mail-erklaerung">Das Programm bringt keinen Versanddienst mit. So kannst du die Belege von
+          deiner Mailadresse direkt an deine Buchhaltungssoftware schicken – sevDesk, Lexware Office und viele andere
+          haben dafür eine eigene Empfangsadresse für Belege; die trägst du unten als Empfänger ein. Auch dein
+          Steuerbüro kann Empfänger sein. Verschickt wird über <strong>dein eigenes Postfach</strong> — jede neue
+          Rechnung als eigene Mail mit PDF an die Adressen unten. Was mit Belegen geschieht, die es schon gibt, legst
+          du unten bei „Erster Versand“ fest.</p>
+        <label class="ankreuzen"><input type="checkbox" id="mail-an"> Rechnungen zusätzlich per Mail verschicken</label>
+        <div id="mail-felder">
+          <label for="mailanbieter">Mailanbieter</label>
+          <select id="mailanbieter" aria-describedby="anbieter-hinweis">
+            <option value="gmx">GMX</option>
+            <option value="webde">WEB.DE</option>
+            <option value="gmail">Gmail</option>
+            <option value="outlook">Outlook.com</option>
+            <option value="m365">Microsoft 365</option>
+            <option value="ionos">IONOS</option>
+            <option value="strato">STRATO</option>
+            <option value="allinkl">all-inkl.com</option>
+            <option value="icloud">iCloud</option>
+            <option value="anderer">Anderer (selbst eintragen)</option>
+          </select>
+          <p class="leise versteckt" id="anbieter-hinweis"></p>
+          <div class="reihe">
+            <div><label for="server">Postausgangsserver (SMTP)</label><input type="text" id="server" placeholder="smtp.example.com" spellcheck="false"></div>
+            <div><label for="verschluesselung">Verschlüsselung</label>
+              <select id="verschluesselung"><option value="ssl">SSL (meist Port 465)</option><option value="starttls">STARTTLS (meist Port 587)</option></select></div>
+            <div><label for="port">Port</label><input type="number" id="port" min="1" max="65535"></div>
+          </div>
+          <div class="reihe">
+            <div><label for="benutzer">Benutzername (meist die Mailadresse)</label><input type="text" id="benutzer" spellcheck="false"></div>
+            <div><label for="absender">Absenderadresse</label><input type="text" id="absender" spellcheck="false"></div>
+          </div>
+          <label for="empfaenger">Empfänger (mehrere mit Komma trennen)</label>
+          <input type="text" id="empfaenger" placeholder="belege@example.com" spellcheck="false">
+          <fieldset id="erstversand" class="erstversand">
+            <legend id="erstversand-titel">Erster Versand: Belege, die es beim Einschalten schon gibt, und Belege aus
+              dem ersten Lauf eines neuen Kontos</legend>
+            <label class="ankreuzen"><input type="radio" name="erstversand" value="nicht" checked> nicht verschicken (nur ablegen)</label>
+            <label class="ankreuzen"><input type="radio" name="erstversand" value="auch"> auch verschicken</label>
+            <p class="leise" id="erstversand-erklaerung"></p>
+          </fieldset>
+        </div>
+        <div id="fremd-hinweis" class="meldung warn versteckt oben16"></div>
+        <div class="knoepfe oben16">
+          <button type="submit" class="haupt" id="speichern" aria-describedby="speichern-meldung">Einstellungen speichern</button>
+        </div>
+        <div id="speichern-meldung" class="meldung schlecht versteckt" role="alert"></div>
+        <div id="gespeichert" class="meldung gut versteckt" role="status">Gespeichert.</div>
+      </form>
+
+      <div id="passwort-bereich">
+        <h2 class="oben22">Mail-Passwort</h2>
+        <p class="leise">Das Passwort geht direkt in den Passwortspeicher deines Rechners (Mac: Schlüsselbund,
+          Windows: Anmeldeinformationsverwaltung). Es wird nie angezeigt. Bei Gmail und iCloud ein
+          App-Passwort (siehe Hinweis beim Mailanbieter). Status: <strong id="passwort-status">–</strong></p>
+        <form id="passwort-formular" autocomplete="off">
+          <label for="passwort">Passwort für das Mailkonto</label>
+          <input type="password" id="passwort" autocomplete="new-password">
+          <div class="knoepfe oben10">
+            <button type="submit" id="passwort-speichern">Passwort hinterlegen</button>
+            <button type="button" id="mail-pruefen">Mail-Anmeldung prüfen</button>
+            <button type="button" id="passwort-loeschen">Passwort löschen</button>
+          </div>
+        </form>
+        <div id="mail-ergebnis" class="meldung versteckt"></div>
+      </div>
+  </section>
+  </div>
+</main>
+
+<script nonce="{{NONCE}}">
+"use strict";
+// Der Schlüssel steht in der Adresse des App-Fensters (ohne Adressleiste). Er bleibt dort,
+// damit „Neu laden“ funktioniert; weitergegeben wird er nie (Referrer-Policy: no-referrer).
+const SCHLUESSEL = new URLSearchParams(location.search).get("k") || "";
+
+const $ = (id) => document.getElementById(id);
+let zustand = null;
+let gesehen = 0;
+let abfrage = null;
+
+async function api(methode, pfad, daten) {
+  const optionen = { method: methode, headers: { "X-Belegabruf-Schluessel": SCHLUESSEL } };
+  if (methode === "POST") {
+    optionen.headers["Content-Type"] = "application/json";
+    optionen.body = JSON.stringify(daten || {});
+  }
+  const antwort = await fetch(pfad, optionen);
+  let inhalt = {};
+  try { inhalt = await antwort.json(); } catch (e) { inhalt = {}; }
+  if (!antwort.ok) {
+    const fehler = new Error(inhalt.fehler || "Das hat nicht geklappt.");
+    fehler.felder = inhalt.felder || null;
+    throw fehler;
+  }
+  return inhalt;
+}
+
+function zeigeFehler(text) {
+  const f = $("fehler");
+  f.textContent = text || "";
+  f.classList.toggle("versteckt", !text);
+}
+
+// ── Erster Versand: Erklärung passend zur Auswahl ─────────────────────────────
+const ERSTVERSAND_TEXT = {
+  nicht: "Beim Einschalten, für eine neu eingetragene Adresse und beim ersten Lauf eines neuen Kontos werden die "
+    + "Belege nur abgelegt und als verschickt vermerkt. Gemailt wird erst, was danach neu dazukommt.",
+  auch: "Beim Einschalten bzw. für eine neue Adresse gehen alle schon geholten Belege einmal raus, beim ersten Lauf "
+    + "eines neuen Kontos alles aus dem Zeitraum „Belege ab“. Danach nur noch Neues.",
+};
+function erstversandErklaeren() {
+  const wert = (document.querySelector("input[name=erstversand]:checked") || {}).value || "nicht";
+  $("erstversand-erklaerung").textContent = ERSTVERSAND_TEXT[wert];
+}
+
+// ── Infoboxen ──────────────────────────────────────────────────────────────
+const INFO = {
+  fehlende: "Holt Belege noch einmal, die schon geholt wurden, aber im Belegordner fehlen – z. B. versehentlich "
+    + "gelöscht oder verschoben. Bereits verschickte Belege werden nicht erneut gemailt. Grau, wenn nichts fehlt.",
+  pruefen: "Prüft bei allen Konten, ob die Anmeldung noch gilt – auch bei Konten ohne Haken. Es wird nichts geholt.",
+  holen: "Mit Haken holt „Belege holen“ dieses Konto. Ohne Haken bleibt es eingetragen und angemeldet, "
+    + "wird aber übersprungen. Ein Klick speichert die Auswahl.",
+  belege_ab: "Ältere Belege werden nicht geholt und nicht vermerkt – erweiterst du den Zeitraum später, kommen sie "
+    + "beim nächsten Lauf. „Letzter Monat“ heißt ab dem 1. des Vormonats.",
+};
+let infoNummer = 0;
+
+// Legt um ein Element eine Hülle mit Infobox (role=tooltip). Die Hülle bekommt Hover und Fokus
+// auch dann, wenn das Element selbst grau ist; das ⓘ macht sie ohne Maus erreichbar.
+function infobox(ziel, text, mitKnopf = true, id = null) {
+  const huelle = element("span", undefined, "info-huelle");
+  const box = element("span", text, "infobox");
+  box.id = id || "info-" + (++infoNummer);
+  box.setAttribute("role", "tooltip");
+  if (ziel.parentNode) ziel.replaceWith(huelle);
+  huelle.append(ziel);
+  ziel.setAttribute("aria-describedby", box.id);
+  if (mitKnopf) {
+    const knopf = element("button", "ⓘ", "info-knopf");
+    knopf.type = "button";
+    knopf.setAttribute("aria-label", "Erklärung");
+    knopf.setAttribute("aria-describedby", box.id);
+    huelle.append(knopf);
+  }
+  huelle.append(box);
+  huelle.addEventListener("keydown", (e) => { if (e.key === "Escape") huelle.classList.add("zu"); });
+  huelle.addEventListener("mouseleave", () => huelle.classList.remove("zu"));
+  huelle.addEventListener("focusout", () => huelle.classList.remove("zu"));
+  return huelle;
+}
+
+function element(tag, text, klasse) {
+  const e = document.createElement(tag);
+  if (text !== undefined) e.textContent = text;
+  if (klasse) e.className = klasse;
+  return e;
+}
+
+// ── Reiter (WAI-ARIA Tabs: Pfeiltasten, Pos1/Ende, automatische Aktivierung) ──
+const REITER = ["holen", "einstellungen"];
+let reiterGewaehlt = false;
+
+function reiterWaehlen(name, fokus) {
+  reiterGewaehlt = true;
+  for (const r of REITER) {
+    const an = r === name;
+    const reiter = $("reiter-" + r);
+    reiter.setAttribute("aria-selected", String(an));
+    reiter.tabIndex = an ? 0 : -1;
+    $("tafel-" + r).hidden = !an;
+  }
+  if (fokus) $("reiter-" + name).focus();
+}
+
+for (const r of REITER) {
+  $("reiter-" + r).addEventListener("click", () => reiterWaehlen(r, true));
+  $("reiter-" + r).addEventListener("keydown", (ereignis) => {
+    const i = REITER.indexOf(r);
+    const ziel = { ArrowRight: REITER[(i + 1) % REITER.length], ArrowLeft: REITER[(i - 1 + REITER.length) % REITER.length],
+                   Home: REITER[0], End: REITER[REITER.length - 1] }[ereignis.key];
+    if (ziel) { ereignis.preventDefault(); reiterWaehlen(ziel, true); }
+  });
+}
+$("zu-einstellungen").addEventListener("click", () => reiterWaehlen("einstellungen", true));
+
+const ZUSTAND_TEXT = { angemeldet: "angemeldet", abgelaufen: "abgelaufen", nie: "noch nie angemeldet",
+                       unbekannt: "unbekannt", laeuft: "Anmeldung läuft …" };
+let laufendeAnmeldung = null;  // "quelle/name", solange dort ein Anmeldefenster offen ist
+
+function schluesselVon(k) { return k.quelle + "/" + k.name; }
+function standVon(k) { return laufendeAnmeldung === schluesselVon(k) ? "laeuft" : k.zustand; }
+
+function marke(k) {
+  const stand = standVon(k);
+  return element("span", ZUSTAND_TEXT[stand] || stand, "marke " + stand);
+}
+
+function kontenZeigen() {
+  const koerper = $("konten");
+  koerper.replaceChildren();
+  for (const k of zustand.konten) {
+    const zeile = element("tr", undefined, k.aktiv ? "" : "aus");
+    // Haken je Konto: „Belege holen“ holt nur angehakte Konten. Ein Klick speichert sofort.
+    const hakenZelle = element("td");
+    const haken = element("input"); haken.type = "checkbox"; haken.checked = k.aktiv; haken.className = "holen-haken";
+    haken.setAttribute("aria-label", k.bezeichnung + ": Belege holen");
+    haken.setAttribute("aria-describedby", "info-holen");
+    haken.dataset.auftrag = "1";
+    haken.addEventListener("change", () => hakenSetzen(k, haken));
+    hakenZelle.append(haken);
+    const kontoZelle = element("td", k.titel || "–");
+    if (k.ab_text) kontoZelle.append(element("div", k.ab_text, "leise"));
+    zeile.append(hakenZelle, element("td", k.anzeige), kontoZelle);
+    // Anmeldestatus nur anzeigen; angemeldet wird im Reiter „Einstellungen“.
+    const zelle = element("td");
+    zelle.append(marke(k));
+    if (k.geprueft) zelle.append(element("span", k.geprueft, "geprueft"));
+    zeile.append(zelle);
+    koerper.append(zeile);
+  }
+  anmeldeHinweise();
+  anmeldungenInEinstellungen();
+  $("keine-konten").classList.toggle("versteckt", zustand.konten.length > 0);
+  $("konten").closest("table").classList.toggle("versteckt", !zustand.konten.length);
+  const fehlen = zustand.konten.reduce((s, k) => s + (k.fehlende || 0), 0);
+  $("fehlende").textContent = "Fehlende Dateien neu holen" + (fehlen ? ` (${fehlen})` : "");
+  $("fehlende").disabled = !fehlen;
+  holenErlaubt();
+  $("ordner-hinweis").textContent = "Belegordner: " + zustand.belegordner;
+}
+
+// Abgelaufen oder noch nie angemeldet: Hinweis mit Sprung in die Einstellungen.
+function anmeldeHinweise() {
+  const kasten = $("anmelde-hinweise");
+  kasten.replaceChildren();
+  for (const k of zustand.konten) {
+    if (!["abgelaufen", "nie"].includes(k.zustand) || laufendeAnmeldung === schluesselVon(k)) continue;
+    const text = k.zustand === "nie" ? `Bei ${k.bezeichnung} noch nicht angemeldet – `
+                                     : `Anmeldung bei ${k.bezeichnung} abgelaufen – `;
+    const hinweis = element("p", text, "meldung warn");
+    const sprung = element("button", "in den Einstellungen anmelden", "knopf-verweis");
+    sprung.type = "button";
+    sprung.addEventListener("click", () => zumKontoAnmelden(k));
+    hinweis.append(sprung);
+    kasten.append(hinweis);
+  }
+}
+
+function zumKontoAnmelden(k) {
+  reiterWaehlen("einstellungen", false);
+  const zeile = [...$("kontenliste").children].find((z) => z.schluessel === schluesselVon(k));
+  document.querySelectorAll(".kontozeile.hervorgehoben").forEach((z) => z.classList.remove("hervorgehoben"));
+  if (!zeile) return;
+  zeile.classList.add("hervorgehoben");
+  zeile.scrollIntoView({ block: "center" });
+  if (zeile.anmeldeKnopf) zeile.anmeldeKnopf.focus();
+  setTimeout(() => zeile.classList.remove("hervorgehoben"), 6000);
+}
+
+// Status und „Anmelden“ in den Zeilen der Einstellungen aktuell halten (ohne das Formular neu zu füllen).
+function anmeldungenInEinstellungen() {
+  for (const zeile of [...$("kontenliste").children]) {
+    if (!zeile.statusZelle) continue;
+    const k = zustand.konten.find((a) => schluesselVon(a) === zeile.schluessel);
+    zeile.statusZelle.replaceChildren(k ? marke(k) : element("span", "nach dem Speichern", "leise"));
+    if (zeile.anmeldeKnopf) zeile.anmeldeKnopf.classList.toggle("versteckt", !k);
+  }
+}
+
+function kontozeile(k) {
+  const zeile = element("div", undefined, "kontozeile");
+  const wahl = element("select");
+  wahl.setAttribute("aria-label", "Anbieter");
+  for (const q of zustand.quellen) {
+    const o = element("option", q.anzeige); o.value = q.name;
+    if (q.name === k.quelle) o.selected = true;
+    wahl.append(o);
+  }
+  const name = element("input"); name.type = "text"; name.value = k.titel || ""; name.placeholder = "Name, z. B. privat";
+  name.setAttribute("aria-label", "Kontoname"); name.className = "kontoname";
+  wahl.addEventListener("change", namenZeigen);
+  // „Belege ab“: Zeitraum je Konto
+  const ab = element("select");
+  ab.setAttribute("aria-label", "Belege ab");
+  for (const [wert, text] of [["alle", "Belege ab: alle"], ["letzter-monat", "ab letztem Monat"],
+                              ["letzte-3-monate", "letzte 3 Monate"], ["letzte-12-monate", "letzte 12 Monate"],
+                              ["datum", "ab Datum …"]]) {
+    const o = element("option", text); o.value = wert; ab.append(o);
+  }
+  const datum = element("input"); datum.type = "text"; datum.placeholder = "TT.MM.JJJJ"; datum.inputMode = "numeric";
+  datum.setAttribute("aria-label", "Belege ab Datum (TT.MM.JJJJ)"); datum.className = "ab-datum";
+  const istDatum = /^\d{2}\.\d{2}\.\d{4}$/.test(k.belege_ab || "");
+  ab.value = istDatum ? "datum" : (k.belege_ab || "alle");
+  datum.value = istDatum ? k.belege_ab : "";
+  const datumZeigen = () => datum.classList.toggle("versteckt", ab.value !== "datum");
+  ab.addEventListener("change", () => { datumZeigen(); if (ab.value === "datum") datum.focus(); });
+  datumZeigen();
+  const weg = element("button", "Entfernen"); weg.type = "button";
+  weg.addEventListener("click", () => {
+    for (const f of [name, wahl, ab, datum]) if (f.satz) markierungWeg(f);
+    zeile.remove(); namenZeigen();
+  });
+  const zeitraum = element("div", undefined, "zeitraum");
+  zeitraum.append(infobox(ab, INFO.belege_ab, false), datum);
+  // Anmelden je Konto (erst, wenn es gespeichert ist): Status und eigener Anmeldefenster-Knopf.
+  const anmeldung = element("div", undefined, "anmeldung");
+  zeile.schluessel = k.name ? k.quelle + "/" + k.name : null;
+  zeile.statusZelle = element("span");
+  const anmelden = element("button", "Anmelden"); anmelden.type = "button"; anmelden.dataset.auftrag = "1";
+  anmelden.setAttribute("aria-label", "Anmelden bei " + (k.bezeichnung || "diesem Konto"));
+  anmelden.addEventListener("click", () => {
+    laufendeAnmeldung = zeile.schluessel;
+    starten("/api/anmelden", { quelle: k.quelle, name: k.name });
+    kontenZeigen();
+  });
+  zeile.anmeldeKnopf = anmelden;
+  anmeldung.append(zeile.statusZelle, anmelden);
+  zeile.append(wahl, name, zeitraum, anmeldung, weg);
+  // kennung: woran Anmeldung und Protokoll hängen — bleibt beim Umbenennen gleich.
+  zeile.lesen = () => ({ quelle: wahl.value, name: name.value,
+                         belege_ab: ab.value === "datum" ? datum.value.trim() : ab.value,
+                         kennung: wahl.value === k.quelle ? (k.name || null) : null });
+  zeile.anbieter = () => wahl.value;
+  zeile.anbieterfeld = wahl;
+  zeile.datumsfeld = datum;
+  zeile.namensfeld = name;
+  return zeile;
+}
+
+// Ein Name ist erst nötig, wenn es beim selben Anbieter ein zweites Konto gibt.
+function namenZeigen() {
+  const zeilen = [...$("kontenliste").children].filter((z) => z.lesen);
+  for (const z of zeilen) {
+    const mehrere = zeilen.filter((a) => a.anbieter() === z.anbieter()).length > 1;
+    const feld = z.namensfeld;
+    feld.classList.toggle("unsichtbar", !mehrere && !feld.value.trim());
+    feld.required = mehrere;
+    feld.placeholder = mehrere ? "Name (nötig), z. B. privat" : "Name, z. B. privat";
+  }
+}
+
+function formularFuellen() {
+  $("belegordner").value = zustand.belegordner;
+  $("ablage").value = zustand.ablage || "jahr";
+  const liste = $("kontenliste");
+  liste.replaceChildren(...zustand.konten.map(kontozeile));
+  if (!zustand.konten.length) liste.append(kontozeile({ quelle: zustand.quellen[0].name }));
+  namenZeigen();
+  anmeldungenInEinstellungen();
+  const m = zustand.mail;
+  $("mail-an").checked = zustand.mail_an;
+  $("server").value = m.server; $("port").value = m.port; $("verschluesselung").value = m.verschluesselung;
+  $("benutzer").value = m.benutzer; $("absender").value = m.absender; $("empfaenger").value = m.empfaenger.join(", ");
+  absenderVonHand = Boolean(m.absender) && m.absender !== m.benutzer;
+  for (const r of document.querySelectorAll("input[name=erstversand]")) r.checked = r.value === (m.erstversand || "nicht");
+  erstversandErklaeren();
+  $("mailanbieter").value = anbieterErkennen();
+  anbieterHinweis();
+  mailFelderZeigen();
+}
+
+// Absender vorbelegen: Ein Benutzername mit @ wird als Absender übernommen, solange der
+// Absender nicht von Hand geändert wurde. (Empfänger bleibt leer.)
+let absenderVonHand = false;
+function absenderVorbelegen() {
+  const benutzer = $("benutzer").value.trim();
+  if (absenderVonHand || !benutzer.includes("@")) return;
+  if ($("absender").value !== benutzer) {
+    $("absender").value = benutzer;
+    $("absender").dispatchEvent(new Event("change"));  // nimmt eine Markierung weg
+  }
+}
+
+function mailFelderZeigen() {
+  const an = $("mail-an").checked;
+  $("mail-felder").classList.toggle("versteckt", !an);
+  $("passwort-bereich").classList.toggle("versteckt", !an && !zustand.mail_an);
+}
+
+async function laden(formularAuch) {
+  zustand = await api("GET", "/api/zustand");
+  $("version").textContent = zustand.version;
+  if (zustand.neuere_version) {
+    $("neu").textContent = `Es gibt eine neuere Version (${zustand.neuere_version}). Herunterladen unter ${zustand.neueste_seite} — alten Ordner löschen, neues ZIP auspacken, „Belegabruf“ doppelklicken (richtet sich selbst ein); Einstellungen und Anmeldungen bleiben.`;
+    $("neu").classList.remove("versteckt");
+  }
+  $("willkommen").classList.toggle("versteckt", zustand.eingerichtet);
+  if (!reiterGewaehlt) {
+    // Erster Start ohne Konten: gleich zu den Einstellungen, sonst „Belege holen“.
+    reiterWaehlen(zustand.konten.length ? "holen" : "einstellungen", false);
+  }
+  $("passwort-status").textContent = zustand.mail.passwort;
+  const fremd = zustand.datei_fremd || [];
+  $("fremd-hinweis").textContent = fremd.length
+    ? "Hinweis: Deine Einstellungsdatei enthält " + fremd.join(", ") + ". Beim Speichern schreibt Belegabruf die Datei neu; "
+      + "die bisherige Fassung wird vorher unverändert als „einstellungen.toml.vorher“ daneben gesichert."
+    : "";
+  $("fremd-hinweis").classList.toggle("versteckt", !fremd.length);
+  kontenZeigen();
+  if (formularAuch) formularFuellen();
+  knoepfeSperren(zustand.beschaeftigt);
+  if (zustand.beschaeftigt && !abfrage) beobachten();
+}
+
+let laeuft = false;
+function knoepfeSperren(beschaeftigt) {
+  laeuft = beschaeftigt;
+  for (const id of ["holen", "fehlende", "alle-pruefen", "speichern"]) {
+    if (beschaeftigt) $(id).disabled = true;
+  }
+  if (!beschaeftigt) { $("alle-pruefen").disabled = false; $("speichern").disabled = false; }
+  document.querySelectorAll("[data-auftrag]").forEach((b) => { b.disabled = beschaeftigt; });
+  holenErlaubt();
+}
+
+// „Belege holen“ nur, wenn mindestens ein Konto angehakt ist.
+function holenErlaubt() {
+  const keins = Boolean(zustand) && zustand.konten.length > 0 && !zustand.konten.some((k) => k.aktiv);
+  $("kein-haken").classList.toggle("versteckt", !keins);
+  $("holen").disabled = keins || laeuft;
+}
+
+async function hakenSetzen(k, haken) {
+  zeigeFehler("");
+  try {
+    const r = await api("POST", "/api/konto-holen", { quelle: k.quelle, name: k.name, aktiv: haken.checked });
+    k.aktiv = r.aktiv;
+    haken.closest("tr").classList.toggle("aus", !r.aktiv);
+    holenErlaubt();
+  } catch (e) { haken.checked = k.aktiv; zeigeFehler(e.message); }
+}
+
+const TITEL = { holen: "Belege holen", pruefen: "Anmeldungen prüfen", anmelden: "Anmelden" };
+
+async function starten(pfad, daten) {
+  zeigeFehler("");
+  try {
+    const r = await api("POST", pfad, daten);
+    $("lauf-titel").textContent = TITEL[r.gestartet] || "Fortschritt";
+    $("protokoll").textContent = "";
+    $("zusammenfassung").replaceChildren();
+    $("bereich-lauf").classList.remove("versteckt");
+    gesehen = 0;
+    knoepfeSperren(true);
+    beobachten();
+  } catch (e) {
+    if (laufendeAnmeldung) { laufendeAnmeldung = null; kontenZeigen(); }
+    zeigeFehler(e.message);
+  }
+}
+
+function beobachten() {
+  if (abfrage) return;
+  abfrage = setInterval(async () => {
+    try {
+      const s = await api("GET", "/api/auftrag?seit=" + gesehen);
+      if (s.meldungen.length) {
+        $("bereich-lauf").classList.remove("versteckt");
+        $("protokoll").textContent += s.meldungen.join("\n") + "\n";
+        $("protokoll").scrollTop = $("protokoll").scrollHeight;
+      }
+      gesehen = s.anzahl;
+      // Anmeldestatus sofort nachziehen (z. B. bei „Alle Anmeldungen prüfen“), nicht erst am Ende.
+      if (s.laeuft && s.meldungen.length && s.art !== "anmelden") await laden(false);
+      if (!s.laeuft) {
+        clearInterval(abfrage); abfrage = null;
+        laufendeAnmeldung = null;
+        if (s.zusammenfassung) {
+          const liste = $("zusammenfassung");
+          liste.replaceChildren(...s.zusammenfassung.map((z) => element("li", z.text, z.art)));
+        }
+        await laden(false);
+      }
+    } catch (e) { clearInterval(abfrage); abfrage = null; zeigeFehler(e.message); }
+  }, 700);
+}
+
+$("holen").addEventListener("click", () => starten("/api/holen", { fehlende: false }));
+$("fehlende").addEventListener("click", () => starten("/api/holen", { fehlende: true }));
+$("alle-pruefen").addEventListener("click", () => starten("/api/pruefen", {}));
+$("konto-dazu").addEventListener("click", () => {
+  $("kontenliste").append(kontozeile({ quelle: zustand.quellen[0].name }));
+  anmeldungenInEinstellungen();
+  namenZeigen();
+});
+// ── Mailanbieter: füllt Server, Port und Verschlüsselung vor ──────────────────
+// Gespeichert werden weiter nur server/port/verschluesselung; der Anbieter wird beim Laden
+// erkannt. Werte geprüft am 25.11.2026 auf den offiziellen Hilfeseiten:
+//   GMX        https://hilfe.gmx.net/pop-imap/imap/imap-serverdaten.html
+//   WEB.DE     https://hilfe.web.de/pop-imap/imap/imap-serverdaten.html
+//   Gmail      https://knowledge.workspace.google.com/admin/gmail/send-email-from-a-printer-scanner-or-app
+//              (465 SSL oder 587 STARTTLS), App-Passwort: https://support.google.com/mail/answer/185833
+//   Outlook    https://support.microsoft.com/en-us/office/pop-imap-and-smtp-settings-for-outlook-com-d088b986-291d-42b8-9564-9c414e2aa040
+//   M365       https://learn.microsoft.com/en-us/exchange/mail-flow-best-practices/how-to-set-up-a-multifunction-device-or-application-to-send-email-using-microsoft-365-or-office-365
+//              (587 STARTTLS, nicht 465), SMTP AUTH: https://learn.microsoft.com/en-us/exchange/clients-and-mobile-in-exchange-online/authenticated-client-smtp-submission
+//              Zeitplan: https://techcommunity.microsoft.com/blog/exchange/updated-exchange-online-smtp-auth-basic-authentication-deprecation-timeline/4489835
+//   IONOS      https://www.ionos.de/hilfe/e-mail/allgemeine-themen/serverinformationen-fuer-imap-pop3-und-smtp/
+//   STRATO     https://www.strato.de/faq/mail/e-mailserver-adressen-ports-ssl-tls/ (587 nur für Server-Relay)
+//   all-inkl   https://all-inkl.com/wichtig/anleitungen/programme/e-mail/thunderbird/smtp-authentifizierung-aktivieren_449.html
+//              (Server je Kunde: <KAS-Login>.kasserver.com, 465 SSL)
+//   iCloud     https://support.apple.com/en-us/102525, App-Passwort: https://support.apple.com/en-us/102654
+const MAILANBIETER = {
+  gmx: { server: "mail.gmx.net", port: "587", verschluesselung: "starttls",
+         hinweis: "Bei GMX muss der Zugriff per POP3/IMAP in den GMX-Einstellungen erst eingeschaltet sein. Mit Zwei-Faktor-Anmeldung braucht es ein App-Passwort.",
+         link: "https://hilfe.gmx.net/sicherheit/2fa/anwendungsspezifisches-passwort.html" },
+  webde: { server: "smtp.web.de", port: "587", verschluesselung: "starttls",
+           hinweis: "Bei WEB.DE muss der Zugriff per POP3/IMAP in den WEB.DE-Einstellungen erst eingeschaltet sein. Mit Zwei-Faktor-Anmeldung braucht es ein App-Passwort.",
+           link: "https://hilfe.web.de/sicherheit/2fa/anwendungsspezifisches-passwort.html" },
+  gmail: { server: "smtp.gmail.com", port: "465", verschluesselung: "ssl",
+           hinweis: "Gmail braucht ein App-Passwort (dafür muss die Bestätigung in zwei Schritten an sein). Bei manchen Arbeits- oder Schulkonten bietet Google keins an.",
+           link: "https://support.google.com/mail/answer/185833" },
+  outlook: { server: "smtp-mail.outlook.com", port: "587", verschluesselung: "starttls",
+             hinweis: "Achtung: Microsoft verlangt für Outlook.com die moderne Anmeldung (OAuth2). Belegabruf meldet sich mit Passwort an — das klappt bei Outlook.com voraussichtlich nicht. Mit „Mail-Anmeldung prüfen“ testen; sonst ein anderes Postfach nehmen.",
+             link: "https://support.microsoft.com/en-us/office/pop-imap-and-smtp-settings-for-outlook-com-d088b986-291d-42b8-9564-9c414e2aa040" },
+  m365: { server: "smtp.office365.com", port: "587", verschluesselung: "starttls",
+          hinweis: "Achtung: Bei Microsoft 365 muss der Admin „SMTP AUTH“ für dieses Postfach erlauben (in neueren Organisationen ist es aus). Microsoft schaltet die Anmeldung mit Passwort dafür Ende Dezember 2026 standardmäßig ab; der Admin kann sie wieder einschalten, das endgültige Aus kündigt Microsoft für 2027 an. Mit „Mail-Anmeldung prüfen“ testen.",
+          link: "https://learn.microsoft.com/en-us/exchange/clients-and-mobile-in-exchange-online/authenticated-client-smtp-submission" },
+  ionos: { server: "smtp.ionos.de", port: "465", verschluesselung: "ssl" },
+  strato: { server: "smtp.strato.de", port: "465", verschluesselung: "ssl" },
+  allinkl: { server: null, port: "465", verschluesselung: "ssl",
+             hinweis: "Bei all-inkl.com ist der Server für jeden Kunden anders: Er steht im KAS, z. B. w0123456.kasserver.com." },
+  icloud: { server: "smtp.mail.me.com", port: "587", verschluesselung: "starttls",
+            hinweis: "iCloud braucht ein App-spezifisches Passwort (dafür muss die Zwei-Faktor-Authentifizierung an sein).",
+            link: "https://support.apple.com/en-us/102654" },
+};
+const KASSERVER = /^w\d+\.kasserver\.com$/i;
+
+function anbieterErkennen() {
+  const server = $("server").value.trim().toLowerCase();
+  const port = String($("port").value).trim();
+  const art = $("verschluesselung").value;
+  for (const [name, a] of Object.entries(MAILANBIETER)) {
+    if (a.port !== port || a.verschluesselung !== art) continue;
+    if (a.server === null ? KASSERVER.test(server) : a.server === server) return name;
+  }
+  return "anderer";
+}
+
+function anbieterHinweis() {
+  const a = MAILANBIETER[$("mailanbieter").value];
+  const kasten = $("anbieter-hinweis");
+  kasten.replaceChildren();
+  if (a && a.hinweis) {
+    kasten.append(a.hinweis);
+    if (a.link) {
+      const verweis = element("a", "Hilfeseite des Anbieters");
+      verweis.href = a.link; verweis.target = "_blank"; verweis.rel = "noopener noreferrer";
+      kasten.append(" ", verweis);
+    }
+  }
+  kasten.classList.toggle("versteckt", !(a && a.hinweis));
+  $("server").placeholder = $("mailanbieter").value === "allinkl" ? "w0123456.kasserver.com (steht im KAS)" : "smtp.example.com";
+}
+
+$("mailanbieter").addEventListener("change", () => {
+  const a = MAILANBIETER[$("mailanbieter").value];
+  if (a) {
+    $("server").value = a.server === null ? (KASSERVER.test($("server").value.trim()) ? $("server").value : "") : a.server;
+    $("port").value = a.port;
+    $("verschluesselung").value = a.verschluesselung;
+    for (const id of ["server", "port", "verschluesselung"]) markierungWeg($(id));
+  }
+  anbieterHinweis();
+});
+
+// Von Hand geändert: Passt es nicht mehr zum gewählten Anbieter, springt die Auswahl auf „Anderer“.
+// (Bei all-inkl.com gehört das Eintippen des Servers dazu.)
+function vonHandGeaendert(feld) {
+  const gewaehlt = $("mailanbieter").value;
+  const a = MAILANBIETER[gewaehlt];
+  if (!a) return;
+  if (feld === "server" && a.server === null) return;
+  if (anbieterErkennen() !== gewaehlt) { $("mailanbieter").value = "anderer"; anbieterHinweis(); }
+}
+$("server").addEventListener("input", () => vonHandGeaendert("server"));
+$("port").addEventListener("input", () => vonHandGeaendert("port"));
+$("verschluesselung").addEventListener("change", () => vonHandGeaendert("verschluesselung"));
+
+// Port springt mit der Verschlüsselung — aber nur, wenn er gerade auf dem Standard der
+// anderen Variante steht oder leer ist. Ein eigener Port bleibt stehen.
+const STANDARD_PORT = { ssl: "465", starttls: "587" };
+$("verschluesselung").addEventListener("change", () => {
+  const neu = $("verschluesselung").value;
+  const port = $("port").value.trim();
+  const andere = Object.entries(STANDARD_PORT).filter(([art]) => art !== neu).map(([, p]) => p);
+  if (port === "" || andere.includes(port)) {
+    $("port").value = STANDARD_PORT[neu];
+    $("port").dispatchEvent(new Event("change"));  // nimmt eine Markierung weg
+  }
+});
+$("benutzer").addEventListener("input", absenderVorbelegen);
+$("absender").addEventListener("input", () => { absenderVonHand = $("absender").value.trim() !== ""; });
+$("mail-an").addEventListener("change", () => {
+  for (const id of ["server", "port", "verschluesselung", "benutzer", "absender", "empfaenger"]) markierungWeg($(id));
+  mailFelderZeigen();
+});
+
+// ── Rückmeldung am Speichern-Knopf: markierte Felder ────────────────────────
+// Geprüft wird auf dem Server; er nennt je Feld einen Satz. Die Markierung verschwindet,
+// sobald das Feld geändert wird.
+function feldFuer(name) {
+  const treffer = /^konto-(\d+)-(name|quelle|ab)$/.exec(name);
+  if (treffer) {
+    const zeile = [...$("kontenliste").children].filter((z) => z.lesen)[Number(treffer[1])];
+    if (!zeile) return null;
+    const feld = { name: zeile.namensfeld, quelle: zeile.anbieterfeld, ab: zeile.datumsfeld }[treffer[2]];
+    return { element: feld, nach: zeile };
+  }
+  const element = $(name);
+  return element ? { element, nach: element } : null;
+}
+
+function markierungWeg(element) {
+  element.classList.remove("feld-fehler");
+  element.removeAttribute("aria-invalid");
+  if (element.satz) { element.satz.remove(); element.satz = null; }
+  element.removeAttribute("aria-describedby");
+  if (!document.querySelector("#formular .feld-fehler")) speichernMeldung("");
+}
+
+function markierungenWeg() {
+  document.querySelectorAll("#formular .feld-fehler").forEach(markierungWeg);
+}
+
+function markieren(name, satz) {
+  const ziel = feldFuer(name);
+  if (!ziel) return false;
+  const e = ziel.element;
+  e.classList.add("feld-fehler");
+  e.setAttribute("aria-invalid", "true");
+  const absatz = element("p", satz, "feldsatz");
+  absatz.id = "satz-" + name;
+  ziel.nach.after(absatz);
+  e.satz = absatz;
+  e.setAttribute("aria-describedby", absatz.id);
+  if (!e.weg) {
+    e.weg = () => markierungWeg(e);
+    e.addEventListener("input", e.weg);
+    e.addEventListener("change", e.weg);
+  }
+  return true;
+}
+
+function speichernMeldung(text) {
+  const m = $("speichern-meldung");
+  m.textContent = text || "";
+  m.classList.toggle("versteckt", !text);
+}
+
+$("formular").addEventListener("submit", async (ereignis) => {
+  ereignis.preventDefault();
+  zeigeFehler("");
+  markierungenWeg();
+  speichernMeldung("");
+  $("gespeichert").classList.add("versteckt");
+  const daten = {
+    belegordner: $("belegordner").value,
+    ablage: $("ablage").value,
+    konten: [...$("kontenliste").children].filter((z) => z.lesen).map((z) => z.lesen()),
+    mail_an: $("mail-an").checked,
+    mail: { server: $("server").value, port: $("port").value, verschluesselung: $("verschluesselung").value,
+            benutzer: $("benutzer").value, absender: $("absender").value,
+            empfaenger: $("empfaenger").value.split(",").map((s) => s.trim()).filter(Boolean),
+            erstversand: (document.querySelector("input[name=erstversand]:checked") || {}).value || "nicht" },
+  };
+  try {
+    const r = await api("POST", "/api/einstellungen", daten);
+    $("gespeichert").textContent = r.gesichert
+      ? `Gespeichert. Die bisherige Datei liegt unverändert als „${r.gesichert}“ daneben.`
+      : "Gespeichert.";
+    $("gespeichert").classList.remove("versteckt");
+    await laden(true);
+  } catch (e) {
+    const felder = Object.entries(e.felder || {});
+    const markiert = felder.filter(([name, satz]) => markieren(name, satz)).length;
+    speichernMeldung(markiert ? "Bitte die markierten Felder ausfüllen." : e.message);
+    const erstes = document.querySelector("#formular .feld-fehler");
+    if (erstes) erstes.focus();
+  }
+});
+
+$("passwort-formular").addEventListener("submit", async (ereignis) => {
+  ereignis.preventDefault();
+  zeigeFehler("");
+  const feld = $("passwort");
+  try {
+    const r = await api("POST", "/api/mail-passwort", { passwort: feld.value });
+    $("passwort-status").textContent = r.passwort;
+  } catch (e) { zeigeFehler(e.message); }
+  feld.value = "";
+});
+
+for (const r of document.querySelectorAll("input[name=erstversand]")) r.addEventListener("change", erstversandErklaeren);
+$("erstversand").setAttribute("aria-describedby", "erstversand-erklaerung");
+
+$("passwort-loeschen").addEventListener("click", async () => {
+  zeigeFehler("");
+  if (!confirm("Das Mail-Passwort aus dem Passwortspeicher deines Rechners löschen?")) return;
+  try {
+    const r = await api("POST", "/api/mail-passwort-loeschen", {});
+    $("passwort-status").textContent = r.passwort;
+  } catch (e) { zeigeFehler(e.message); }
+});
+
+$("mail-pruefen").addEventListener("click", async () => {
+  zeigeFehler("");
+  const kasten = $("mail-ergebnis");
+  kasten.className = "meldung"; kasten.textContent = "Prüfe die Anmeldung …";
+  try {
+    const r = await api("POST", "/api/mail-pruefen", {});
+    kasten.className = "meldung " + (r.ok ? "gut" : "schlecht");
+    kasten.textContent = r.meldung;
+  } catch (e) { kasten.className = "meldung schlecht"; kasten.textContent = e.message; }
+});
+
+$("beenden").addEventListener("click", async () => {
+  try {
+    const r = await api("POST", "/api/beenden", {});
+    $("ende").textContent = r.wartet
+      ? "Belegabruf wird beendet, sobald der laufende Vorgang fertig ist."
+      : "Belegabruf ist beendet. Du kannst dieses Fenster schließen.";
+    $("ende").classList.remove("versteckt");
+    document.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+  } catch (e) { zeigeFehler(e.message); }
+});
+
+infobox($("fehlende"), INFO.fehlende);
+infobox($("alle-pruefen"), INFO.pruefen);
+// Haken „Holen“: eine Infobox am Spaltenkopf; jeder Haken verweist darauf (aria-describedby).
+const kopfHolen = element("span", "Holen");
+$("kopf-holen").replaceChildren(infobox(kopfHolen, INFO.holen, true, "info-holen"));
+
+laden(true).catch((e) => zeigeFehler(e.message));
+</script>
+</body>
+</html>

@@ -166,7 +166,8 @@ def liefern(einst: Einstellungen, protokoll: Protokoll, erg: Ergebnis, melden: M
     if ohne_datei:
         erg.hinweise.append(
             f"{len(ohne_datei)} Rechnung(en) sind noch nicht überall angekommen, liegen aber nicht mehr im "
-            "Belegordner. E → „Fehlende Dateien neu holen“, dann werden sie verschickt."
+            "Belegordner. Mit „Fehlende Dateien neu holen“ kommen sie wieder und werden dann verschickt "
+            "(im Terminal-Menü: E)."
         )
 
 
@@ -180,14 +181,19 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
     protokoll = protokoll_fuer(einst, konto)
     # Erst die Schalter abgleichen: Beim allerersten Einschalten eines Ziels gilt alles
     # bis jetzt Geholte als geliefert — bevor dieser Lauf Neues holt.
-    markiert = protokoll.ziele_abgleichen(lieferziel_namen(einst))
+    nur_ablegen = einst.mail.erstversand == "nicht"
+    markiert = protokoll.ziele_abgleichen(lieferziel_namen(einst), bestand_markieren=nur_ablegen)
+    erstlauf = protokoll.erstlauf_offen()
+    if erstlauf:
+        protokoll.erstlauf_setzen("offen")
     try:
         # Lokale Ziele (Ordner) beim Abruf; Lieferziele (Mail) schicken danach, was fehlt.
-        ziele = [ziel_verzeichnis.erstellen(name, einst.belegordner)
+        ziele = [ziel_verzeichnis.erstellen(name, einst.belegordner, ablage=einst.ablage)
                  for name in einst.ziele if name not in ziel_verzeichnis.LIEFERZIELE]
         quelle = quelle_fuer(konto)
     except KeyError as fehler:
-        return Ergebnis(konto.quelle, konto.name, status="fehler", fehler=str(fehler).strip("'\""))
+        return Ergebnis(konto.quelle, konto.name, status="fehler", fehler=str(fehler).strip("'\""),
+                        anzeige=konto.anzeige)
 
     def bekannt(schluessel: str) -> bool:
         if nachholen and schluessel.startswith("rechnung:") and protokoll.fehlt_lokal(schluessel):
@@ -210,12 +216,17 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
                                 + protokoll.bisherige_lieferungen(beleg.schluessel))
         return [str(lokal)] if lokal else []
 
+    ab = konto.ab()
+    if ab is not None:
+        melden(f"Zeitraum: Belege ab {ab:%d.%m.%Y} — ältere werden übersprungen.")
+    zukunft = ab is not None and ab > date.today()
     umgebung = Umgebung(
         bekannt=bekannt,
         abliefern=abliefern,
         vorhandene_datei=vorhandene_datei,
         melden=melden,
         sichtbar=einst.sichtbar,
+        ab=ab,
     )
     try:
         ergebnis = quelle.belege_holen(umgebung)
@@ -225,6 +236,18 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
         ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=str(fehler))
     except Exception as fehler:  # noqa: BLE001 - nie abstürzen, immer melden
         ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=f"{type(fehler).__name__}: {str(fehler).splitlines()[0][:200]}")
+    if erstlauf:
+        if nur_ablegen:
+            # Erster Lauf eines neuen Kontos: alles Geholte nur ablegen, nicht verschicken.
+            gezaehlt = [protokoll.als_schon_markieren(name) for name in lieferziel_namen(einst)]
+            ergebnis.erstlauf_abgelegt = max(gezaehlt, default=0)
+        if ergebnis.status in {"ok", "unvollstaendig"}:  # Liste gelesen: ab jetzt normal
+            protokoll.erstlauf_setzen("fertig")
+    ergebnis.anzeige = ergebnis.anzeige or konto.anzeige
+    ergebnis.ab = ab.isoformat() if ab else ""
+    if zukunft:  # z. B. von Hand in die Datei geschrieben; die Oberfläche lässt das nicht zu
+        ergebnis.hinweise.append(f"„Belege ab {ab:%d.%m.%Y}“ liegt in der Zukunft — so wird nichts geholt. "
+                                 "Bitte den Zeitraum in den Einstellungen prüfen.")
     if ergebnis.status in {"ok", "unvollstaendig"}:
         zustand.lauf_merken(konto.quelle, konto.name)
     try:
@@ -237,7 +260,8 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
     if fehlen:
         ergebnis.hinweise.append(
             f"{fehlen} schon geholte Rechnung(en) liegen nicht mehr im Belegordner. Das ist in Ordnung, "
-            "wenn du sie weitergegeben hast. Sonst: E → „Fehlende Dateien neu holen“."
+            "wenn du sie weitergegeben hast. Sonst holt „Fehlende Dateien neu holen“ sie noch einmal "
+            "(im Terminal-Menü: E)."
         )
     return ergebnis
 
@@ -255,10 +279,13 @@ STATUS_TEXT = {
 def zusammenfassung(ergebnisse: list[Ergebnis], belegordner: Path) -> str:
     zeilen = ["", "Zusammenfassung", "───────────────"]
     for erg in ergebnisse:
-        name = f"{quellen.anzeigename(erg.quelle)} ({erg.konto})"
+        name = erg.anzeige or f"{quellen.anzeigename(erg.quelle)} ({erg.konto})"
         zeilen.append(f"{name}: {STATUS_TEXT.get(erg.status, erg.status)}")
         if erg.status in {"ok", "abgelaufen", "unvollstaendig"} or erg.neu or erg.schon_da:
-            zeilen.append(f"  {erg.neu} neu, {erg.schon_da} schon vorhanden")
+            zeilen.append(f"  {erg.neu} neu, {erg.schon_da} schon vorhanden"
+                          + (f", {erg.uebersprungen} übersprungen (älter als Zeitraum)" if erg.uebersprungen else ""))
+            if erg.ab:
+                zeilen.append(f"  Zeitraum: Belege ab {date.fromisoformat(erg.ab):%d.%m.%Y}")
             if erg.kontrolle_neu:
                 zeilen.append(f"  {erg.kontrolle_neu} Monatsübersicht(en) neu (Ordner kontrolle)")
             if erg.erwartet is not None and erg.vorhanden is not None:
@@ -268,6 +295,8 @@ def zusammenfassung(ergebnisse: list[Ergebnis], belegordner: Path) -> str:
                     f"  Kontrolle: {uebersicht} {erg.erwartet} Rechnungen, "
                     f"davon geholt: {erg.vorhanden} — {passt}"
                 )
+        if erg.erstlauf_abgelegt:
+            zeilen.append(f"  {erg.erstlauf_abgelegt} Beleg(e) abgelegt, nicht verschickt (erster Lauf)")
         for stand in erg.lieferungen.values():
             name = stand["anzeige"]
             if stand["schon_markiert"]:

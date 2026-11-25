@@ -271,3 +271,340 @@ def test_keine_syntaxwarnung_in_modulen():
         with warnings.catch_warnings():
             warnings.simplefilter("error", SyntaxWarning)
             compile(datei.read_text(encoding="utf-8"), str(datei), "exec")
+
+
+# ── Zeitraum je Konto („Belege ab“) ──────────────────────────────────────────
+
+
+@pytest.mark.parametrize("wert, erwartet", [
+    ("alle", None),
+    ("letzter-monat", date(2026, 10, 1)),
+    ("letzte-3-monate", date(2026, 8, 1)),
+    ("letzte-12-monate", date(2025, 11, 1)),
+    ("15.03.2026", date(2026, 3, 15)),
+])
+def test_zeitraum_ab_datum(wert, erwartet):
+    assert einstellungen.ab_datum(wert, heute=date(2026, 11, 25)) == erwartet
+
+
+def test_zeitraum_ueber_den_jahreswechsel():
+    assert einstellungen.ab_datum("letzter-monat", heute=date(2027, 1, 5)) == date(2026, 12, 1)
+    assert einstellungen.ab_datum("letzte-3-monate", heute=date(2027, 1, 31)) == date(2026, 10, 1)
+
+
+@pytest.mark.parametrize("falsch", ["gestern", "31.02.2026", "2026-03-15", "3 monate"])
+def test_zeitraum_falsch(falsch):
+    with pytest.raises(einstellungen.EinstellungsFehler, match="belege_ab"):
+        einstellungen.zeitraum_normal(falsch)
+
+
+def test_zeitraum_in_der_datei(tmp_path):
+    datei = tmp_path / "e.toml"
+    datei.write_text('[[konto]]\nquelle = "airbnb"\nname = "a"\n', encoding="utf-8")
+    einst = einstellungen.laden(datei)
+    assert einst.konten[0].belege_ab == "alle" and einst.konten[0].ab() is None  # alte Datei = alle
+    assert "belege_ab =" not in einstellungen.als_text(einst)
+    einst.konten[0].belege_ab = "letzte-3-monate"
+    wieder = einstellungen.aus_text(einstellungen.als_text(einst))
+    assert wieder.konten[0].belege_ab == "letzte-3-monate" and wieder.konten[0].optionen == {}
+
+
+def _airbnb_ohne_browser(monkeypatch, monate: dict[str, bytes], geholt: list):
+    from contextlib import contextmanager
+
+    from belegabruf import browser
+
+    @contextmanager
+    def profil(profil, sichtbar):
+        yield object()
+
+    monkeypatch.setattr(browser, "profil_oeffnen", profil)
+    monkeypatch.setattr(browser, "neue_seite", lambda kontext: object())
+    monkeypatch.setattr(browser, "pause", lambda *a, **k: None)
+    geladen = []
+    monkeypatch.setattr(airbnb.Airbnb, "_monate", lambda self, seite: [("", m) for m in monate])
+    monkeypatch.setattr(airbnb.Airbnb, "_monats_pdf_laden",
+                        lambda self, seite, text: geladen.append(text) or monate[text])
+
+    def einzeln(self, seite, zeile, umgebung, erg):
+        geholt.append(zeile.kennung)
+        umgebung.abliefern(Beleg(quelle="airbnb", konto="a", art="rechnung", schluessel=f"rechnung:{zeile.kennung}",
+                                 dateiname=f"{zeile.kennung}.pdf", inhalt=b"%PDF", jahr=2026,
+                                 rechnungsdatum=date.fromisoformat(zeile.datum)))
+        erg.neu += 1
+
+    monkeypatch.setattr(airbnb.Airbnb, "_einzelrechnung", einzeln)
+    return geladen
+
+
+def test_airbnb_zeitraum_filtert_vor_dem_download(monkeypatch, tmp_path):
+    from belegabruf.quellen.basis import Umgebung
+
+    monate = {
+        "August 2026": _monats_pdf([("AIUC-111111111-DE-1111111", "2026-08-20", "HMAAAA1111", "aug1")]),
+        "September 2026": _monats_pdf([("AIUC-222222222-DE-2222222", "2026-09-03", "HMBBBB2222", "sep1"),
+                                       ("AIUC-333333333-DE-3333333", "2026-09-20", "HMCCCC3333", "sep2")]),
+        "Oktober 2026": _monats_pdf([("AIUC-444444444-DE-4444444", "2026-10-02", "HMDDDD4444", "okt1")]),
+    }
+    geholt: list[str] = []
+    geladen = _airbnb_ohne_browser(monkeypatch, monate, geholt)
+    bekannt: set[str] = set()
+
+    def umgebung(ab):
+        def abliefern(beleg):
+            bekannt.add(beleg.schluessel)
+            return []
+        return Umgebung(bekannt=lambda s: s in bekannt, abliefern=abliefern, vorhandene_datei=lambda s: None,
+                        melden=lambda t: None, ab=ab)
+
+    quelle = airbnb.Airbnb(Konto("airbnb", "a"), tmp_path / "profil")
+    erg = quelle.belege_holen(umgebung(date(2026, 9, 15)))
+    # August gar nicht geladen, im September nur ab dem 15.; nichts davon im Protokoll
+    assert geladen == ["September 2026", "Oktober 2026"]
+    assert geholt == ["sep2", "okt1"] and erg.uebersprungen == 1
+    assert erg.erwartet == 2 and erg.vorhanden == 2
+    assert "monat:2026-08" not in bekannt and "rechnung:sep1" not in bekannt and "rechnung:aug1" not in bekannt
+    assert any("1 Monat(e) vor dem Zeitraum" in h for h in erg.hinweise)
+
+    # Zeitraum erweitert: das Übersprungene wird nachgeholt
+    geholt.clear()
+    erg = quelle.belege_holen(umgebung(None))
+    assert sorted(geholt) == ["aug1", "sep1"] and erg.uebersprungen == 0 and erg.schon_da == 2
+
+
+def test_zusammenfassung_und_json_nennen_uebersprungene():
+    import json
+
+    erg = Ergebnis("skool", "standard", neu=2, uebersprungen=3, ab="2026-08-01", anzeige="Skool")
+    text = ablauf.zusammenfassung([erg], Path("/tmp/Belege"))
+    assert "2 neu, 0 schon vorhanden, 3 übersprungen (älter als Zeitraum)" in text
+    assert "Zeitraum: Belege ab 01.08.2026" in text
+    daten = json.loads(json.dumps(erg.als_dict()))
+    assert daten["uebersprungen"] == 3 and daten["ab"] == "2026-08-01"
+
+
+def test_ablauf_gibt_zeitraum_an_die_quelle(monkeypatch, tmp_path):
+    gesehen = {}
+
+    class Fake(Quelle):
+        name = "airbnb"
+
+        def sitzung_pruefen(self):
+            return True
+
+        def anmelden_lassen(self, melden):
+            return True
+
+        def belege_holen(self, umgebung):
+            gesehen["ab"] = umgebung.ab
+            return Ergebnis(self.name, self.konto.name, uebersprungen=4)
+
+    monkeypatch.setattr(ablauf, "quelle_fuer", lambda konto: Fake(konto, tmp_path))
+    konto = Konto("airbnb", "a", belege_ab="01.06.2026")
+    erg = ablauf.abrufen(Einstellungen(belegordner=tmp_path / "B", konten=[konto]), konto, lambda t: None)
+    assert gesehen["ab"] == date(2026, 6, 1) and erg.ab == "2026-06-01" and erg.uebersprungen == 4
+
+
+# ── Ein Starter je System: richtet sich selbst ein, jeder Schritt nur, wenn nötig ──
+
+
+WURZEL = Path(__file__).resolve().parents[2]
+
+
+def _starter_kopie(tmp_path):
+    import shutil
+
+    shutil.copytree(WURZEL / "Start Mac", tmp_path / "Start Mac")
+    (tmp_path / "programm").mkdir()
+    (tmp_path / "programm" / "uv.lock").write_text("", encoding="utf-8")
+    (tmp_path / "bin").mkdir()
+    return tmp_path
+
+
+def _falsches_uv(tmp_path, sync_klappt=True):
+    """Ein „uv“, das nur mitschreibt. „uv sync“ legt eine .venv mit einem falschen Python
+    an, das die Startprüfung nach Dateien beantwortet (browser-da / umgebung-alt)."""
+    log = tmp_path / "aufrufe.log"
+    uv = tmp_path / "bin" / "uv"
+    uv.write_text(
+        "#!/bin/bash\n"
+        f'echo "uv $*" >> "{log}"\n'
+        'if [ "$1" = sync ]; then\n'
+        + ("  exit 1\n" if not sync_klappt else
+           "  mkdir -p .venv/bin\n"
+           "  printf '%s\\n' '#!/bin/bash' "
+           f"'echo \"python $*\" >> \"{log}\"' "
+           f"'if [ \"$3\" = browser ]; then [ -e \"{tmp_path}/browser-da\" ]; exit $?; fi' "
+           "'[ -e .venv/.belegabruf-sync ] && ! [ uv.lock -nt .venv/.belegabruf-sync ]' > .venv/bin/python\n"
+           "  chmod +x .venv/bin/python\n")
+        + "fi\n"
+        'if [ "$*" = "run --no-dev --quiet playwright install --no-shell chromium" ]; then '
+        f'touch "{tmp_path}/browser-da"; fi\n'
+        "exit 0\n", encoding="utf-8")
+    uv.chmod(0o755)
+    return log
+
+
+def _starten(tmp_path, datei="Start Mac/Belegabruf.command", mit_uv=True):
+    import subprocess
+
+    pfad = f"{tmp_path / 'bin'}:/usr/bin:/bin" if mit_uv else "/usr/bin:/bin"
+    return subprocess.run(["/bin/bash", str(tmp_path / datei)], input="\n", capture_output=True, text=True,
+                          env={"PATH": pfad, "HOME": str(tmp_path / "home")}, timeout=30)
+
+
+def _aufrufe(log):
+    zeilen = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+    log.unlink(missing_ok=True)
+    return [z for z in zeilen if not z.startswith("python")]
+
+
+pytestmark_mac = pytest.mark.skipif(__import__("sys").platform == "win32", reason="Mac-Starter")
+
+
+@pytestmark_mac
+def test_starter_erststart_dann_nur_noch_starten(tmp_path):
+    import time
+
+    _starter_kopie(tmp_path)
+    log = _falsches_uv(tmp_path)
+    lauf = _starten(tmp_path)
+    assert lauf.returncode == 0, lauf.stdout + lauf.stderr
+    assert "Richte die neue Version ein" in lauf.stdout and "Hole den Browser" in lauf.stdout
+    assert _aufrufe(log) == ["uv sync --locked --no-dev --quiet", "uv run --no-dev --quiet playwright install --no-shell chromium",
+                             "uv run --no-dev --quiet belege oberflaeche"]
+    # zweiter Start: alles da → nur das Fenster
+    lauf = _starten(tmp_path)
+    assert "Richte" not in lauf.stdout and "Hole" not in lauf.stdout
+    assert _aufrufe(log) == ["uv run --no-dev --quiet belege oberflaeche"]
+    # Update im Arbeitsordner: uv.lock neuer → nur Bausteine, Browser ist schon da
+    time.sleep(1.1)
+    (tmp_path / "programm" / "uv.lock").write_text("neu", encoding="utf-8")
+    lauf = _starten(tmp_path)
+    assert _aufrufe(log) == ["uv sync --locked --no-dev --quiet", "uv run --no-dev --quiet belege oberflaeche"]
+    # Browser weg (z. B. Cache geleert) → nur der Browser
+    (tmp_path / "browser-da").unlink()
+    _starten(tmp_path)
+    assert _aufrufe(log) == ["uv run --no-dev --quiet playwright install --no-shell chromium",
+                             "uv run --no-dev --quiet belege oberflaeche"]
+
+
+@pytestmark_mac
+def test_starter_halbe_einrichtung_wird_weggeraeumt(tmp_path):
+    _starter_kopie(tmp_path)
+    log = _falsches_uv(tmp_path, sync_klappt=False)
+    lauf = _starten(tmp_path)
+    assert lauf.returncode == 1 and "noch einmal doppelklicken" in lauf.stdout
+    assert not (tmp_path / "programm" / ".venv").exists()
+    assert not any("belege" in a for a in _aufrufe(log))
+
+
+@pytestmark_mac
+def test_starter_holt_uv_wenn_es_fehlt(tmp_path):
+    """Ohne uv lädt der Starter es (hier: „curl“ als Attrappe, die ein falsches uv anlegt)."""
+    _starter_kopie(tmp_path)
+    log = _falsches_uv(tmp_path)
+    versteck = tmp_path / "versteck"
+    versteck.mkdir()
+    (tmp_path / "bin" / "uv").rename(versteck / "uv")
+    curl = tmp_path / "bin" / "curl"
+    curl.write_text("#!/bin/bash\n"
+                    f'echo "curl $*" >> "{log}"\n'
+                    'echo "mkdir -p \\"$HOME/.local/bin\\"; cp \\"' + str(versteck / "uv") + '\\" \\"$HOME/.local/bin/uv\\""\n',
+                    encoding="utf-8")
+    curl.chmod(0o755)
+    lauf = _starten(tmp_path)
+    assert lauf.returncode == 0, lauf.stdout + lauf.stderr
+    aufrufe = _aufrufe(log)
+    assert aufrufe[0] == "curl -LsSf https://astral.sh/uv/install.sh" and "Hole das Hilfsprogramm uv" in lauf.stdout
+    assert aufrufe[-1] == "uv run --no-dev --quiet belege oberflaeche"
+
+
+@pytestmark_mac
+def test_terminal_starter_liegt_in_fehlersuche(tmp_path):
+    _starter_kopie(tmp_path)
+    log = _falsches_uv(tmp_path)
+    lauf = _starten(tmp_path, "Start Mac/Fehlersuche/Belegabruf (Terminal).command")
+    assert lauf.returncode == 1 and "Belegabruf" in lauf.stdout  # erst den Starter
+    _starten(tmp_path)
+    _aufrufe(log)
+    lauf = _starten(tmp_path, "Start Mac/Fehlersuche/Belegabruf (Terminal).command")
+    assert _aufrufe(log) == ["uv run --no-dev --quiet belege start"]
+
+
+def test_oben_liegt_nur_ein_starter():
+    for ordner, endung in (("Start Mac", ".command"), ("Start Windows", ".cmd")):
+        oben = sorted(p.name for p in (WURZEL / ordner).iterdir() if p.is_file())
+        assert oben == [f"Belegabruf{endung}"], oben
+        assert (WURZEL / ordner / "Fehlersuche" / f"Belegabruf (Terminal){endung}").exists()
+
+
+def test_windows_starter_ablauf_und_crlf():
+    for name in ("Belegabruf.cmd", "Fehlersuche/Belegabruf (Terminal).cmd"):
+        roh = (WURZEL / "Start Windows" / name).read_bytes()
+        assert roh.count(b"\n") == roh.count(b"\r\n"), f"{name}: Zeilenenden müssen CRLF sein"
+    text = (WURZEL / "Start Windows" / "Belegabruf.cmd").read_text(encoding="utf-8")
+    reihenfolge = ["where uv", "astral.sh/uv/install.ps1", ":uvda", "startpruefung umgebung", ":sync",
+                   "uv sync --locked --no-dev --quiet", ".belegabruf-sync", ":browser", "startpruefung browser",
+                   "playwright install --no-shell chromium", ":start", "belege oberflaeche", ":syncfehler",
+                   "rmdir /s /q .venv"]
+    stellen = [text.index(t) for t in reihenfolge]
+    assert stellen == sorted(stellen)
+    assert '"%~dp0..\\..\\programm"' in (WURZEL / "Start Windows" / "Fehlersuche" /
+                                         "Belegabruf (Terminal).cmd").read_text(encoding="utf-8")
+
+
+def test_startpruefung_umgebung(tmp_path):
+    import os
+    import time
+
+    from belegabruf import startpruefung
+
+    (tmp_path / "uv.lock").write_text("", encoding="utf-8")
+    assert not startpruefung.umgebung_aktuell(tmp_path)  # keine .venv
+    (tmp_path / ".venv").mkdir()
+    (tmp_path / ".venv" / startpruefung.MERKER).write_text("", encoding="utf-8")
+    assert startpruefung.umgebung_aktuell(tmp_path)
+    spaeter = time.time() + 10
+    os.utime(tmp_path / "uv.lock", (spaeter, spaeter))
+    assert not startpruefung.umgebung_aktuell(tmp_path)
+
+
+def test_startpruefung_browser(tmp_path, monkeypatch):
+    from belegabruf import startpruefung
+
+    revision = startpruefung.chromium_revision()
+    assert revision and revision.isdigit()  # liest die browsers.json des installierten Playwright
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path))
+    assert not startpruefung.chromium_da()
+    (tmp_path / f"chromium-{revision}").mkdir()
+    assert not startpruefung.chromium_da()  # halb geladen zählt nicht
+    (tmp_path / f"chromium-{revision}" / "INSTALLATION_COMPLETE").write_text("", encoding="utf-8")
+    assert startpruefung.chromium_da()
+    assert not (tmp_path / f"chromium-headless-shell-{revision}").exists()
+
+
+@pytestmark_mac
+@pytest.mark.parametrize("datei", ["Start Mac/Belegabruf.command", "Start Mac/Fehlersuche/Belegabruf (Terminal).command"])
+def test_starter_ohne_programmordner_meldet_sich(tmp_path, datei):
+    import shutil
+
+    shutil.copytree(WURZEL / "Start Mac", tmp_path / "Start Mac")  # nur der Start-Ordner ausgepackt
+    lauf = _starten(tmp_path, datei, mit_uv=False)
+    assert lauf.returncode == 1 and "Ordner „programm“ fehlt" in lauf.stdout and "vollständig auspacken" in lauf.stdout
+
+
+def test_starter_holt_uv_nur_von_fester_adresse():
+    import re
+
+    mac = (WURZEL / "Start Mac" / "Belegabruf.command").read_text(encoding="utf-8")
+    win = (WURZEL / "Start Windows" / "Belegabruf.cmd").read_text(encoding="utf-8")
+    assert re.findall(r"curl [^|]*\|", mac) == ["curl -LsSf https://astral.sh/uv/install.sh |"]
+    assert 'irm https://astral.sh/uv/install.ps1 | iex' in win
+    for text in (mac, win):
+        zeile = next(z for z in text.splitlines() if "astral.sh/uv/install" in z and ("curl" in z or "irm" in z))
+        assert "$" not in zeile.split("astral.sh")[0] and "%" not in zeile, zeile  # keine Variablen in der Adresse
+    for name in ("Belegabruf.cmd", "Fehlersuche/Belegabruf (Terminal).cmd"):
+        text = (WURZEL / "Start Windows" / name).read_text(encoding="utf-8")
+        assert '2>nul || (' in text and 'fehlt neben "Start Windows"' in text
+    assert "uv sync --locked --no-dev" in win and "uv sync --locked --no-dev" in mac

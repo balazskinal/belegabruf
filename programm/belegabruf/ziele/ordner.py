@@ -1,14 +1,21 @@
 """Ziel "ordner": Belege in den lokalen Belegordner legen.
 
-Aufbau:
-    <Belegordner>/<quelle>/<Jahr>/<Dateiname>.pdf      die eigentlichen Rechnungen
-    <Belegordner>/<quelle>/kontrolle/<Dateiname>.pdf   Übersichten zur Kontrolle
+Aufbau (Einstellung ``ablage``):
+    <Belegordner>/<quelle>/<JJJJ>/<Dateiname>.pdf       die Rechnungen, ablage = "jahr" (Standard)
+    <Belegordner>/<quelle>/<JJJJ>/<MM>/<Dateiname>.pdf  die Rechnungen, ablage = "monat"
+    <Belegordner>/<quelle>/kontrolle/<Dateiname>.pdf    Übersichten zur Kontrolle (immer hier)
+
+Maßgeblich für Jahr und Monat ist das Rechnungsdatum. Ob ein Beleg schon geholt ist,
+entscheidet allein das Protokoll (Schlüssel), nicht der Pfad: Wer die Ablage umstellt,
+bekommt nichts doppelt, und bereits abgelegte Belege bleiben, wo sie sind.
 """
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
+
+from datetime import date
 
 from belegabruf.quellen.basis import Beleg
 from belegabruf.ziele.basis import Ziel
@@ -17,12 +24,19 @@ from belegabruf.ziele.basis import Ziel
 class Ordner(Ziel):
     name = "ordner"
 
-    def lokale_datei(self, beleg_quelle: str, art: str, jahr: int, dateiname: str) -> Path:
-        unterordner = "kontrolle" if art == "kontrolle" else str(jahr)
-        return self.belegordner / beleg_quelle / unterordner / dateiname
+    def lokale_datei(self, beleg_quelle: str, art: str, jahr: int, dateiname: str,
+                     monat: int | None = None) -> Path:
+        if art == "kontrolle":
+            return self.belegordner / beleg_quelle / "kontrolle" / dateiname
+        ordner = self.belegordner / beleg_quelle / str(jahr)
+        if self.ablage == "monat":
+            ordner = ordner / f"{monat or date.today().month:02d}"
+        return ordner / dateiname
 
     def abliefern(self, beleg: Beleg) -> Path:
-        ziel = self.lokale_datei(beleg.quelle, beleg.art, beleg.jahr, beleg.dateiname)
+        datum = beleg.rechnungsdatum
+        ziel = self.lokale_datei(beleg.quelle, beleg.art, datum.year if datum else beleg.jahr, beleg.dateiname,
+                                 monat=datum.month if datum else None)
         ziel.parent.mkdir(parents=True, exist_ok=True)
         if beleg.art != "kontrolle":
             # Nie einen anderen Beleg überschreiben: gleicher Name → -2, -3, …

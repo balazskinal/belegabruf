@@ -329,3 +329,18 @@ def test_pdf_auch_im_sichtbaren_fenster(tmp_path, monkeypatch):
     umgebung.sichtbar = True
     erg = quelle.belege_holen(umgebung)
     assert erg.neu == 3 and all(pruefung.ist_pdf(b.inhalt) for b in abgeliefert)
+
+
+def test_zeitraum_filtert_vor_dem_oeffnen(tmp_path, falsches_skool):
+    aufrufe, _ = falsches_skool
+    quelle = skool.Skool(Konto("skool", "test"), tmp_path / "profil")
+    bekannt, abgeliefert = set(), []
+    umgebung = _umgebung(bekannt, abgeliefert)
+    umgebung.ab = date(2026, 9, 1)
+    erg = quelle.belege_holen(umgebung)
+    assert erg.neu == 2 and erg.uebersprungen == 1 and erg.erwartet == 2 and erg.vorhanden == 2
+    assert "rechnung:in_1CCC333" not in bekannt  # nicht im Protokoll
+    assert not any("in_1CCC333" in u for u in aufrufe)  # gar nicht geöffnet
+    # Zeitraum erweitert: wird nachgeholt
+    erg = quelle.belege_holen(_umgebung(bekannt, abgeliefert))
+    assert erg.neu == 1 and erg.schon_da == 2 and erg.uebersprungen == 0

@@ -44,7 +44,7 @@ def passwort_lesen(dienst: str, konto: str) -> str:
     if not wert:
         raise PasswortFehlt(
             f"Im Passwortspeicher liegt kein Mail-Passwort unter „{dienst}/{konto}“. "
-            "Doppelklick auf „Einrichten“ und das Passwort eingeben."
+            "Im Fenster „Belegabruf“ unter „Einstellungen“ → „Mail-Passwort“ das Passwort hinterlegen."
         )
     return wert
 
@@ -169,7 +169,7 @@ class Postausgang:
 
 
 def anmeldung_pruefen(einst, passwort: str, smtp_klassen=None) -> str | None:
-    """Nur für "Einrichten": anmelden und wieder abmelden, ohne eine Mail zu schicken.
+    """Nur für „Mail-Anmeldung prüfen“ bzw. die Terminal-Einrichtung: anmelden und wieder abmelden, ohne eine Mail zu schicken.
     None, wenn es geht, sonst eine verständliche Meldung."""
     postausgang = Postausgang(einst, passwort, smtp_klassen)
     try:

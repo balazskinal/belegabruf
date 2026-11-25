@@ -23,8 +23,14 @@ mit Komma getrennt, als Zustand je Rechnung:
 
 ``ordner`` heißt: liegt im Belegordner. Ob ein Ziel an ist, steht als Zeile
 ``einstellung:<ziel>`` (an/aus) im Protokoll selbst. Nur beim allerersten Einschalten
-eines Ziels gilt alles schon Geholte als geliefert; beim Wiedereinschalten nicht.
-Jede Änderung ist eine neue Zeile, die spätere gilt.
+eines Ziels gilt alles schon Geholte als geliefert (Einstellung ``erstversand = "nicht"``,
+die Vorgabe); beim Wiedereinschalten nicht. Jede Änderung ist eine neue Zeile, die
+spätere gilt.
+
+**Erster Lauf eines neuen Kontos:** Die Zeile ``einstellung:erstlauf`` steht auf
+``offen``, bis ein Lauf die Rechnungsliste gelesen hat (Status ok oder unvollständig),
+dann auf ``fertig``. Ein Protokoll ohne diese Zeile gilt als neu, solange es keine
+Rechnung enthält — bisherige Protokolle mit Rechnungen also nicht.
 """
 
 from __future__ import annotations
@@ -188,19 +194,39 @@ class Protokoll:
             self._anhaengen(neu)
         return len(neu)
 
-    def ziele_abgleichen(self, aktive: list[str]) -> dict[str, int]:
+    def ziele_abgleichen(self, aktive: list[str], bestand_markieren: bool = True) -> dict[str, int]:
         """Schalter an die Einstellungen anpassen. Ziele, die zum allerersten Mal an
-        sind, markieren den Bestand als schon geliefert. Gibt je so markiertem Ziel die
-        Anzahl zurück."""
+        sind, markieren den Bestand als schon geliefert (außer bei erstversand = "auch").
+        Gibt je so markiertem Ziel die Anzahl zurück."""
         markiert = {}
         for ziel in aktive:
-            if not self.je_eingeschaltet(ziel):
+            if not self.je_eingeschaltet(ziel) and bestand_markieren:
                 markiert[ziel] = self.als_schon_markieren(ziel)
             self.schalten(ziel, True)
         for ziel in self.eingeschaltete_ziele():
             if ziel not in aktive:
                 self.schalten(ziel, False)
         return markiert
+
+    # Erster Lauf eines neuen Kontos
+
+    ERSTLAUF = "einstellung:erstlauf"
+
+    def erstlauf_offen(self) -> bool:
+        zeile = self.eintrag(self.ERSTLAUF)
+        if zeile is not None:
+            return zeile.get("ziele") == "offen"
+        return self.anzahl("rechnung") == 0
+
+    def erstlauf_setzen(self, stand: str) -> None:
+        zeile = self.eintrag(self.ERSTLAUF)
+        if zeile is not None and zeile.get("ziele") == stand:
+            return
+        self._anhaengen([{
+            "zeitpunkt": datetime.now().isoformat(timespec="seconds"),
+            "quelle": self.quelle, "konto": self.konto, "art": "einstellung",
+            "schluessel": self.ERSTLAUF, "ziele": stand,
+        }])
 
     def _anhaengen(self, zeilen: list[dict]) -> None:
         neu_anlegen = not self.datei.exists()

@@ -296,6 +296,9 @@ class Skool(Quelle):
             for z in zahlungen:
                 if z.datum is None:
                     erg.hinweise.append(f"Rechnung {z.kennung}: Datum im Zahlungsverlauf nicht erkannt.")
+            # Zeitraum: ältere Rechnungen gar nicht erst öffnen und nicht vermerken.
+            erg.uebersprungen = sum(1 for z in zahlungen if umgebung.zu_alt(z.datum))
+            zahlungen = [z for z in zahlungen if not umgebung.zu_alt(z.datum)]
 
             offen = [z for z in zahlungen if not umgebung.bekannt(f"rechnung:{z.kennung}")]
             erg.schon_da = len(zahlungen) - len(offen)

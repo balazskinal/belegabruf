@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from belegabruf import einstellungen, pfade, quellen
@@ -30,31 +31,65 @@ def _ja(text: str, standard: bool) -> bool:
         print("  Bitte j oder n eingeben.")
 
 
+def _titelschluessel(titel: str) -> str:
+    """Vergleichsschlüssel für Namen; ein leerer Name bleibt leer (nicht „standard“)."""
+    return pfade.kurzname(titel) if titel.strip() else ""
+
+
 def _konten_abfragen(quelle: str, vorhanden: list[Konto]) -> list[Konto]:
     anzeige = quellen.anzeigename(quelle)
     if vorhanden:
         print(f"\n  Eingetragene {anzeige}-Konten:")
         for k in vorhanden:
-            print(f"   - {k.name} ({'eingeschaltet' if k.aktiv else 'ausgeschaltet'})")
+            print(f"   - {k.anzeigetitel or '(ohne Namen)'} ({'eingeschaltet' if k.aktiv else 'ausgeschaltet'})")
         if _ja(f"  {anzeige}-Konten so lassen?", True):
             return vorhanden
+    # Wer einen bisherigen Namen wieder eingibt (oder beim namenlosen Konto wieder nichts),
+    # behält dessen Kennung — also Anmeldung und Protokoll — und seine übrigen Angaben.
+    # Die Kennung eines bestehenden Kontos ändert sich hier nie stillschweigend.
+    bisher: dict[str, Konto] = {}
+    for k in vorhanden:
+        bisher.setdefault(_titelschluessel(k.anzeigetitel), k)
+    if len(vorhanden) == 1:
+        # Nur ein Konto bisher: Enter ohne Namen meint dieses Konto, auch wenn es einen Namen hatte.
+        bisher.setdefault("", vorhanden[0])
+
+    def konto(titel: str) -> Konto:
+        alt = bisher.get(_titelschluessel(titel))
+        if alt is not None:
+            return replace(alt, titel=titel, optionen=dict(alt.optionen))
+        return Konto(quelle=quelle, name=einstellungen.kennung_fuer(titel), titel=titel)
+
+    def passt(liste: list[Konto]) -> bool:
+        try:
+            einstellungen.konten_unterscheidbar(liste)
+            return True
+        except einstellungen.EinstellungsFehler as fehler:
+            print(f"  {fehler}")
+            return False
+
+    print(f"\n  Ein Name ist nur nötig, wenn du mehrere {anzeige}-Konten hast (z. B. \"privat\" und\n"
+          "  \"co-host\"). Bei nur einem Konto einfach Enter drücken.")
     konten: list[Konto] = []
-    print(
-        f"\n  Gib deinem {anzeige}-Konto einen Namen. Der Name ist nur für dich, damit du\n"
-        "  mehrere Konten auseinanderhalten kannst (z. B. \"privat\" oder \"co-host\")."
-    )
     while True:
-        standard = "privat" if not konten else ""
-        name = _frage(f"  Name für das {len(konten) + 1}. {anzeige}-Konto", standard)
-        if not name:
-            break
-        if any(k.name == name for k in konten):
-            print("  Diesen Namen gibt es schon.")
+        if not konten:
+            neu = konto(_frage(f"  Name für das {anzeige}-Konto (leer = ohne Namen)"))
+        else:
+            name = _frage(f"  Name für das {len(konten) + 1}. {anzeige}-Konto (leer = fertig)")
+            if not name:
+                break
+            neu = konto(name)
+        if not passt(konten + [neu]):
             continue
-        konten.append(Konto(quelle=quelle, name=name))
+        konten.append(neu)
         beispiel = " (z. B. ein Zugang als Co-Gastgeber)" if quelle == "airbnb" else ""
         if not _ja(f"  Noch ein {anzeige}-Konto{beispiel}?", False):
             break
+        while not konten[0].anzeigetitel:
+            # Die Kennung (und damit die Anmeldung) des ersten Kontos bleibt dabei gleich.
+            name = _frage(f"  Dann braucht auch das 1. {anzeige}-Konto einen Namen")
+            if name and passt([Konto(quelle=quelle, name=konten[0].name, titel=name)]):
+                konten[0].titel = name
     return konten
 
 
@@ -105,6 +140,7 @@ def einrichten() -> Einstellungen:
         ziele=["ordner", "mail"] if mail_an else ["ordner"],
         sichtbar=alt.sichtbar if alt else False,
         mail=mail_einst,
+        ablage=alt.ablage if alt else "jahr",
     )
     ordner.mkdir(parents=True, exist_ok=True)
     datei = einstellungen.speichern(neu)
@@ -213,7 +249,7 @@ def _mail_abfragen(alt: Einstellungen | None) -> tuple[bool, MailEinstellung]:
         if _ja("  Austauschen?", False):
             _passwort_eingeben(dienst, konto)
     elif not _passwort_eingeben(dienst, konto):
-        print("  Ohne Passwort wird nichts verschickt. Du kannst es später über „Einrichten“ eingeben.")
+        print("  Ohne Passwort wird nichts verschickt. Du kannst es später im Reiter „Einstellungen“ eingeben.")
         return True, einst
 
     print("  Prüfe die Anmeldung am Mailserver (es wird keine Mail verschickt) …")
@@ -222,7 +258,7 @@ def _mail_abfragen(alt: Einstellungen | None) -> tuple[bool, MailEinstellung]:
     except Exception as fehler:  # noqa: BLE001
         meldung = f"Der Passwortspeicher ließ sich nicht lesen ({type(fehler).__name__})."
     if meldung:
-        print(f"  ✗ {meldung}\n  Bitte noch einmal „Einrichten“ und die Angaben prüfen.")
+        print(f"  ✗ {meldung}\n  Bitte die Angaben im Reiter „Einstellungen“ prüfen.")
     else:
         print("  ✓ Anmeldung klappt.")
     return True, einst
