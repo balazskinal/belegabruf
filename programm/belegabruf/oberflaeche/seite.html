@@ -77,7 +77,13 @@
   .oben16 { margin-top: 16px; }
   .oben18 { margin-top: 18px; }
   .oben22 { margin-top: 22px; }
-  details > summary { cursor: pointer; font-weight: 600; font-size: 17px; }
+  .reiterleiste { display: flex; gap: 4px; border-bottom: 1px solid var(--linie); margin: 0 0 16px; }
+  .reiterleiste [role=tab] { border: 1px solid transparent; border-bottom: none; border-radius: 8px 8px 0 0;
+    background: none; color: var(--leise); padding: 9px 16px; margin-bottom: -1px; font-weight: 600; }
+  .reiterleiste [role=tab][aria-selected=true] { background: var(--flaeche); color: var(--text);
+    border-color: var(--linie); border-bottom: 1px solid var(--flaeche); }
+  .reiterleiste [role=tab]:hover { color: var(--text); }
+  .knopf-verweis { border: none; background: none; color: var(--akzent); padding: 0; text-decoration: underline; }
   @media (max-width: 560px) { .kontozeile { grid-template-columns: 1fr 1fr; } }
 </style>
 </head>
@@ -93,19 +99,20 @@
   <div id="fehler" class="meldung schlecht versteckt" role="alert"></div>
   <div id="ende" class="meldung gut versteckt">Belegabruf ist beendet. Du kannst dieses Fenster schließen.</div>
 
-  <section id="willkommen" class="versteckt">
-    <h2>Willkommen</h2>
-    <p>Belegabruf ist noch nicht eingerichtet. Trag unten den Belegordner und deine Konten ein und klick auf
-      „Einstellungen speichern“. Danach meldest du dich je Konto einmal an.</p>
-  </section>
+  <div class="reiterleiste" role="tablist" aria-label="Bereiche">
+    <button type="button" role="tab" id="reiter-holen" aria-controls="tafel-holen" aria-selected="true" tabindex="0">Belege holen</button>
+    <button type="button" role="tab" id="reiter-einstellungen" aria-controls="tafel-einstellungen" aria-selected="false" tabindex="-1">Einstellungen</button>
+  </div>
 
+  <div role="tabpanel" id="tafel-holen" aria-labelledby="reiter-holen" tabindex="0">
   <section id="bereich-konten">
     <h2>Konten</h2>
     <table>
       <thead><tr><th>Anbieter</th><th>Konto</th><th>Anmeldung</th><th></th></tr></thead>
       <tbody id="konten"></tbody>
     </table>
-    <p id="keine-konten" class="leise versteckt">Noch kein Konto eingetragen — unten bei „Einstellungen“ hinzufügen.</p>
+    <p id="keine-konten" class="leise versteckt">Noch kein Konto eingetragen — im Reiter
+      <button type="button" class="knopf-verweis" id="zu-einstellungen">Einstellungen</button> hinzufügen.</p>
     <div class="knoepfe oben14">
       <button id="holen" class="haupt" type="button">Belege holen</button>
       <button id="fehlende" type="button">Fehlende Dateien neu holen</button>
@@ -120,9 +127,17 @@
     <ul id="zusammenfassung"></ul>
   </section>
 
-  <section>
-    <details id="einstellungen">
-      <summary>Einstellungen</summary>
+  </div>
+
+  <div role="tabpanel" id="tafel-einstellungen" aria-labelledby="reiter-einstellungen" tabindex="0" hidden>
+  <section id="willkommen" class="versteckt">
+    <h2>Willkommen</h2>
+    <p>Belegabruf ist noch nicht eingerichtet. Trag unten den Belegordner und deine Konten ein und klick auf
+      „Einstellungen speichern“. Danach meldest du dich im Reiter „Belege holen“ je Konto einmal an.</p>
+  </section>
+
+  <section id="einstellungen">
+      <h2>Belegordner</h2>
       <form id="formular" autocomplete="off" novalidate>
         <label for="belegordner">Belegordner (hier landen die PDFs)</label>
         <input type="text" id="belegordner" spellcheck="false">
@@ -177,8 +192,8 @@
         </form>
         <div id="mail-ergebnis" class="meldung versteckt"></div>
       </div>
-    </details>
   </section>
+  </div>
 </main>
 
 <script nonce="{{NONCE}}">
@@ -222,6 +237,33 @@ function element(tag, text, klasse) {
   return e;
 }
 
+// ── Reiter (WAI-ARIA Tabs: Pfeiltasten, Pos1/Ende, automatische Aktivierung) ──
+const REITER = ["holen", "einstellungen"];
+let reiterGewaehlt = false;
+
+function reiterWaehlen(name, fokus) {
+  reiterGewaehlt = true;
+  for (const r of REITER) {
+    const an = r === name;
+    const reiter = $("reiter-" + r);
+    reiter.setAttribute("aria-selected", String(an));
+    reiter.tabIndex = an ? 0 : -1;
+    $("tafel-" + r).hidden = !an;
+  }
+  if (fokus) $("reiter-" + name).focus();
+}
+
+for (const r of REITER) {
+  $("reiter-" + r).addEventListener("click", () => reiterWaehlen(r, true));
+  $("reiter-" + r).addEventListener("keydown", (ereignis) => {
+    const i = REITER.indexOf(r);
+    const ziel = { ArrowRight: REITER[(i + 1) % REITER.length], ArrowLeft: REITER[(i - 1 + REITER.length) % REITER.length],
+                   Home: REITER[0], End: REITER[REITER.length - 1] }[ereignis.key];
+    if (ziel) { ereignis.preventDefault(); reiterWaehlen(ziel, true); }
+  });
+}
+$("zu-einstellungen").addEventListener("click", () => reiterWaehlen("einstellungen", true));
+
 const ZUSTAND_TEXT = { angemeldet: "angemeldet", abgelaufen: "abgelaufen", unbekannt: "unbekannt" };
 
 function kontenZeigen() {
@@ -244,6 +286,7 @@ function kontenZeigen() {
     koerper.append(zeile);
   }
   $("keine-konten").classList.toggle("versteckt", zustand.konten.length > 0);
+  $("konten").closest("table").classList.toggle("versteckt", !zustand.konten.length);
   const fehlen = zustand.konten.reduce((s, k) => s + (k.fehlende || 0), 0);
   $("fehlende").textContent = "Fehlende Dateien neu holen" + (fehlen ? ` (${fehlen})` : "");
   $("fehlende").disabled = !fehlen;
@@ -335,8 +378,10 @@ async function laden(formularAuch) {
     $("neu").classList.remove("versteckt");
   }
   $("willkommen").classList.toggle("versteckt", zustand.eingerichtet);
-  $("bereich-konten").classList.toggle("versteckt", !zustand.eingerichtet);
-  if (!zustand.eingerichtet) $("einstellungen").open = true;
+  if (!reiterGewaehlt) {
+    // Erster Start ohne Konten: gleich zu den Einstellungen, sonst „Belege holen“.
+    reiterWaehlen(zustand.konten.length ? "holen" : "einstellungen", false);
+  }
   $("passwort-status").textContent = zustand.mail.passwort;
   const fremd = zustand.datei_fremd || [];
   $("fremd-hinweis").textContent = fremd.length

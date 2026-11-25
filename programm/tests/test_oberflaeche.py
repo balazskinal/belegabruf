@@ -279,12 +279,14 @@ def seite(server, monkeypatch):
 
 def test_ablauf_einrichten_pruefen_anmelden_holen(seite, server, tmp_path):
     p = seite
-    assert p.is_visible("#willkommen") and p.eval_on_selector("#einstellungen", "e => e.open")
+    # Erster Start ohne Konten: Reiter „Einstellungen“ ist offen
+    assert p.is_visible("#willkommen") and p.get_attribute("#reiter-einstellungen", "aria-selected") == "true"
 
     # Einrichten
     p.fill("#belegordner", str(tmp_path / "Belege"))
     p.click("#speichern")
     p.wait_for_selector("#gespeichert:not(.versteckt)")
+    p.click("#reiter-holen")
     assert p.is_hidden("#willkommen")
     # Ein einzelnes Konto braucht keinen Namen: Anzeige nur „Airbnb“.
     assert p.is_hidden("#kontenliste input[type=text]")
@@ -326,6 +328,7 @@ def test_fehlende_dateien_und_beenden(seite, server, tmp_path):
     p.fill("#belegordner", str(tmp_path / "Belege"))
     p.click("#speichern")
     p.wait_for_selector("#gespeichert:not(.versteckt)")
+    p.click("#reiter-holen")
     p.click("#holen")
     p.wait_for_function("() => document.querySelector('#zusammenfassung').innerText.includes('2 neu')")
     (tmp_path / "Belege" / "airbnb" / "2026" / "2026-11-03_a1.pdf").unlink()
@@ -426,10 +429,16 @@ def test_knoepfe_in_der_seite_gesperrt(seite, server, tmp_path, monkeypatch):
     p.fill("#belegordner", str(tmp_path / "Belege"))
     p.click("#speichern")
     p.wait_for_selector("#gespeichert:not(.versteckt)")
+    p.click("#reiter-holen")
     p.click("#holen")
     p.wait_for_function("() => document.querySelector('#holen').disabled")
     for knopf in ("#alle-pruefen", "#speichern", "#konten button:has-text('Anmelden')", "#konten button:has-text('Prüfen')"):
         assert p.is_disabled(knopf), knopf
+    # Reiter wechseln geht während des Vorgangs; in den Einstellungen ist nur Speichern gesperrt
+    p.click("#reiter-einstellungen")
+    assert p.is_visible("#formular") and p.is_disabled("#speichern")
+    assert p.is_enabled("#belegordner") and p.is_enabled("#passwort-speichern")
+    p.click("#reiter-holen")
     LangsameAttrappe.tor.set()
     p.wait_for_function("() => !document.querySelector('#holen').disabled")
     assert p.is_enabled("#konten button:has-text('Anmelden')")
@@ -529,7 +538,7 @@ def test_warnung_steht_vor_dem_speichern_in_der_seite(server, tmp_path, monkeypa
         p = b.new_page()
         p.goto(server.adresse)
         p.wait_for_selector("#version:not(:empty)")
-        p.click("#einstellungen summary")
+        p.click("#reiter-einstellungen")
         assert "eigene Kommentare" in p.inner_text("#fremd-hinweis")
         p.click("#speichern")
         p.wait_for_selector("#gespeichert:not(.versteckt)")
@@ -885,3 +894,51 @@ def test_port_springt_mit_der_verschluesselung(seite):
     assert p.input_value("#port") == "2525"
     p.fill("#port", "26")
     assert p.input_value("#port") == "26"
+
+
+# ── Zwei Reiter ──────────────────────────────────────────────────────────────
+
+
+def test_reiter_tastatur_und_aria(seite):
+    p = seite
+    assert p.get_attribute("[role=tablist]", "aria-label")
+    reiter = p.locator("[role=tab]")
+    assert reiter.count() == 2
+    for i in range(2):
+        r = reiter.nth(i)
+        tafel = p.locator("#" + r.get_attribute("aria-controls"))
+        assert tafel.get_attribute("role") == "tabpanel"
+        assert tafel.get_attribute("aria-labelledby") == r.get_attribute("id")
+    # Erster Start ohne Konten: „Einstellungen“
+    assert p.get_attribute("#reiter-einstellungen", "aria-selected") == "true"
+    assert p.get_attribute("#reiter-einstellungen", "tabindex") == "0"
+    assert p.get_attribute("#reiter-holen", "tabindex") == "-1"
+    assert p.is_visible("#tafel-einstellungen") and p.is_hidden("#tafel-holen")
+    p.focus("#reiter-einstellungen")
+    p.keyboard.press("ArrowLeft")
+    assert p.evaluate("document.activeElement.id") == "reiter-holen"
+    assert p.get_attribute("#reiter-holen", "aria-selected") == "true"
+    assert p.is_visible("#tafel-holen") and p.is_hidden("#tafel-einstellungen")
+    p.keyboard.press("ArrowRight")
+    assert p.evaluate("document.activeElement.id") == "reiter-einstellungen"
+    p.keyboard.press("Home")
+    assert p.evaluate("document.activeElement.id") == "reiter-holen"
+    p.keyboard.press("End")
+    assert p.get_attribute("#reiter-einstellungen", "aria-selected") == "true"
+    # Tab-Taste führt aus der Reiterleiste in die Tafel, nicht zum anderen Reiter
+    p.keyboard.press("Tab")
+    assert p.evaluate("document.activeElement.id") == "tafel-einstellungen"
+
+
+def test_mit_konten_oeffnet_belege_holen(server, tmp_path):
+    _speichern(server, tmp_path)
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(channel="chromium")
+        p = b.new_page()
+        p.goto(server.adresse)
+        p.wait_for_selector("#version:not(:empty)")
+        assert p.get_attribute("#reiter-holen", "aria-selected") == "true"
+        assert p.is_visible("#holen") and p.is_hidden("#formular")
+        b.close()
