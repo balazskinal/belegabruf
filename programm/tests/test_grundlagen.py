@@ -259,3 +259,15 @@ def test_keine_hive_homes_bezuege_im_repo():
         inhalt = datei.read_text(encoding="utf-8", errors="ignore").lower()
         for wort in verboten:
             assert wort not in inhalt, f"{datei} erwähnt '{wort}'"
+
+
+def test_keine_syntaxwarnung_in_modulen():
+    """Ungültige Escape-Sequenzen (z. B. in eingebettetem JavaScript) sieht jeder Nutzer als
+    Warnung — und künftige Python-Versionen machen einen Fehler daraus."""
+    import warnings
+
+    ordner = Path(__file__).resolve().parents[1] / "belegabruf"
+    for datei in sorted(ordner.rglob("*.py")):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", SyntaxWarning)
+            compile(datei.read_text(encoding="utf-8"), str(datei), "exec")
