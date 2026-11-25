@@ -19,6 +19,14 @@ FEHLER_MERKMALE = (
 )
 
 
+#: Größer wird kein Beleg gespeichert (Schutz vor kaputten oder untergeschobenen Dateien).
+MAX_PDF_BYTES = 20 * 1024 * 1024
+
+
+def zu_gross(inhalt: bytes | None) -> bool:
+    return inhalt is not None and len(inhalt) > MAX_PDF_BYTES
+
+
 def ist_pdf(inhalt: bytes) -> bool:
     return inhalt[:5] == b"%PDF-"
 

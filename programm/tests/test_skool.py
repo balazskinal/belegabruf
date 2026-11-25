@@ -290,3 +290,42 @@ def test_dunkle_seite_waere_ohne_aufhellen_dunkel(tmp_path):
         hell = seite.pdf(format="A4", print_background=True)
         b.close()
     assert _helligkeit(dunkel) < 100 < 200 < _helligkeit(hell)
+
+
+def test_zu_grosses_pdf_wird_nicht_gespeichert(tmp_path, falsches_skool, monkeypatch):
+    monkeypatch.setattr(pruefung, "MAX_PDF_BYTES", 1000)  # die erfundenen PDFs sind größer
+    quelle = skool.Skool(Konto("skool", "test"), tmp_path / "profil")
+    abgeliefert = []
+    erg = quelle.belege_holen(_umgebung(set(), abgeliefert))
+    assert abgeliefert == [] and erg.status == "unvollstaendig"
+    assert all("PDF größer als" in a for a in erg.abweichungen)
+
+
+@pytest.mark.skipif(not __import__("os").environ.get("BELEGABRUF_SICHTBAR_TESTEN"),
+                    reason="öffnet ein sichtbares Fenster; nur mit BELEGABRUF_SICHTBAR_TESTEN=1")
+def test_pdf_auch_im_sichtbaren_fenster(tmp_path, monkeypatch):
+    """sichtbar = "ja": Chromium druckt auch im sichtbaren Fenster ein PDF."""
+    if not _chromium_da():
+        pytest.skip("Chromium nicht installiert")
+    original = browser.profil_oeffnen
+
+    @contextmanager
+    def sichtbar_mit_umleitung(profil, sichtbar):
+        assert sichtbar is True
+        with original(profil, sichtbar=True) as kontext:
+            def antworten(route):
+                pfad = route.request.url.removeprefix("https://www.skool.com")
+                if pfad.startswith("/settings"):
+                    return route.fulfill(content_type="text/html; charset=utf-8", body=UEBERSICHT_HTML)
+                return route.fulfill(content_type="text/html; charset=utf-8", body=_rechnung_html("TEST-0001"))
+            kontext.route("https://www.skool.com/**", antworten)
+            yield kontext
+
+    monkeypatch.setattr(browser, "profil_oeffnen", sichtbar_mit_umleitung)
+    monkeypatch.setattr(browser, "pause", lambda *a, **k: None)
+    quelle = skool.Skool(Konto("skool", "test"), tmp_path / "profil")
+    abgeliefert = []
+    umgebung = _umgebung(set(), abgeliefert)
+    umgebung.sichtbar = True
+    erg = quelle.belege_holen(umgebung)
+    assert erg.neu == 3 and all(pruefung.ist_pdf(b.inhalt) for b in abgeliefert)

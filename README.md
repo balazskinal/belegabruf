@@ -319,6 +319,10 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 
 ## Für Neugierige und Entwickler
 
+Warum das Programm so gebaut ist, steht in den **Entscheidungen** unter
+[`docs/entscheidungen/`](docs/entscheidungen/README.md); was als Nächstes kommt, in der
+[Roadmap](docs/roadmap.md).
+
 ### Kommandozeile
 
 Im Ordner `programm` (mit installiertem [uv](https://docs.astral.sh/uv/)):

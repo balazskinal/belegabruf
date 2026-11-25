@@ -154,7 +154,7 @@ def dateiname(datum: date | None, gruppe: str, kennung: str) -> str:
 # Nur für diese eine Seite im Browser, nie in Skool gespeichert: Klassen und Attribute,
 # mit denen Seiten ein dunkles Design schalten, auf hell setzen. localStorage und die
 # Kontoeinstellung bei Skool bleiben unberührt.
-_HELL_JS = """() => {
+_HELL_JS = r"""() => {
   for (const e of [document.documentElement, document.body]) {
     if (!e) continue;
     for (const k of [...e.classList]) if (/dark/i.test(k)) e.classList.remove(k);
@@ -165,7 +165,7 @@ _HELL_JS = """() => {
 }"""
 
 # Hintergrund des Rumpfs (oder des ersten Elements mit Hintergrund) als Helligkeit 0…255.
-_HELLIGKEIT_JS = """() => {
+_HELLIGKEIT_JS = r"""() => {
   const farbe = e => getComputedStyle(e).backgroundColor;
   let e = document.body, f = farbe(e);
   const leer = f => !f || f === 'transparent' || /rgba\(.*,\s*0\)$/.test(f);
@@ -344,6 +344,8 @@ class Skool(Quelle):
         daten = rechnungsseite_lesen(seitentext)
         hell_machen(seite)
         inhalt = seite.pdf(format="A4", print_background=True)
+        if pruefung.zu_gross(inhalt):
+            return f"PDF größer als {pruefung.MAX_PDF_BYTES // (1024 * 1024)} MB"
         # Auch das fertige PDF prüfen: Steht die Rechnung wirklich drin?
         grund = rechnung_pruefen(pruefung.pdf_text(inhalt))
         if grund:
