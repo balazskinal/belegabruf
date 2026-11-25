@@ -5,6 +5,7 @@ eigenen Rechner. Es kann:
 
 - **Airbnb:** die Rechnungen über die Airbnb-Servicegebühren für Gastgeber, jede Buchung als eigenes PDF.
 - **Skool:** die Rechnungen für bezahlte Mitgliedschaften in Skool-Communities (siehe [Skool](#skool)).
+- **Xentra:** die Rechnungen für das Xentra-Abonnement und Provisionen (siehe [Xentra](#xentra)).
 
 **Das ist kein Dienst — jeder betreibt seine eigene Kopie.** Niemand außer dir sieht deine
 Anmeldung oder deine Belege. Es gibt keinen Server, kein Konto bei uns, keinen Support-Vertrag.
@@ -79,7 +80,7 @@ Administratorrechte nötig.
 4. Ein schwarzes Fenster geht auf und lädt alles Nötige (ein Hilfsprogramm namens *uv*, Python und
    einen eigenen Browser). Das dauert beim ersten Mal ein paar Minuten.
 5. Dann kommen ein paar Fragen. **Enter übernimmt jeweils den Vorschlag in [Klammern].**
-   - Welche Anbieter (Airbnb, Skool)
+   - Welche Anbieter (Airbnb, Skool, Xentra)
    - Ein Name für dein Konto — nur für dich, z. B. „privat“. Hast du mehrere Airbnb-Konten
      (z. B. einen Zugang als Co-Gastgeber), kannst du mehrere eintragen; jedes bekommt seine eigene Anmeldung.
    - Der Belegordner (Vorschlag: `Dokumente/Belege`)
@@ -92,7 +93,9 @@ PDF-Knopf gibt es dort nicht: Das Programm öffnet jede Rechnung im (unsichtbare
 Überschrift und Gesamtbetrag da sind, und speichert sie selbst als PDF:
 `skool/<Jahr>/<Datum>_<Community>_<Rechnungs-ID>.pdf`. Bist du Mitglied in mehreren bezahlten
 Communities, kommen alle mit; die Community steht im Dateinamen. Am Ende vergleicht es, ob so viele
-Rechnungen geholt sind, wie der Zahlungsverlauf nennt.
+Rechnungen geholt sind, wie der Zahlungsverlauf nennt. Das PDF kommt immer im **hellen Design**
+heraus (gut zum Drucken und für die Texterkennung), auch wenn dein Skool-Konto auf Dunkel steht — das
+gilt nur für den Ausdruck, deine Einstellung bei Skool bleibt, wie sie ist.
 
 Das Programm **liest nur und lädt herunter**. Es klickt bei Skool nichts an — weder
 Zahlungsmethoden noch Kündigung.
@@ -101,6 +104,19 @@ Zahlungsmethoden noch Kündigung.
 Programms womöglich von Google blockiert („Dieser Browser oder diese App ist möglicherweise nicht
 sicher“). Dann bei Skool mit **E-Mail und Passwort** anmelden. Hast du noch kein Skool-Passwort,
 leg vorher in deinem normalen Browser eins fest (bei der Skool-Anmeldung über „Passwort vergessen“).
+## Xentra
+
+Xentra zeigt die Rechnungen unter *Abrechnung → Rechnungen*: Datum, Beschreibung, Betrag, Status und
+ein Knopf „PDF herunterladen“. Das Programm drückt diesen Knopf für jede Zeile — wie du es mit der
+Maus tun würdest —, lädt das PDF und speichert es als
+`xentra/<Jahr>/<Datum>_xentra_<Rechnungsnummer>.pdf`. Die Beschreibung kommt absichtlich nicht in den
+Dateinamen (bei Provisionen stehen dort Gastnamen). Am Ende vergleicht es, ob so viele Rechnungen
+vorliegen, wie die Liste zeigt.
+
+Das Programm **liest nur und lädt herunter**. Angeklickt werden nur der Reiter „Rechnungen“ und die
+Knöpfe „PDF herunterladen“ — nichts an Abo, Zahlungsmethode oder Einstellungen. Damit es merkt, was
+schon geholt ist, drückt es bei jedem Lauf alle Download-Knöpfe einmal; geladen und gespeichert wird
+aber nur, was neu ist.
 
 ## Benutzen
 
@@ -199,7 +215,7 @@ programm/
   belegabruf/
     cli.py            Kommandozeile und Ablauf beim Doppelklick
     ablauf.py         Gerüst: prüfen, anmelden lassen, holen, abliefern
-    quellen/          ein Baustein je Anbieter: airbnb.py, skool.py
+    quellen/          ein Baustein je Anbieter: airbnb.py, skool.py, xentra.py
       basis.py        die feste Schnittstelle für Bausteine
     ziele/            wohin Belege geliefert werden (Version 1: ordner.py)
     protokoll.py      Protokoll je Anbieter und Konto — entscheidet, was schon geholt ist
@@ -241,7 +257,4 @@ Die GitHub Action baut das ZIP und hängt es an das Release.
 ## Offen
 
 - **Windows:** noch von niemandem getestet (Abnahmepunkt 5). Wer es ausprobiert, bitte Rückmeldung.
-- **Skool:** Der erste echte Lauf steht noch aus; getestet ist mit nachgebauten Seiten. Ob der
-  Zahlungsverlauf bei sehr vielen Zahlungen nachlädt, ist ungeprüft — das Programm scrollt dafür nach
-  unten und vergleicht am Ende die Anzahl.
 - Weitere Bausteine und das Ziel „Upload an die Buchhaltung“ folgen in späteren Versionen.
