@@ -137,6 +137,10 @@ def attrappe(monkeypatch):
     return a
 
 
+def _stand(erg) -> dict:
+    return erg.lieferungen["sevdesk"]
+
+
 def _lauf(einst, nachholen=False) -> Ergebnis:
     return ablauf.abrufen(einst, einst.konten[0], lambda t: None, nachholen=nachholen)
 
@@ -181,11 +185,11 @@ def test_alter_bestand_wird_nicht_hochgeladen(tmp_path, attrappe):
     einst = _einst(tmp_path, an=True)
     Falsch.rechnungen += [("a3", "2026-11-20", "AIUC-3")]
     erg = _lauf(einst)
-    assert erg.als_schon_markiert == 2
-    assert erg.hochgeladen == 1
+    assert _stand(erg)['schon_markiert'] == 2
+    assert _stand(erg)['geliefert'] == 1
     assert [e["voucher"]["description"] for e in attrappe.entwuerfe] == ["AIUC-3"]
     p = _protokoll(einst)
-    assert "sevdesk-schon" in p.ziele_von("rechnung:a1")
+    assert "sevdesk:schon" in p.ziele_von("rechnung:a1")
     assert "sevdesk" in p.ziele_von("rechnung:a3")
 
 
@@ -209,16 +213,16 @@ def test_entwurf_enthaelt_nur_bekanntes(tmp_path, attrappe):
     assert gutschrift["voucher"]["description"] == "AIUC-9 (Gutschrift)"
     assert all(k["Authorization"] == PLATZHALTER for k in attrappe.kopfzeilen)
     p = _protokoll(einst)
-    assert p.eintrag("rechnung:a1")["sevdesk_id"] == "901"
+    assert p.kennung("rechnung:a1", "sevdesk") == "901"
     assert p.ziele_von("rechnung:a1") == ["ordner", "sevdesk"]
 
 
 def test_zweiter_lauf_laedt_nichts_doppelt(tmp_path, attrappe):
     einst = _einst(tmp_path)
     Falsch.rechnungen = [("a1", "2026-11-03", "AIUC-1")]
-    assert _lauf(einst).hochgeladen == 1
+    assert _stand(_lauf(einst))['geliefert'] == 1
     erg = _lauf(einst)
-    assert erg.hochgeladen == 0 and erg.nicht_hochgeladen == 0
+    assert _stand(erg)['geliefert'] == 0 and _stand(erg)['offen'] == 0
     assert len(attrappe.entwuerfe) == 1
 
 
@@ -239,19 +243,19 @@ def test_falscher_schluessel_verstaendlich_nichts_verloren(tmp_path, attrappe):
     Falsch.rechnungen = [("a1", "2026-11-03", "AIUC-1"), ("a2", "2026-11-04", "AIUC-2")]
     attrappe.verhalten = "401"
     erg = _lauf(einst)
-    assert erg.hochgeladen == 0 and erg.nicht_hochgeladen == 2
-    assert "lehnt den API-Schlüssel ab" in erg.upload_fehler
-    assert PLATZHALTER not in erg.upload_fehler
+    assert _stand(erg)['geliefert'] == 0 and _stand(erg)['offen'] == 2
+    assert "lehnt den API-Schlüssel ab" in _stand(erg)['fehler']
+    assert PLATZHALTER not in _stand(erg)['fehler']
     assert len(attrappe.aufrufe) == 1  # hält beim ersten Fehler an
     p = _protokoll(einst)
-    assert p.upload_offen() == ["rechnung:a1", "rechnung:a2"]
+    assert p.offen_fuer("sevdesk") == ["rechnung:a1", "rechnung:a2"]
     assert p.lokale_datei("rechnung:a1").exists()
     text = ablauf.zusammenfassung([erg], einst.belegordner)
     assert "noch nicht hochgeladen" in text and PLATZHALTER not in text
 
     attrappe.verhalten = "ok"  # Schlüssel ausgetauscht → nächster Lauf holt es nach
     erg = _lauf(einst)
-    assert erg.hochgeladen == 2 and erg.nicht_hochgeladen == 0
+    assert _stand(erg)['geliefert'] == 2 and _stand(erg)['offen'] == 0
 
 
 def test_sevdesk_lehnt_entwurf_ab(tmp_path, attrappe):
@@ -259,9 +263,9 @@ def test_sevdesk_lehnt_entwurf_ab(tmp_path, attrappe):
     Falsch.rechnungen = [("a1", "2026-11-03", "AIUC-1")]
     attrappe.verhalten = "ablehnen"
     erg = _lauf(einst)
-    assert "voucherPos must not be empty" in erg.upload_fehler
-    assert "422" in erg.upload_fehler
-    assert _protokoll(einst).upload_offen() == ["rechnung:a1"]
+    assert "voucherPos must not be empty" in _stand(erg)['fehler']
+    assert "422" in _stand(erg)['fehler']
+    assert _protokoll(einst).offen_fuer("sevdesk") == ["rechnung:a1"]
 
 
 def test_kein_netz_naechster_lauf_versucht_erneut(tmp_path, attrappe):
@@ -269,9 +273,9 @@ def test_kein_netz_naechster_lauf_versucht_erneut(tmp_path, attrappe):
     Falsch.rechnungen = [("a1", "2026-11-03", "AIUC-1")]
     attrappe.verhalten = "kein_netz"
     erg = _lauf(einst)
-    assert "nicht erreichbar" in erg.upload_fehler and erg.nicht_hochgeladen == 1
+    assert "nicht erreichbar" in _stand(erg)['fehler'] and _stand(erg)['offen'] == 1
     attrappe.verhalten = "ok"
-    assert _lauf(einst).hochgeladen == 1
+    assert _stand(_lauf(einst))['geliefert'] == 1
 
 
 @pytest.mark.parametrize("verhalten", ["zeitueberschreitung", "500"])
@@ -280,13 +284,13 @@ def test_antwort_bleibt_aus_wird_nicht_wiederholt(tmp_path, attrappe, verhalten)
     Falsch.rechnungen = [("a1", "2026-11-03", "AIUC-1")]
     attrappe.verhalten = verhalten
     erg = _lauf(einst)
-    assert erg.upload_unklar == ["AIUC-1"]
+    assert _stand(erg)['unklar'] == ["AIUC-1"]
     assert "nachsehen" in ablauf.zusammenfassung([erg], einst.belegordner)
     attrappe.verhalten = "ok"
     vorher = len(attrappe.aufrufe)
     erg = _lauf(einst)
     assert len(attrappe.aufrufe) == vorher  # nicht noch einmal geschickt
-    assert erg.nicht_hochgeladen == 0
+    assert _stand(erg)['offen'] == 0
 
 
 def test_absturz_waehrend_entwurf_wird_nicht_wiederholt(tmp_path, attrappe, monkeypatch):
@@ -302,7 +306,7 @@ def test_absturz_waehrend_entwurf_wird_nicht_wiederholt(tmp_path, attrappe, monk
     monkeypatch.setattr(sevdesk.urllib.request, "urlopen", absturz)
     with pytest.raises(KeyboardInterrupt):
         _lauf(einst)
-    assert "sevdesk-unklar" in _protokoll(einst).ziele_von("rechnung:a1")
+    assert "sevdesk:unklar" in _protokoll(einst).ziele_von("rechnung:a1")
     monkeypatch.setattr(sevdesk.urllib.request, "urlopen", attrappe)
     _lauf(einst)
     assert attrappe.entwuerfe == []
@@ -316,7 +320,7 @@ def test_schluessel_fehlt(tmp_path, attrappe, monkeypatch):
     einst = _einst(tmp_path)
     Falsch.rechnungen = [("a1", "2026-11-03", "AIUC-1")]
     erg = _lauf(einst)
-    assert erg.upload_fehler == "kein Schlüssel" and erg.nicht_hochgeladen == 1
+    assert _stand(erg)['fehler'] == "kein Schlüssel" and _stand(erg)['offen'] == 1
     assert attrappe.aufrufe == []
 
 
@@ -328,7 +332,7 @@ def test_aus_und_wieder_an_markiert_nichts(tmp_path, attrappe):
     _lauf(_einst(tmp_path, an=False))  # ausgeschaltet: a2 kommt nur in den Ordner
     assert len(attrappe.entwuerfe) == 1
     erg = _lauf(einst)  # wieder an: nichts markiert, a2 wird hochgeladen
-    assert erg.als_schon_markiert == 0 and erg.hochgeladen == 1
+    assert _stand(erg)['schon_markiert'] == 0 and _stand(erg)['geliefert'] == 1
     assert [e["voucher"]["description"] for e in attrappe.entwuerfe] == ["AIUC-1", "AIUC-2"]
 
 
@@ -336,12 +340,12 @@ def test_aus_und_wieder_an_laedt_gescheiterte_hoch(tmp_path, attrappe):
     einst = _einst(tmp_path)
     Falsch.rechnungen = [("a1", "2026-11-03", "AIUC-1")]
     attrappe.verhalten = "401"
-    assert _lauf(einst).nicht_hochgeladen == 1  # gescheitert
+    assert _stand(_lauf(einst))['offen'] == 1  # gescheitert
     _lauf(_einst(tmp_path, an=False))
     _lauf(_einst(tmp_path, an=False))  # mehrmals aus ändert nichts
     attrappe.verhalten = "ok"
     erg = _lauf(einst)
-    assert erg.als_schon_markiert == 0 and erg.hochgeladen == 1
+    assert _stand(erg)['schon_markiert'] == 0 and _stand(erg)['geliefert'] == 1
     assert "sevdesk" in _protokoll(einst).ziele_von("rechnung:a1")
 
 
@@ -351,7 +355,7 @@ def test_erstes_einschalten_nach_langer_zeit_aus(tmp_path, attrappe):
     _lauf(_einst(tmp_path, an=False))
     _lauf(_einst(tmp_path, an=False))
     erg = _lauf(_einst(tmp_path))
-    assert erg.als_schon_markiert == 1 and attrappe.entwuerfe == []
+    assert _stand(erg)['schon_markiert'] == 1 and attrappe.entwuerfe == []
 
 
 def test_datei_fehlt_vor_upload(tmp_path, attrappe):
@@ -362,7 +366,7 @@ def test_datei_fehlt_vor_upload(tmp_path, attrappe):
     _protokoll(einst).lokale_datei("rechnung:a1").unlink()
     attrappe.verhalten = "ok"
     erg = _lauf(einst)
-    assert erg.hochgeladen == 0 and erg.nicht_hochgeladen == 1
+    assert _stand(erg)['geliefert'] == 0 and _stand(erg)['offen'] == 1
     assert any("Fehlende Dateien neu holen" in h for h in erg.hinweise)
 
 
@@ -453,7 +457,7 @@ def test_einrichten_mit_neuem_schluessel(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(sevdesk.urllib.request, "urlopen", a)
     _einrichten.speicher = None
     # Anbieter, Kontoname, noch ein Konto?, Belegordner, sevDesk?, Eintrag, Steuerregel (erst falsch)
-    einst, speicher = _einrichten(monkeypatch, tmp_path, ["", "", "n", "", "j", "", "x", "14"],
+    einst, speicher = _einrichten(monkeypatch, tmp_path, ["", "", "n", "", "", "j", "", "x", "14"],
                                   verdeckt=PLATZHALTER)
     assert einst.sevdesk.steuerregel == "14"
     assert einst.sevdesk_an and einst.sevdesk.schluessel == "belegabruf/sevdesk"
@@ -473,7 +477,7 @@ def test_einrichten_mit_vorhandenem_eintrag(tmp_path, monkeypatch, capsys):
     speicher.daten[("sevdesk-api", "jemand")] = PLATZHALTER
     _einrichten.speicher = speicher
     # …, sevDesk?, Eintrag, Steuerregel, Austauschen?
-    einst, _ = _einrichten(monkeypatch, tmp_path, ["", "", "n", "", "j", "sevdesk-api/jemand", "14", "n"])
+    einst, _ = _einrichten(monkeypatch, tmp_path, ["", "", "n", "", "", "j", "sevdesk-api/jemand", "14", "n"])
     assert einst.sevdesk.schluessel == "sevdesk-api/jemand"
     assert speicher.daten == {("sevdesk-api", "jemand"): PLATZHALTER}  # nichts überschrieben
     assert "Der Schlüssel funktioniert" in capsys.readouterr().out
@@ -484,7 +488,7 @@ def test_ohne_steuerregel_wird_nichts_hochgeladen(tmp_path, attrappe):
     einst.sevdesk = SevDeskEinstellung(steuerregel="")
     Falsch.rechnungen = [("a1", "2026-11-03", "AIUC-1")]
     erg = _lauf(einst)
-    assert "keine Steuerregel" in erg.upload_fehler and erg.nicht_hochgeladen == 1
+    assert "keine Steuerregel" in _stand(erg)['fehler'] and _stand(erg)['offen'] == 1
     assert attrappe.aufrufe == []
 
 
@@ -500,18 +504,19 @@ def test_protokoll_aus_1_1_bekommt_neue_spalte(tmp_path):
 
     datei = protokoll_modul.protokolldatei("airbnb", "privat")
     datei.parent.mkdir(parents=True)
-    alte_spalten = [s for s in protokoll_modul.SPALTEN if s != "sevdesk_id"]
+    alte_spalten = [s for s in protokoll_modul.SPALTEN if s != "kennungen"]
     datei.write_text(
         ";".join(alte_spalten) + "\n"
         "2026-11-01T10:00:00;airbnb;privat;rechnung;rechnung:a1;2026-10-01;HMX;AIUC-1;airbnb/2026/x.pdf;ordner\n"
         "2026-11-01T10:00:01;airbnb;privat;kontrolle;monat:2026-10;;;;airbnb/kontrolle/m.pdf;ordner\n",
         encoding="utf-8")
     p = Protokoll("airbnb", "privat", tmp_path / "Belege")
-    assert datei.read_text(encoding="utf-8").splitlines()[0].endswith(";ziele;sevdesk_id")
+    assert datei.read_text(encoding="utf-8").splitlines()[0].endswith(";ziele;kennungen")
     assert p.eintrag("rechnung:a1")["rechnungsnummer"] == "AIUC-1"
-    p.hochgeladen("rechnung:a1", "77")
+    p.als_geliefert("rechnung:a1", "sevdesk", "77")
     neu = Protokoll("airbnb", "privat", tmp_path / "Belege")
-    assert neu.eintrag("rechnung:a1")["sevdesk_id"] == "77"
+    assert neu.kennung("rechnung:a1", "sevdesk") == "77"
+    assert neu.ziele_von("rechnung:a1") == ["ordner", "sevdesk"]
     assert neu.eintrag("monat:2026-10")["datei"] == "airbnb/kontrolle/m.pdf"
     assert neu.anzahl("rechnung") == 1
 
@@ -522,7 +527,7 @@ def test_einrichten_ohne_steuerregel_bleibt_sevdesk_aus(tmp_path, monkeypatch, c
     monkeypatch.setattr(sevdesk.urllib.request, "urlopen", a)
     _einrichten.speicher = _Speicher()
     # …, sevDesk?, Eintrag, Steuerregel leer
-    einst, speicher = _einrichten(monkeypatch, tmp_path, ["", "", "n", "", "j", "", ""], verdeckt=PLATZHALTER)
+    einst, speicher = _einrichten(monkeypatch, tmp_path, ["", "", "n", "", "", "j", "", ""], verdeckt=PLATZHALTER)
     assert not einst.sevdesk_an
     assert speicher.daten == {} and a.aufrufe == []  # kein Schlüssel abgefragt, nichts gesendet
     assert "AUSGESCHALTET" in capsys.readouterr().out

@@ -28,6 +28,8 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import date
 
+from belegabruf.ziele.basis import Abgelehnt, Lieferziel, Sendung, Unklar
+
 BASIS = "https://my.sevdesk.de/api/v1"
 ZEITLIMIT = 60
 
@@ -37,8 +39,9 @@ ERLAUBT = {
     ("GET", "/SevClient"),
 }
 
+NAME = "sevdesk"  # so heißt das Ziel im Protokoll
 STATUS_ENTWURF = 50
-LIEFERANT = {"airbnb": "Airbnb"}
+LIEFERANT = {"airbnb": "Airbnb", "skool": "Skool", "xentra": "Xentra"}
 
 
 class NichtErlaubt(Exception):
@@ -200,14 +203,6 @@ def _json(rumpf: bytes) -> dict:
 # ── Hochladen ────────────────────────────────────────────────────────────────
 
 
-class Abgelehnt(Exception):
-    """sevDesk hat geantwortet und abgelehnt — der Entwurf wurde sicher nicht angelegt."""
-
-    def __init__(self, text: str, schluessel_falsch: bool = False):
-        super().__init__(text)
-        self.schluessel_falsch = schluessel_falsch
-
-
 def entwurf(quelle: str, rechnungsdatum: date | None, rechnungsnummer: str, steuerregel: str,
             gutschrift: bool, temp_datei: str) -> dict:
     """Der Rumpf für saveVoucher: nur, was das Programm weiß; ohne Positionen.
@@ -229,10 +224,13 @@ def entwurf(quelle: str, rechnungsdatum: date | None, rechnungsnummer: str, steu
     return {"voucher": beleg, "filename": temp_datei}
 
 
-class SevDesk:
-    """Lädt einzelne Belege hoch. Kennt das Protokoll nicht — das macht ablauf.py."""
+class SevDeskZiel(Lieferziel):
+    """Lieferziel sevDesk: legt je Rechnung einen Entwurf an. Im Protokoll heißt es
+    ``sevdesk``; die Beleg-ID aus sevDesk kommt in die Spalte ``kennungen``."""
 
-    name = "sevdesk"
+    name = NAME
+    anzeigename = "sevDesk"
+    gruppe = "sevdesk"
 
     def __init__(self, verbindung: Verbindung, steuerregel: str):
         if not str(steuerregel).strip():
@@ -240,40 +238,40 @@ class SevDesk:
                 "In den Einstellungen ist keine Steuerregel für sevDesk eingetragen. "
                 "Doppelklick auf „Einrichten“ und die Nummer eingeben.")
         self.verbindung = verbindung
-        self.steuerregel = steuerregel
+        self.steuerregel = str(steuerregel).strip()
 
-    def hochladen(self, *, quelle: str, dateiname: str, inhalt: bytes, rechnungsdatum: date | None,
-                  rechnungsnummer: str, gutschrift: bool, vor_entwurf=lambda: None) -> str:
-        """Legt einen Entwurf an. Wirft ``Abgelehnt`` (sicher nicht angelegt) oder
-        ``Uebertragungsfehler`` (``vielleicht_angekommen`` sagt, ob es unklar ist).
-
-        Gibt die Beleg-ID in sevDesk zurück (leer, falls sevDesk keine nennt).
-
-        ``vor_entwurf`` wird direkt vor dem Anlegen aufgerufen. Dort merkt sich das
-        Programm „unklar“ — bricht der Rechner mittendrin ab, wird der Beleg so nicht
-        ein zweites Mal geschickt."""
+    def senden(self, sendung: Sendung, vor_senden) -> str:
+        """Legt einen Entwurf an und gibt die Beleg-ID zurück (leer, falls sevDesk keine nennt).
+        Wirft ``Abgelehnt`` (sicher nicht angelegt) oder ``Unklar`` (Antwort blieb aus)."""
+        v = self.verbindung
         # Schritt 1: Datei hochladen. Scheitert das, ist in sevDesk noch kein Beleg entstanden.
         try:
-            antwort = self.verbindung.aufrufen(
-                "POST", "/Voucher/Factory/uploadTempFile", datei=(dateiname, inhalt))
+            antwort = v.aufrufen("POST", "/Voucher/Factory/uploadTempFile",
+                                 datei=(sendung.dateiname, sendung.inhalt))
         except Uebertragungsfehler as fehler:
-            raise Uebertragungsfehler(str(fehler), vielleicht_angekommen=False) from fehler
+            raise Abgelehnt(str(fehler), alle_anhalten=True) from fehler
         if antwort.status >= 400:
-            raise Abgelehnt(self.verbindung.fehlertext(antwort), schluessel_falsch=antwort.status == 401)
+            raise Abgelehnt(v.fehlertext(antwort), alle_anhalten=True)
         objekte = antwort.daten.get("objects") or {}
         temp_datei = objekte.get("filename") if isinstance(objekte, dict) else None
         if not temp_datei:
             raise Abgelehnt("sevDesk hat die Datei angenommen, aber keinen Dateinamen zurückgegeben.")
 
-        # Schritt 2: Entwurf anlegen.
-        rumpf = entwurf(quelle, rechnungsdatum, rechnungsnummer, self.steuerregel, gutschrift, temp_datei)
-        vor_entwurf()
-        antwort = self.verbindung.aufrufen("POST", "/Voucher/Factory/saveVoucher", json_daten=rumpf)
+        # Schritt 2: Entwurf anlegen. Ab hier kann er angelegt sein.
+        rumpf = entwurf(sendung.quelle, sendung.rechnungsdatum, sendung.rechnungsnummer,
+                        self.steuerregel, sendung.gutschrift, temp_datei)
+        vor_senden()
+        try:
+            antwort = v.aufrufen("POST", "/Voucher/Factory/saveVoucher", json_daten=rumpf)
+        except Uebertragungsfehler as fehler:
+            if fehler.vielleicht_angekommen:
+                raise Unklar(str(fehler)) from fehler
+            raise Abgelehnt(str(fehler), alle_anhalten=True) from fehler
         if 400 <= antwort.status < 500:
-            raise Abgelehnt(self.verbindung.fehlertext(antwort), schluessel_falsch=antwort.status == 401)
+            # sicher nicht angelegt; Schlüssel falsch o. Ä. betrifft alles Weitere auch
+            raise Abgelehnt(v.fehlertext(antwort), alle_anhalten=True)
         if antwort.status >= 500:
-            # Serverfehler: sevDesk kann den Entwurf trotzdem angelegt haben.
-            raise Uebertragungsfehler(self.verbindung.fehlertext(antwort), vielleicht_angekommen=True)
+            raise Unklar(v.fehlertext(antwort))  # Serverfehler: kann trotzdem angelegt sein
         objekte = antwort.daten.get("objects") or {}
         beleg = objekte.get("voucher") if isinstance(objekte, dict) else None
         return str(beleg.get("id") or "") if isinstance(beleg, dict) else ""

@@ -1,8 +1,8 @@
 """Verzeichnis der Ziele (wohin Belege geliefert werden).
 
-``ordner`` legt Dateien ab (immer dabei). ``sevdesk`` (Upload als Entwurf per API,
-siehe sevdesk.py) läuft nach dem Abruf über das Protokoll und steht deshalb nicht in
-dieser Liste — Quellen bleiben dabei unverändert.
+``ordner`` legt Dateien ab (immer dabei). **Lieferziele** wie ``mail`` schicken nach
+dem Abruf weiter, was laut Protokoll noch fehlt (siehe ablauf.liefern) — sie stehen
+deshalb nicht in ``ZIELE``. Quellen bleiben dabei unverändert.
 """
 
 from __future__ import annotations
@@ -15,6 +15,9 @@ from belegabruf.ziele.ordner import Ordner
 ZIELE: dict[str, type[Ziel]] = {
     "ordner": Ordner,
 }
+
+#: Ziele, die nach dem Abruf weiterschicken (eigene Dateien: mail.py, sevdesk.py).
+LIEFERZIELE = {"mail", "sevdesk"}
 
 
 def erstellen(name: str, belegordner: Path) -> Ziel:

@@ -42,25 +42,47 @@ class Konto:
 
 
 #: Vorgabe für den Eintrag im Passwortspeicher des Betriebssystems: "Dienst/Konto".
+STANDARD_PASSWORT_EINTRAG = "belegabruf/mail"
+
+
+def dienst_und_konto(eintrag: str) -> tuple[str, str]:
+    dienst, _, konto = eintrag.partition("/")
+    return dienst.strip(), konto.strip()
+
+
+@dataclass
+class MailEinstellung:
+    """Ziel mail. Hier steht nie das Passwort selbst, nur wo es im Passwortspeicher
+    des Betriebssystems liegt (Schlüsselbund bzw. Anmeldeinformationsverwaltung)."""
+
+    server: str = ""
+    port: int = 465
+    verschluesselung: str = "ssl"  # ssl | starttls — ohne Verschlüsselung kein Versand
+    benutzer: str = ""
+    absender: str = ""
+    empfaenger: list[str] = field(default_factory=list)
+    passwort_eintrag: str = STANDARD_PASSWORT_EINTRAG  # "Dienst/Konto"
+
+    @property
+    def dienst_und_konto(self) -> tuple[str, str]:
+        return dienst_und_konto(self.passwort_eintrag)
+
+
+#: Vorgabe für den Eintrag des sevDesk-Schlüssels im Passwortspeicher.
 STANDARD_SCHLUESSEL = "belegabruf/sevdesk"
-#: Steuerregel des Entwurfs in sevDesk. Keine Vorgabe: Sie hängt von der eigenen
-#: Buchhaltung ab und wird bei "Einrichten" gewählt (Nummer aus sevDesk).
-STANDARD_STEUERREGEL = ""
 
 
 @dataclass
 class SevDeskEinstellung:
-    """Ziel sevDesk. Hier steht nie der Schlüssel selbst, nur wo er im
-    Passwortspeicher des Betriebssystems liegt (Schlüsselbund bzw.
-    Anmeldeinformationsverwaltung)."""
+    """Ziel sevDesk. Hier steht nie der Schlüssel selbst, nur wo er im Passwortspeicher
+    liegt. Die Steuerregel hat keine Vorgabe — sie hängt von der eigenen Buchhaltung ab."""
 
     schluessel: str = STANDARD_SCHLUESSEL  # "Dienst/Konto"
-    steuerregel: str = STANDARD_STEUERREGEL
+    steuerregel: str = ""
 
     @property
     def dienst_und_konto(self) -> tuple[str, str]:
-        dienst, _, konto = self.schluessel.partition("/")
-        return dienst.strip(), konto.strip()
+        return dienst_und_konto(self.schluessel)
 
 
 @dataclass
@@ -69,7 +91,12 @@ class Einstellungen:
     konten: list[Konto]
     ziele: list[str] = field(default_factory=lambda: ["ordner"])
     sichtbar: bool = False  # Abruf im sichtbaren Fenster (nur zur Fehlersuche)
+    mail: MailEinstellung = field(default_factory=MailEinstellung)
     sevdesk: SevDeskEinstellung = field(default_factory=SevDeskEinstellung)
+
+    @property
+    def mail_an(self) -> bool:
+        return "mail" in self.ziele
 
     @property
     def sevdesk_an(self) -> bool:
@@ -113,27 +140,71 @@ def laden(datei: Path | None = None) -> Einstellungen:
     ziele = [str(z).strip().lower() for z in ziele]
     if "ordner" not in ziele:  # Der Belegordner ist immer dabei.
         ziele.insert(0, "ordner")
-    roh_sevdesk = roh.get("sevdesk") or {}
-    if not isinstance(roh_sevdesk, dict):
-        raise EinstellungsFehler("[sevdesk] muss ein Abschnitt sein.")
-    sevdesk = SevDeskEinstellung(
-        schluessel=str(roh_sevdesk.get("schluessel") or STANDARD_SCHLUESSEL).strip(),
-        steuerregel=str(roh_sevdesk.get("steuerregel") or STANDARD_STEUERREGEL).strip(),
-    )
-    if sevdesk.steuerregel and not sevdesk.steuerregel.isdigit():
-        raise EinstellungsFehler(
-            f"[sevdesk] steuerregel = \"{sevdesk.steuerregel}\" muss eine Nummer sein (z. B. \"14\").")
-    dienst, konto = sevdesk.dienst_und_konto
-    if not dienst or not konto:
-        raise EinstellungsFehler(
-            f"[sevdesk] schluessel = \"{sevdesk.schluessel}\" muss die Form \"Dienst/Konto\" haben.")
+    mail = _mail_lesen(roh.get("mail") or {}, pruefen="mail" in ziele)
+    sevdesk = _sevdesk_lesen(roh.get("sevdesk") or {})
     return Einstellungen(
         belegordner=belegordner,
         konten=konten,
         ziele=ziele,
         sichtbar=_wahrheitswert(roh.get("sichtbar"), False),
+        mail=mail,
         sevdesk=sevdesk,
     )
+
+
+def _sevdesk_lesen(roh: object) -> SevDeskEinstellung:
+    if not isinstance(roh, dict):
+        raise EinstellungsFehler("[sevdesk] muss ein Abschnitt sein.")
+    sevdesk = SevDeskEinstellung(
+        schluessel=str(roh.get("schluessel") or STANDARD_SCHLUESSEL).strip(),
+        steuerregel=str(roh.get("steuerregel") or "").strip(),
+    )
+    if sevdesk.steuerregel and not sevdesk.steuerregel.isdigit():
+        raise EinstellungsFehler(
+            f"[sevdesk] steuerregel = \"{sevdesk.steuerregel}\" muss eine Nummer sein (z. B. \"14\").")
+    if not all(sevdesk.dienst_und_konto):
+        raise EinstellungsFehler(
+            f"[sevdesk] schluessel = \"{sevdesk.schluessel}\" muss die Form \"Dienst/Konto\" haben.")
+    return sevdesk
+
+
+def _mail_lesen(roh: object, pruefen: bool) -> MailEinstellung:
+    if not isinstance(roh, dict):
+        raise EinstellungsFehler("[mail] muss ein Abschnitt sein.")
+    empfaenger = roh.get("empfaenger") or []
+    if isinstance(empfaenger, str):
+        empfaenger = [empfaenger]
+    try:
+        port = int(roh.get("port") or 465)
+    except (TypeError, ValueError) as fehler:
+        raise EinstellungsFehler(f"[mail] port = \"{roh.get('port')}\" ist keine Zahl.") from fehler
+    mail = MailEinstellung(
+        server=str(roh.get("server") or "").strip(),
+        port=port,
+        verschluesselung=str(roh.get("verschluesselung") or "ssl").strip().lower(),
+        benutzer=str(roh.get("benutzer") or "").strip(),
+        absender=str(roh.get("absender") or "").strip(),
+        empfaenger=[str(e).strip() for e in empfaenger if str(e).strip()],
+        passwort_eintrag=str(roh.get("passwort_eintrag") or STANDARD_PASSWORT_EINTRAG).strip(),
+    )
+    if mail.verschluesselung not in {"ssl", "starttls"}:
+        raise EinstellungsFehler(
+            f"[mail] verschluesselung = \"{mail.verschluesselung}\": erlaubt sind nur \"ssl\" und \"starttls\". "
+            "Ohne Verschlüsselung wird keine Mail verschickt.")
+    if not all(mail.dienst_und_konto):
+        raise EinstellungsFehler(
+            f"[mail] passwort_eintrag = \"{mail.passwort_eintrag}\" muss die Form \"Dienst/Konto\" haben.")
+    for adresse in mail.empfaenger + ([mail.absender] if mail.absender else []):
+        if "@" not in adresse or "," in adresse or " " in adresse:
+            raise EinstellungsFehler(f"[mail] \"{adresse}\" ist keine Mailadresse.")
+    if pruefen:
+        fehlt = [n for n in ("server", "benutzer", "absender") if not getattr(mail, n)]
+        if not mail.empfaenger:
+            fehlt.append("empfaenger")
+        if fehlt:
+            raise EinstellungsFehler(
+                "Bei ziele steht \"mail\", aber in [mail] fehlt: " + ", ".join(fehlt) + ".")
+    return mail
 
 
 def _toml_text(wert: str) -> str:
@@ -147,13 +218,14 @@ def als_text(einst: Einstellungen) -> str:
         "# Du kannst diese Datei mit jedem Texteditor ändern oder einfach noch einmal",
         "# \"Einrichten\" doppelklicken. Zeilen mit # am Anfang sind nur Erklärungen.",
         "# Hier stehen keine Passwörter — angemeldet wird immer im Browserfenster.",
-        "# Der sevDesk-Schlüssel liegt im Passwortspeicher des Betriebssystems, nie hier.",
+        "# Mail-Passwort und sevDesk-Schlüssel liegen im Passwortspeicher des Betriebssystems, nie hier.",
         "",
         "# Wohin die Belege gespeichert werden.",
         f"belegordner = {_toml_text(str(einst.belegordner))}",
         "",
         "# Wohin die Belege geliefert werden: \"ordner\" (der Belegordner oben, immer dabei)",
-        "# und auf Wunsch \"sevdesk\" (Upload als Entwurf, siehe Abschnitt [sevdesk] unten).",
+        "# und auf Wunsch \"mail\" (Versand per Mail, siehe [mail] unten) und \"sevdesk\"",
+        "# (Upload als Entwurf, siehe [sevdesk] unten).",
         "ziele = [" + ", ".join(_toml_text(z) for z in einst.ziele) + "]",
         "",
         "# Abruf im sichtbaren Browserfenster? Nur zur Fehlersuche: \"ja\".",
@@ -173,12 +245,26 @@ def als_text(einst: Einstellungen) -> str:
         ]
         for schluessel, wert in konto.optionen.items():
             zeilen.append(f"{schluessel} = {_toml_text(str(wert))}")
+    m = einst.mail
     zeilen += [
         "",
-        "# Nur wichtig, wenn bei ziele \"sevdesk\" steht.",
-        "# schluessel: wo der API-Schlüssel im Passwortspeicher liegt, als \"Dienst/Konto\"",
-        "#   (nicht der Schlüssel selbst!). Eingeben oder austauschen über \"Einrichten\".",
-        "# steuerregel: Nummer der Steuerregel in sevDesk, wird im Entwurf eingetragen (Pflicht).",
+        "# Nur wichtig, wenn bei ziele \"mail\" steht: Jede neue Rechnung geht als eigene Mail",
+        "# mit PDF-Anhang an jeden Empfänger. verschluesselung: \"ssl\" (meist Port 465) oder",
+        "# \"starttls\" (meist Port 587). passwort_eintrag: wo das Passwort im Passwortspeicher",
+        "# liegt, als \"Dienst/Konto\" (nicht das Passwort selbst!). Ändern über \"Einrichten\".",
+        "[mail]",
+        f"server = {_toml_text(m.server)}",
+        f"port = {int(m.port)}",
+        f"verschluesselung = {_toml_text(m.verschluesselung)}",
+        f"benutzer = {_toml_text(m.benutzer)}",
+        f"absender = {_toml_text(m.absender)}",
+        "empfaenger = [" + ", ".join(_toml_text(e) for e in m.empfaenger) + "]",
+        f"passwort_eintrag = {_toml_text(m.passwort_eintrag)}",
+        "",
+        "# Nur wichtig, wenn bei ziele \"sevdesk\" steht: Jede neue Rechnung wird als Entwurf",
+        "# hochgeladen. schluessel: wo der API-Schlüssel im Passwortspeicher liegt, als",
+        "# \"Dienst/Konto\" (nicht der Schlüssel selbst!). steuerregel: Nummer der Steuerregel in",
+        "# sevDesk (Pflicht, ohne Vorgabe). Ändern über \"Einrichten\".",
         "[sevdesk]",
         f"schluessel = {_toml_text(einst.sevdesk.schluessel)}",
         f"steuerregel = {_toml_text(einst.sevdesk.steuerregel)}",

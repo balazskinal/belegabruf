@@ -1,9 +1,16 @@
 # Belegabruf
 
 Holt Rechnungen, die es nur im eingeloggten Konto eines Anbieters gibt, per Doppelklick auf den
-eigenen Rechner. **Es kann Airbnb:** die Rechnungen über die Airbnb-Servicegebühren für
-Gastgeber, jede Buchung als eigenes PDF. **Seit Version 2** lädt es neue Rechnungen auf Wunsch
-zusätzlich als Entwurf nach **sevDesk** hoch.
+eigenen Rechner. Es kann:
+
+- **Airbnb:** die Rechnungen über die Airbnb-Servicegebühren für Gastgeber, jede Buchung als eigenes PDF.
+- **Skool:** die Rechnungen für bezahlte Mitgliedschaften in Skool-Communities (siehe [Skool](#skool)).
+- **Xentra:** die Rechnungen für das Xentra-Abonnement und Provisionen (siehe [Xentra](#xentra)).
+
+**Seit Version 1.3** verschickt es neue Rechnungen auf Wunsch zusätzlich **per Mail** — z. B. an die
+Belegadresse deines Buchhaltungsprogramms oder an deine Steuerberatung. Verschickt wird über **dein
+eigenes Postfach**; einen Versanddienst bringt das Programm nicht mit. **Seit Version 1.4** lädt es
+sie auf Wunsch auch als Entwurf nach **sevDesk** hoch.
 
 **Das ist kein Dienst — jeder betreibt seine eigene Kopie.** Niemand außer dir sieht deine
 Anmeldung oder deine Belege. Es gibt keinen Server, kein Konto bei uns, keinen Support-Vertrag.
@@ -32,8 +39,9 @@ im Belegordner). Den Belegordner darfst du also jederzeit leeren oder an die Buc
 Steuerberater weiterreichen, ohne dass alles wiederkommt. Gastnamen kommen nirgends vor — weder in
 Dateinamen noch im Protokoll.
 
-5. Ist **sevDesk** eingeschaltet, lädt es jede neue Rechnung dort als **Entwurf** hoch (siehe
-   [Upload nach sevDesk](#upload-nach-sevdesk)). Die Datei bleibt trotzdem im Belegordner.
+5. Ist der **Mailversand** eingeschaltet, geht jede neue Rechnung als eigene Mail mit PDF an die
+   eingestellten Adressen (siehe [Versand per Mail](#versand-per-mail)). Die Datei bleibt trotzdem im
+   Belegordner.
 
 **Wichtig:** Airbnb zeigt nur die **letzten 12 Monate**. Was älter ist, ist weg. Am besten einmal
 im Monat laufen lassen. Liegt der letzte Lauf über zwei Monate zurück, warnt das Programm beim Start.
@@ -81,12 +89,44 @@ Administratorrechte nötig.
 4. Ein schwarzes Fenster geht auf und lädt alles Nötige (ein Hilfsprogramm namens *uv*, Python und
    einen eigenen Browser). Das dauert beim ersten Mal ein paar Minuten.
 5. Dann kommen ein paar Fragen. **Enter übernimmt jeweils den Vorschlag in [Klammern].**
-   - Welche Anbieter (zurzeit nur Airbnb)
+   - Welche Anbieter (Airbnb, Skool, Xentra)
    - Ein Name für dein Konto — nur für dich, z. B. „privat“. Hast du mehrere Airbnb-Konten
      (z. B. einen Zugang als Co-Gastgeber), kannst du mehrere eintragen; jedes bekommt seine eigene Anmeldung.
    - Der Belegordner (Vorschlag: `Dokumente/Belege`)
-   - Ob die Rechnungen auch nach sevDesk sollen — dann fragt es nach dem API-Schlüssel (siehe unten)
+   - Ob die Rechnungen auch per Mail verschickt werden sollen (Vorschlag: nein; siehe unten)
 6. Zum Schluss öffnet sich das Airbnb-Anmeldefenster. Melde dich an. Fertig.
+
+## Skool
+
+Skool zeigt die Rechnungen unter *Einstellungen → Zahlungsverlauf*, je Zahlung eine Rechnung. Einen
+PDF-Knopf gibt es dort nicht: Das Programm öffnet jede Rechnung im (unsichtbaren) Browser, prüft, dass
+Überschrift und Gesamtbetrag da sind, und speichert sie selbst als PDF:
+`skool/<Jahr>/<Datum>_<Community>_<Rechnungs-ID>.pdf`. Bist du Mitglied in mehreren bezahlten
+Communities, kommen alle mit; die Community steht im Dateinamen. Am Ende vergleicht es, ob so viele
+Rechnungen geholt sind, wie der Zahlungsverlauf nennt. Das PDF kommt immer im **hellen Design**
+heraus (gut zum Drucken und für die Texterkennung), auch wenn dein Skool-Konto auf Dunkel steht — das
+gilt nur für den Ausdruck, deine Einstellung bei Skool bleibt, wie sie ist.
+
+Das Programm **liest nur und lädt herunter**. Es klickt bei Skool nichts an — weder
+Zahlungsmethoden noch Kündigung.
+
+**Anmeldung mit Google:** Wer sich bei Skool sonst „Mit Google“ anmeldet, wird im Anmeldefenster des
+Programms womöglich von Google blockiert („Dieser Browser oder diese App ist möglicherweise nicht
+sicher“). Dann bei Skool mit **E-Mail und Passwort** anmelden. Hast du noch kein Skool-Passwort,
+leg vorher in deinem normalen Browser eins fest (bei der Skool-Anmeldung über „Passwort vergessen“).
+## Xentra
+
+Xentra zeigt die Rechnungen unter *Abrechnung → Rechnungen*: Datum, Beschreibung, Betrag, Status und
+ein Knopf „PDF herunterladen“. Das Programm drückt diesen Knopf für jede Zeile — wie du es mit der
+Maus tun würdest —, lädt das PDF und speichert es als
+`xentra/<Jahr>/<Datum>_xentra_<Rechnungsnummer>.pdf`. Die Beschreibung kommt absichtlich nicht in den
+Dateinamen (bei Provisionen stehen dort Gastnamen). Am Ende vergleicht es, ob so viele Rechnungen
+vorliegen, wie die Liste zeigt.
+
+Das Programm **liest nur und lädt herunter**. Angeklickt werden nur der Reiter „Rechnungen“ und die
+Knöpfe „PDF herunterladen“ — nichts an Abo, Zahlungsmethode oder Einstellungen. Damit es merkt, was
+schon geholt ist, drückt es bei jedem Lauf alle Download-Knöpfe einmal; geladen und gespeichert wird
+aber nur, was neu ist.
 
 ## Benutzen
 
@@ -110,13 +150,71 @@ geholt wurde. Stattdessen beim Start **E** und dann **2 „Fehlende Dateien neu 
 kommt alles wieder, was im Protokoll steht, aber im Belegordner fehlt — soweit Airbnb es noch anbietet
 (die letzten 12 Monate).
 
+## Versand per Mail
+
+Auf Wunsch verschickt das Programm jede **neu geholte** Rechnung als **eigene Mail mit dem PDF im
+Anhang** — an eine oder mehrere Adressen, je Rechnung und Adresse eine Mail. Betreff zum Beispiel
+„Beleg Airbnb AIUC-… vom 27.10.2026“. So kommt die Rechnung überall an, wo es eine Belegadresse gibt
+(Buchhaltungsprogramm, Steuerberatung), und wird dort gelesen wie jede andere Belegmail.
+
+**Das Programm bringt keinen Versanddienst mit.** Verschickt wird über **dein eigenes Postfach** —
+genauso, als würdest du die Mail selbst in deinem Mailprogramm schreiben. Deshalb fragt die Einrichtung
+nach den Zugangsdaten deines Postfachs. Die Mails liegen danach je nach Anbieter auch in deinem Ordner
+„Gesendet“.
+
+**Einschalten:** „Einrichten“ doppelklicken und bei „Per Mail verschicken?“ mit **j** antworten.
+Dann fragt es nach den Angaben deines Mailkontos — die findest du bei deinem Mailanbieter unter
+„SMTP“ oder „Postausgangsserver“:
+
+| Frage | Beispiel |
+|---|---|
+| Postausgangsserver | `smtp.example.com` |
+| Verschlüsselung | SSL (meist Port 465) oder STARTTLS (meist Port 587) — **ohne Verschlüsselung wird nichts verschickt** |
+| Benutzername | meist deine Mailadresse, z. B. `ich@example.com` |
+| Absenderadresse | `ich@example.com` |
+| Empfänger | z. B. `belege@example.com`, mehrere mit Komma |
+| Passwort | wird verdeckt eingegeben (man sieht nichts — das ist Absicht) |
+
+Zum Schluss meldet es sich einmal am Mailserver an und wieder ab — **ohne eine Mail zu schicken** —
+und sagt, ob es klappt.
+
+**Das Passwort** kommt in den **Passwortspeicher deines Rechners** (Mac: Schlüsselbund, Windows:
+Anmeldeinformationsverwaltung) und **nie in eine Datei**. In den Einstellungen steht nur, unter
+welchem Eintrag es liegt (Vorschlag: `belegabruf/mail`). Austauschen oder löschen ebenfalls über
+„Einrichten“. Auf dem Mac fragt der Schlüsselbund beim ersten Versand, ob das Programm den Eintrag
+lesen darf — dort **„Immer erlauben“** wählen (nach einem Update kann die Frage wiederkommen).
+
+**Gmail und Microsoft 365:** Mit dem normalen Passwort klappt es dort meist nicht.
+- **Gmail:** Zwei-Faktor-Anmeldung einschalten und ein **App-Passwort** anlegen (Google-Konto →
+  Sicherheit → App-Passwörter). Server `smtp.gmail.com`, STARTTLS, Port 587.
+- **Microsoft 365 / Outlook:** Für das Postfach muss **SMTP AUTH** eingeschaltet sein (macht die
+  Verwaltung im Microsoft-365-Admin-Center); mit Zwei-Faktor zusätzlich ein App-Passwort. Server
+  `smtp.office365.com`, STARTTLS, Port 587.
+- Anmeldung über OAuth („Mit Google/Microsoft anmelden“) ist **nicht vorgesehen**.
+
+**Alter Bestand:** Kommt eine Empfängeradresse **zum allerersten Mal** dazu, gilt alles, was bis
+dahin geholt ist, für sie als **schon verschickt** und geht nicht raus. Verschickt wird nur, was danach
+neu dazukommt. Schaltest du den Versand (oder eine Adresse) später aus und wieder ein, wird nichts
+mehr als verschickt markiert: Dann geht alles raus, was in der Zwischenzeit geholt wurde. **Wer
+zwischendurch von Hand verschicken will, schaltet den Versand deshalb nicht aus** — sonst kommen diese
+Rechnungen beim Wiedereinschalten doppelt an.
+
+**Nie doppelt:** Das Protokoll merkt sich je Adresse, was verschickt ist. Klappt der Versand nicht
+(kein Internet, falsches Passwort, der Server lehnt ab), bleibt die Rechnung im Belegordner, die
+Zusammenfassung zeigt die Meldung des Servers, und der **nächste Lauf versucht es erneut**. Kommt
+nach dem Senden keine Antwort vom Server, ist unklar, ob die Mail angekommen ist. Dann schickt das
+Programm sie **nicht** noch einmal und sagt dir, bei welcher Rechnung du beim Empfänger nachsehen
+sollst.
+
+**Was das Programm am Mailserver tut:** nur anmelden, senden, abmelden. Es liest keine Postfächer.
+
 ## Upload nach sevDesk
 
 Auf Wunsch lädt das Programm jede **neu geholte** Rechnung als **Entwurf** nach sevDesk hoch. Du
 findest sie dort bei den Belegen als offenen Entwurf, mit dem PDF im Anhang.
 
 **Was im Entwurf steht:** nur, was das Programm ohnehin weiß — Belegdatum, Rechnungsnummer (als
-Belegnummer), Lieferant „Airbnb“ und die Steuerregel. **Betrag und Konto bleiben leer — die
+Belegnummer), der Anbieter als Lieferant (z. B. „Airbnb“) und die Steuerregel. **Betrag und Konto bleiben leer — die
 ergänzt du in sevDesk**; sevDesk liest dabei nichts aus dem PDF aus. Gebucht wird nichts. Gutschriften
 kommen genauso an, mit „(Gutschrift)“ hinter der Belegnummer.
 
@@ -131,6 +229,11 @@ Datei**. In den Einstellungen steht nur, unter welchem Eintrag er liegt (Vorschl
 `belegabruf/sevdesk`). Hast du schon einen Eintrag, kannst du den angeben. Austauschen oder löschen
 ebenfalls über „Einrichten“. Auf dem Mac fragt der Schlüsselbund beim ersten Mal, ob das Programm den
 Eintrag lesen darf — dort **„Immer erlauben“** wählen (nach einem Update kann die Frage wiederkommen).
+
+**Nicht doppelt mit der Belegmail:** Schickst du die Rechnungen schon per Mail an deine
+sevDesk-Belegadresse (siehe oben), schalte den Upload **nicht zusätzlich** ein — sonst kommt jede
+Rechnung zweimal in sevDesk an. Der Mailweg hat den Vorteil, dass sevDesk den Beleg selbst ausliest
+(Betrag, Lieferant); der Upload trägt nur ein, was das Programm weiß.
 
 **Alter Bestand:** Beim **allerersten** Einschalten gilt alles, was bis dahin geholt ist, als
 **schon in sevDesk** und wird nicht hochgeladen. Hochgeladen wird nur, was danach neu dazukommt.
@@ -159,8 +262,8 @@ das Netz erreicht (`programm/belegabruf/ziele/sevdesk.py`, Liste `ERLAUBT`).
 | Deine Belege | der Belegordner, den du beim Einrichten angegeben hast |
 | Einstellungen | Mac: `~/Library/Application Support/belegabruf/einstellungen.toml` · Windows: `%APPDATA%\belegabruf\einstellungen.toml` |
 | Anmeldungen (Browserprofile) | im selben Ordner unter `profile/` — **darf man jederzeit löschen** |
-| Protokolle (was schon geholt und hochgeladen ist) | im selben Ordner unter `protokolle/<anbieter>/<konto>.csv` — **nie löschen** |
-| sevDesk-Schlüssel | im Passwortspeicher des Betriebssystems, nie in einer Datei |
+| Protokolle (was schon geholt und verschickt ist) | im selben Ordner unter `protokolle/<anbieter>/<konto>.csv` — **nie löschen** |
+| Mail-Passwort, sevDesk-Schlüssel | im Passwortspeicher des Betriebssystems, nie in einer Datei |
 
 Die Einstellungsdatei ist eine Textdatei mit Erklärungen und lässt sich mit jedem Texteditor
 ändern. Ein Konto lässt sich dort mit `aktiv = "nein"` vorübergehend ausschalten.
@@ -189,6 +292,21 @@ Einstellungen, Anmeldungen, Protokolle und Belege bleiben dabei erhalten — sie
 Programmordner.
 Ein automatisches Selbst-Update gibt es bewusst nicht.
 
+## Was neu ist
+
+- **1.4.0** — Neue Rechnungen auf Wunsch als **Entwurf nach sevDesk** hochladen, über die
+  sevDesk-Schnittstelle (siehe [Upload nach sevDesk](#upload-nach-sevdesk)). Nur einschalten, wenn
+  du nicht schon per Mail an die sevDesk-Belegadresse schickst.
+- **1.3.0** — Neue Rechnungen auf Wunsch zusätzlich **per Mail** verschicken (über dein eigenes
+  Postfach, siehe [Versand per Mail](#versand-per-mail)). Beim Update einmal „Einrichten“
+  doppelklicken; die Frage nach dem Mailversand steht auf „nein“, bis du sie mit „j“ beantwortest.
+- **1.2.0** — Zwei neue Anbieter: **Xentra** (Abo- und Provisionsrechnungen) und **Skool**
+  (Rechnungen für bezahlte Communities, immer als helles PDF). Beim Update einmal „Einrichten“
+  doppelklicken und die neuen Anbieter dazunehmen.
+- **1.1.0** — Das Protokoll entscheidet, was schon geholt ist (nicht mehr der Belegordner); es liegt
+  bei den Einstellungen. Neu: „Fehlende Dateien neu holen“.
+- **1.0.0** — Erste Version: Airbnb-Rechnungen per Doppelklick.
+
 ## Rechtliches
 
 - Das Programm ruft **deine eigenen Rechnungen aus deinem eigenen Konto** ab, so wie du es von Hand
@@ -216,7 +334,7 @@ uv run belege holen --fehlende                  # dazu Fehlendes neu holen
 
 `belege holen` gibt mit `--json` ein maschinenlesbares Ergebnis aus (Fortschritt geht nach stderr).
 Exit-Code: 0 = alles gut, 2 = Anmeldung nötig oder abgelaufen, nicht alles geholt oder nicht alles
-nach sevDesk hochgeladen (später noch einmal), 1 = Fehler. So lassen sich die
+verschickt (später noch einmal), 1 = Fehler. So lassen sich die
 Bausteine später auch aus einer Automatisierung (z. B. n8n) aufrufen.
 
 ### Aufbau
@@ -229,19 +347,20 @@ programm/
   belegabruf/
     cli.py            Kommandozeile und Ablauf beim Doppelklick
     ablauf.py         Gerüst: prüfen, anmelden lassen, holen, abliefern
-    quellen/          ein Baustein je Anbieter (Version 1: airbnb.py)
+    quellen/          ein Baustein je Anbieter: airbnb.py, skool.py, xentra.py
       basis.py        die feste Schnittstelle für Bausteine
-    ziele/            wohin Belege geliefert werden: ordner.py, sevdesk.py
+    ziele/            wohin Belege geliefert werden: ordner.py, mail.py, sevdesk.py
     protokoll.py      Protokoll je Anbieter und Konto — entscheidet, was schon geholt ist
     pruefung.py       nie eine Anmelde-, 404- oder leere Seite als Beleg speichern
 ```
 
 Ein **Baustein (Quelle)** kann genau drei Dinge: `sitzung_pruefen()`, `anmelden_lassen()` und
 `belege_holen()`. Er speichert nichts selbst, sondern übergibt jeden Beleg an die **Ziele**. Das
-Ziel „ordner“ legt Dateien ab und ist immer dabei. Das Ziel „sevdesk“ lädt danach hoch, was laut
-Protokoll noch nicht in sevDesk ist. Weitere Ziele (z. B. Lexware Office) kommen als eigene Datei in
-`ziele/` dazu, ohne dass sich die Quellen ändern. Ziele mit API-Schlüssel lesen ihn nur über
-`keyring` und rufen nur die Aufrufe zum Hochladen auf.
+Ziel „ordner“ legt Dateien ab und ist immer dabei. **Lieferziele** wie „mail“ schicken danach weiter,
+was laut Protokoll noch fehlt (`ablauf.liefern`, Schnittstelle `ziele/basis.py: Lieferziel`); das
+Protokoll führt je Lieferziel „geliefert / schon / unklar / offen“. Weitere Ziele (z. B. Upload an
+eine Buchhaltungssoftware per API) kommen als eigene Datei in `ziele/` dazu, ohne dass sich die
+Quellen ändern. Zugangsdaten liegen nur im Passwortspeicher (`keyring`).
 
 Tests (im Ordner `programm`): `uv run --group dev pytest`
 
@@ -273,7 +392,5 @@ Die GitHub Action baut das ZIP und hängt es an das Release.
 ## Offen
 
 - **Windows:** noch von niemandem getestet (Abnahmepunkt 5). Wer es ausprobiert, bitte Rückmeldung.
-- **sevDesk:** Ein Entwurf ohne Betrag und Konto wird über die API angenommen (einmal mit einer
-  echten Rechnung geprüft; dokumentiert ist es nicht). Eine automatische Belegerkennung wie beim
-  Mail-Eingang gibt es über die API nicht.
-- Weitere Bausteine und Ziele (z. B. Lexware Office) folgen in späteren Versionen.
+- **Mail:** Der erste echte Versand steht noch aus; getestet ist gegen einen nachgebauten Mailserver.
+- Weitere Bausteine und das Ziel „Upload an die Buchhaltung per API“ folgen in späteren Versionen.

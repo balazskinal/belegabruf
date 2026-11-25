@@ -13,13 +13,18 @@ darf man löschen. Es ist auch die Grundlage für den späteren Upload.
 
 Enthält keine Namen von Gästen oder Kunden — nur Datum, Nummern und Ablageort.
 
-Spalte ``ziele``: wohin der Beleg geliefert ist, mit Komma getrennt.
-    ordner          liegt im Belegordner
-    sevdesk         vom Programm als Entwurf nach sevDesk hochgeladen
-    sevdesk-schon   war schon vorher in sevDesk (beim Einschalten markiert, nie hochgeladen)
-    sevdesk-unklar  Antwort von sevDesk blieb aus — wird nicht noch einmal geschickt
-Fehlt alles mit "sevdesk", ist der Beleg **noch nicht hochgeladen**; der nächste Lauf
-versucht es erneut. Jede Änderung ist eine neue Zeile, die spätere gilt.
+**Lieferziele** (z. B. ``mail:buchhaltung@example.com``) stehen in der Spalte ``ziele``,
+mit Komma getrennt, als Zustand je Rechnung:
+
+    <ziel>          geliefert (z. B. Mail verschickt)
+    <ziel>:schon    galt beim allerersten Einschalten des Ziels als schon geliefert
+    <ziel>:unklar   Antwort blieb aus — wird nicht noch einmal geschickt
+    (nichts)        noch offen; der nächste Lauf versucht es erneut
+
+``ordner`` heißt: liegt im Belegordner. Ob ein Ziel an ist, steht als Zeile
+``einstellung:<ziel>`` (an/aus) im Protokoll selbst. Nur beim allerersten Einschalten
+eines Ziels gilt alles schon Geholte als geliefert; beim Wiedereinschalten nicht.
+Jede Änderung ist eine neue Zeile, die spätere gilt.
 """
 
 from __future__ import annotations
@@ -43,7 +48,7 @@ SPALTEN = [
     "rechnungsnummer",
     "datei",
     "ziele",
-    "sevdesk_id",  # Beleg-ID in sevDesk, wenn das Programm ihn hochgeladen hat
+    "kennungen",  # Kennung beim Ziel, z. B. "sevdesk=12345" (mehrere mit |)
 ]
 
 
@@ -71,7 +76,7 @@ class Protokoll:
                 self._spalten_umstellen(alle)
 
     def _spalten_umstellen(self, alle: list[dict]) -> None:
-        """Ältere Datei mit weniger Spalten (z. B. aus 1.1): neu schreiben, alle Zeilen
+        """Ältere Datei mit weniger Spalten (z. B. aus 1.1–1.3): neu schreiben, alle Zeilen
         bleiben in derselben Reihenfolge. Erst Zwischendatei, dann ersetzen."""
         zwischen = self.datei.with_suffix(".csv.teil")
         with zwischen.open("w", newline="", encoding="utf-8") as f:
@@ -105,7 +110,7 @@ class Protokoll:
     def anzahl(self, art: str) -> int:
         return sum(1 for z in self._zeilen.values() if z.get("art") == art)
 
-    # ── Ziele je Beleg (z. B. schon in sevDesk?) ─────────────────────────────
+    # ── Lieferziele (Mail, später weitere) ───────────────────────────────────
 
     def ziele_von(self, schluessel: str) -> list[str]:
         zeile = self.eintrag(schluessel)
@@ -113,77 +118,117 @@ class Protokoll:
             return []
         return [z for z in (zeile.get("ziele") or "").split(",") if z]
 
-    def in_sevdesk(self, schluessel: str) -> bool:
-        """Hochgeladen, schon vorher drin oder unklar — in allen Fällen nicht (noch einmal) schicken."""
-        return any(z in SEVDESK_ERLEDIGT for z in self.ziele_von(schluessel))
+    def zustand(self, schluessel: str, ziel: str) -> str:
+        """'geliefert', 'schon', 'unklar' oder 'offen'."""
+        vorhanden = set(self.ziele_von(schluessel))
+        if ziel in vorhanden:
+            return "geliefert"
+        if f"{ziel}:schon" in vorhanden:
+            return "schon"
+        if f"{ziel}:unklar" in vorhanden:
+            return "unklar"
+        return "offen"
 
-    def ziel_ergaenzen(self, schluessel: str, ziel: str) -> None:
+    def _ziele_setzen(self, schluessel: str, ziele: list[str], **extra: str) -> None:
         zeile = self.eintrag(schluessel)
-        if zeile is None or ziel in self.ziele_von(schluessel):
+        if zeile is None or ziele == self.ziele_von(schluessel):
             return
         neu = dict(zeile)
+        neu.update(extra)
         neu["zeitpunkt"] = datetime.now().isoformat(timespec="seconds")
-        neu["ziele"] = ",".join(self.ziele_von(schluessel) + [ziel])
+        neu["ziele"] = ",".join(ziele)
         self._anhaengen([neu])
 
-    def hochgeladen(self, schluessel: str, beleg_id: str) -> None:
-        """Upload geklappt: "unklar" weg, "sevdesk" dazu, Beleg-ID merken — eine Zeile."""
-        zeile = self.eintrag(schluessel)
-        if zeile is None:
-            return
-        neu = dict(zeile)
-        neu["zeitpunkt"] = datetime.now().isoformat(timespec="seconds")
-        neu["ziele"] = ",".join([z for z in self.ziele_von(schluessel) if z != "sevdesk-unklar"] + ["sevdesk"])
-        neu["sevdesk_id"] = beleg_id
-        self._anhaengen([neu])
+    def _ohne(self, schluessel: str, ziel: str) -> list[str]:
+        """Alle Ziele dieser Rechnung ohne die Einträge zu ``ziel``."""
+        return [z for z in self.ziele_von(schluessel)
+                if z not in {ziel, f"{ziel}:schon", f"{ziel}:unklar"}]
 
-    def ziel_entfernen(self, schluessel: str, ziel: str) -> None:
-        zeile = self.eintrag(schluessel)
-        if zeile is None or ziel not in self.ziele_von(schluessel):
-            return
-        neu = dict(zeile)
-        neu["zeitpunkt"] = datetime.now().isoformat(timespec="seconds")
-        neu["ziele"] = ",".join(z for z in self.ziele_von(schluessel) if z != ziel)
-        self._anhaengen([neu])
+    def als_unklar(self, schluessel: str, ziel: str) -> None:
+        """Direkt vor dem Senden: Bricht es jetzt ab, wird nicht noch einmal geschickt."""
+        self._ziele_setzen(schluessel, self._ohne(schluessel, ziel) + [f"{ziel}:unklar"])
 
-    def upload_offen(self) -> list[str]:
-        """Rechnungen, die noch nicht in sevDesk sind (älteste zuerst)."""
-        offen = [s for s, z in self._zeilen.items() if z.get("art") == "rechnung" and not self.in_sevdesk(s)]
+    def als_offen(self, schluessel: str, ziel: str) -> None:
+        """Sicher nicht angekommen (abgelehnt): der nächste Lauf versucht es erneut."""
+        self._ziele_setzen(schluessel, self._ohne(schluessel, ziel))
+
+    def als_geliefert(self, schluessel: str, ziel: str, kennung: str = "") -> None:
+        extra = {}
+        if kennung:
+            bisher = [k for k in (self.eintrag(schluessel) or {}).get("kennungen", "").split("|")
+                      if k and not k.startswith(f"{ziel}=")]
+            extra["kennungen"] = "|".join(bisher + [f"{ziel}={kennung}"])
+        self._ziele_setzen(schluessel, self._ohne(schluessel, ziel) + [ziel], **extra)
+
+    def kennung(self, schluessel: str, ziel: str) -> str:
+        for teil in ((self.eintrag(schluessel) or {}).get("kennungen") or "").split("|"):
+            if teil.startswith(f"{ziel}="):
+                return teil.removeprefix(f"{ziel}=")
+        return ""
+
+    def offen_fuer(self, ziel: str) -> list[str]:
+        """Rechnungen, die an dieses Ziel noch nicht geliefert sind (älteste zuerst)."""
+        offen = [s for s, z in self._zeilen.items()
+                 if z.get("art") == "rechnung" and self.zustand(s, ziel) == "offen"]
         return sorted(offen, key=lambda s: (self._zeilen[s].get("rechnungsdatum") or "", s))
 
-    def sevdesk_war_an(self) -> bool:
-        """Lief das Konto beim letzten Mal schon mit Ziel sevDesk? Steht im Protokoll
-        selbst (Zeile ``einstellung:sevdesk``), damit es nie verloren geht."""
-        zeile = self.eintrag(SEVDESK_SCHALTER)
+    def bisherige_lieferungen(self, schluessel: str) -> list[str]:
+        """Zustände aller Lieferziele (alles außer „ordner“) — bleiben beim Neuholen erhalten."""
+        return [z for z in self.ziele_von(schluessel) if z != "ordner"]
+
+    # Schalter je Ziel
+
+    @staticmethod
+    def _schalter(ziel: str) -> str:
+        return f"einstellung:{ziel}"
+
+    def je_eingeschaltet(self, ziel: str) -> bool:
+        """Stand je eine Schalterzeile für dieses Ziel im Protokoll?"""
+        return self.eintrag(self._schalter(ziel)) is not None
+
+    def ist_an(self, ziel: str) -> bool:
+        zeile = self.eintrag(self._schalter(ziel))
         return bool(zeile) and zeile.get("ziele") == "an"
 
-    def sevdesk_je_geschaltet(self) -> bool:
-        """Stand schon einmal eine Schalterzeile im Protokoll (an oder aus)?"""
-        return self.eintrag(SEVDESK_SCHALTER) is not None
+    def eingeschaltete_ziele(self) -> list[str]:
+        return [s.removeprefix("einstellung:") for s, z in self._zeilen.items()
+                if z.get("art") == "einstellung" and z.get("ziele") == "an"]
 
-    def sevdesk_schalten(self, an: bool) -> None:
-        if self.sevdesk_war_an() == an:
+    def schalten(self, ziel: str, an: bool) -> None:
+        if self.ist_an(ziel) == an or (not an and not self.je_eingeschaltet(ziel)):
             return
-        if not an and not self.sevdesk_je_geschaltet():
-            return  # nie eingeschaltet: nichts zu merken, das erste Einschalten markiert noch
         self._anhaengen([{
             "zeitpunkt": datetime.now().isoformat(timespec="seconds"),
             "quelle": self.quelle, "konto": self.konto, "art": "einstellung",
-            "schluessel": SEVDESK_SCHALTER, "ziele": "an" if an else "aus",
+            "schluessel": self._schalter(ziel), "ziele": "an" if an else "aus",
         }])
 
-    def als_schon_in_sevdesk_markieren(self) -> int:
-        """Beim Einschalten von sevDesk: Alles, was bis jetzt geholt ist, gilt als schon drin."""
-        neu = []
+    def als_schon_markieren(self, ziel: str) -> int:
+        """Alles bis jetzt Geholte gilt für dieses Ziel als schon geliefert."""
         jetzt = datetime.now().isoformat(timespec="seconds")
-        for schluessel in self.upload_offen():
+        neu = []
+        for schluessel in self.offen_fuer(ziel):
             zeile = dict(self._zeilen[schluessel])
             zeile["zeitpunkt"] = jetzt
-            zeile["ziele"] = ",".join(self.ziele_von(schluessel) + ["sevdesk-schon"])
+            zeile["ziele"] = ",".join(self.ziele_von(schluessel) + [f"{ziel}:schon"])
             neu.append(zeile)
         if neu:
             self._anhaengen(neu)
         return len(neu)
+
+    def ziele_abgleichen(self, aktive: list[str]) -> dict[str, int]:
+        """Schalter an die Einstellungen anpassen. Ziele, die zum allerersten Mal an
+        sind, markieren den Bestand als schon geliefert. Gibt je so markiertem Ziel die
+        Anzahl zurück."""
+        markiert = {}
+        for ziel in aktive:
+            if not self.je_eingeschaltet(ziel):
+                markiert[ziel] = self.als_schon_markieren(ziel)
+            self.schalten(ziel, True)
+        for ziel in self.eingeschaltete_ziele():
+            if ziel not in aktive:
+                self.schalten(ziel, False)
+        return markiert
 
     def _anhaengen(self, zeilen: list[dict]) -> None:
         neu_anlegen = not self.datei.exists()
@@ -214,11 +259,10 @@ class Protokoll:
             "rechnungsnummer": beleg.rechnungsnummer,
             "datei": relativ,
             "ziele": ",".join(ziele),
+            # Kennungen bei den Zielen bleiben beim Neuholen erhalten.
+            "kennungen": (self.eintrag(beleg.schluessel) or {}).get("kennungen") or "",
         }])
 
-
-SEVDESK_SCHALTER = "einstellung:sevdesk"
-SEVDESK_ERLEDIGT = {"sevdesk", "sevdesk-schon", "sevdesk-unklar"}
 
 ALTER_NAME = "protokoll.csv"
 NACH_UEBERNAHME = "protokoll.csv.uebernommen"
