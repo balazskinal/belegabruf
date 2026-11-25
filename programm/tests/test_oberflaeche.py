@@ -866,3 +866,22 @@ def test_absender_wird_aus_benutzername_vorbelegt(seite):
     p.fill("#absender", "")
     p.fill("#benutzer", "neu@example.com")
     assert p.input_value("#absender") == "neu@example.com"
+
+
+def test_port_springt_mit_der_verschluesselung(seite):
+    p = seite
+    p.check("#mail-an")
+    assert p.input_value("#port") == "465"
+    p.select_option("#verschluesselung", "starttls")
+    assert p.input_value("#port") == "587"
+    p.select_option("#verschluesselung", "ssl")
+    assert p.input_value("#port") == "465"
+    p.fill("#port", "")
+    p.select_option("#verschluesselung", "starttls")
+    assert p.input_value("#port") == "587"
+    # eigener Port bleibt stehen, und bleibt von Hand änderbar
+    p.fill("#port", "2525")
+    p.select_option("#verschluesselung", "ssl")
+    assert p.input_value("#port") == "2525"
+    p.fill("#port", "26")
+    assert p.input_value("#port") == "26"

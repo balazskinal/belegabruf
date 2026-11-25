@@ -404,6 +404,18 @@ $("konto-dazu").addEventListener("click", () => {
   $("kontenliste").append(kontozeile({ quelle: zustand.quellen[0].name }));
   namenZeigen();
 });
+// Port springt mit der Verschlüsselung — aber nur, wenn er gerade auf dem Standard der
+// anderen Variante steht oder leer ist. Ein eigener Port bleibt stehen.
+const STANDARD_PORT = { ssl: "465", starttls: "587" };
+$("verschluesselung").addEventListener("change", () => {
+  const neu = $("verschluesselung").value;
+  const port = $("port").value.trim();
+  const andere = Object.entries(STANDARD_PORT).filter(([art]) => art !== neu).map(([, p]) => p);
+  if (port === "" || andere.includes(port)) {
+    $("port").value = STANDARD_PORT[neu];
+    $("port").dispatchEvent(new Event("change"));  // nimmt eine Markierung weg
+  }
+});
 $("benutzer").addEventListener("input", absenderVorbelegen);
 $("absender").addEventListener("input", () => { absenderVonHand = $("absender").value.trim() !== ""; });
 $("mail-an").addEventListener("change", () => {
