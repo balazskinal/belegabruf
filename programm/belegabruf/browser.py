@@ -63,6 +63,9 @@ def profil_oeffnen(profil: Path, sichtbar: bool) -> Iterator[BrowserContext]:
     profil.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as pw:
         try:
+            # Immer channel="chromium": Auch unsichtbar läuft dann das normale Chromium. Die
+            # „Headless Shell“ von Playwright wird nie gebraucht und bei der Einrichtung nicht
+            # geladen (--no-shell). Das gilt auch für diese Versions-Probe.
             probe = pw.chromium.launch(channel="chromium", headless=True)
             version = probe.version
             probe.close()
