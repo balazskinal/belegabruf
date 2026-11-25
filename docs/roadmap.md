@@ -10,10 +10,12 @@ Stand: 25.11.2026. Begründungen stehen in den [Entscheidungen](entscheidungen/R
   (Rechnungen aus dem Zahlungsverlauf, immer als helles PDF). Beide gegen echte Konten durchgespielt.
 - **1.3.0** — Ziel Mail: jede neue Rechnung per Mail an eine oder mehrere Belegadressen, über das
   eigene Postfach; Passwort im Passwortspeicher (ADR-003, ADR-004)
+- **1.4.0** — Ziel sevDesk über die API: Entwurf mit PDF, Datum, Rechnungsnummer, Lieferant und
+  Steuerregel; nur Upload-Aufrufe, Schlüssel im Passwortspeicher (ADR-003, ADR-004)
 
 ## In Arbeit
 
-- [ ] **1.4.0 — Ziel sevDesk über die API:** Entwurf mit PDF, Datum, Rechnungsnummer (ADR-004)
+- Nichts — als Nächstes kommt 2.0.0.
 
 ## Danach: 2.0.0 — Bedienoberfläche im Browserfenster (ADR-005)
 
