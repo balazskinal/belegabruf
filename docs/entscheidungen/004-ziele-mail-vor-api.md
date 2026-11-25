@@ -30,7 +30,8 @@ API (25.11.2026, an echten Belegen) hat gezeigt:
    - Das Passwort liegt im Passwortspeicher (ADR-003). „Einrichten“ prüft die Anmeldung, ohne eine Mail zu
      schicken.
    - Eine Mail je Rechnung und Empfänger, nie doppelt (Protokoll, ADR-002). Beim **allerersten**
-     Einschalten eines Empfängers gilt alles schon Geholte als verschickt. Bleibt die Antwort des Servers
+     Einschalten eines Empfängers gilt alles schon Geholte als verschickt (seit 2.0.0 wählbar, siehe
+     Nachtrag unten und ADR-005 Punkt 11). Bleibt die Antwort des Servers
      nach dem Senden aus, gilt die Mail als „unklar“ und wird nicht noch einmal geschickt.
 2. **Version 2.1: Ziel „sevdesk“ über die API.** Nur `uploadTempFile` und `saveVoucher` (dazu `GET
    /SevClient` beim Einrichten). Eingetragen wird nur, was das Programm ohnehin weiß (Datum,
@@ -49,3 +50,18 @@ API (25.11.2026, an echten Belegen) hat gezeigt:
 
 - Wer sevDesk nutzt, hat mit dem Mail-Weg die bessere Erkennung; der API-Weg bleibt für alle, die keine
   Mail verschicken wollen.
+
+## Nachtrag 25.11.2026 (Version 2.0.0): Erster Versand wählbar
+
+Neue Einstellung `[mail] erstversand` (Balazs):
+
+- `"nicht"` (Vorgabe, auch für alte Dateien ohne den Schlüssel): Belege, die es beim allerersten
+  Einschalten eines Empfängers schon gibt, gelten als verschickt (`mail:<adresse>:schon`), wie bisher.
+  **Neu** gilt das auch für den **ersten Lauf eines neuen Kontos**: Alles, was er holt, wird nur abgelegt.
+- `"auch"`: Nichts wird vorab markiert. Der schon geholte Bestand geht beim Einschalten bzw. an eine neue
+  Adresse einmal raus, beim ersten Lauf eines neuen Kontos alles aus dem Zeitraum „Belege ab“.
+
+Der erste Lauf steht als `einstellung:erstlauf` (offen/fertig) im Protokoll des Kontos. Er endet, sobald
+ein Lauf die Rechnungsliste gelesen hat (Status ok oder unvollständig) — nicht erst bei einem fehlerfreien
+Lauf, sonst würde ein Konto mit einer dauerhaft kaputten Rechnung nie mailen. Bisherige Protokolle mit
+Rechnungen gelten nicht als neu. Geprüft wird die Einstellung zentral in `einstellungen.pruefen`.

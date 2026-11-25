@@ -131,6 +131,9 @@ class MailEinstellung:
     absender: str = ""
     empfaenger: list[str] = field(default_factory=list)
     passwort_eintrag: str = STANDARD_PASSWORT_EINTRAG  # "Dienst/Konto"
+    # Belege, die es beim Einschalten (bzw. für eine neue Adresse) schon gibt, und Belege aus
+    # dem ersten Lauf eines neuen Kontos: "nicht" verschicken (nur ablegen) oder "auch".
+    erstversand: str = "nicht"
 
     @property
     def dienst_und_konto(self) -> tuple[str, str]:
@@ -269,6 +272,10 @@ def aus_text(text: str, herkunft: str = "Einstellungen") -> Einstellungen:
 ABLAGEN = ("jahr", "monat")
 
 
+#: Erstversand: "nicht" = schon vorhandene und erste Belege nur ablegen; "auch" = auch mailen.
+ERSTVERSAND = ("nicht", "auch")
+
+
 def _mail_lesen(roh: object, pruefen: bool) -> MailEinstellung:
     if not isinstance(roh, dict):
         raise EinstellungsFehler("[mail] muss ein Abschnitt sein.")
@@ -287,7 +294,11 @@ def _mail_lesen(roh: object, pruefen: bool) -> MailEinstellung:
         absender=str(roh.get("absender") or "").strip(),
         empfaenger=[str(e).strip() for e in empfaenger if str(e).strip()],
         passwort_eintrag=str(roh.get("passwort_eintrag") or STANDARD_PASSWORT_EINTRAG).strip(),
+        erstversand=str(roh.get("erstversand") or "nicht").strip().lower(),
     )
+    if mail.erstversand not in ERSTVERSAND:
+        raise EinstellungsFehler(
+            f"[mail] erstversand = \"{mail.erstversand}\": erlaubt sind nur \"nicht\" und \"auch\".")
     if mail.verschluesselung not in {"ssl", "starttls"}:
         raise EinstellungsFehler(
             f"[mail] verschluesselung = \"{mail.verschluesselung}\": erlaubt sind nur \"ssl\" und \"starttls\". "
@@ -377,12 +388,16 @@ def als_text(einst: Einstellungen) -> str:
         f"absender = {_toml_text(m.absender)}",
         "empfaenger = [" + ", ".join(_toml_text(e) for e in m.empfaenger) + "]",
         f"passwort_eintrag = {_toml_text(m.passwort_eintrag)}",
+        "# Belege, die es beim Einschalten bzw. für eine neue Adresse schon gibt, und Belege aus dem",
+        "# ersten Lauf eines neuen Kontos: \"nicht\" verschicken (nur ablegen) oder \"auch\" verschicken.",
+        f"erstversand = {_toml_text(m.erstversand)}",
     ]
     return "\n".join(zeilen) + "\n"
 
 
 BEKANNT_OBEN = {"belegordner", "ziele", "sichtbar", "konto", "mail", "ablage"}
-BEKANNT_MAIL = {"server", "port", "verschluesselung", "benutzer", "absender", "empfaenger", "passwort_eintrag"}
+BEKANNT_MAIL = {"server", "port", "verschluesselung", "benutzer", "absender", "empfaenger", "passwort_eintrag",
+                "erstversand"}
 #: Kommentarzeilen, die frühere Versionen selbst geschrieben haben (keine „eigenen“).
 FRUEHERE_KOMMENTARE = {
     # bis 2.0.0 (Startdatei „Einrichten“)

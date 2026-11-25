@@ -67,6 +67,7 @@ class Ergebnis:
     # Zeitraum: Belege vor diesem Datum (ISO, leer = alle) wurden nicht geholt und nicht vermerkt.
     ab: str = ""
     uebersprungen: int = 0  # so viele Rechnungen lagen vor dem Zeitraum
+    erstlauf_abgelegt: int = 0  # erster Lauf eines neuen Kontos: abgelegt, nicht verschickt
 
     def als_dict(self) -> dict:
         return dict(self.__dict__)

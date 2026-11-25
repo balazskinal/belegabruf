@@ -181,7 +181,11 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
     protokoll = protokoll_fuer(einst, konto)
     # Erst die Schalter abgleichen: Beim allerersten Einschalten eines Ziels gilt alles
     # bis jetzt Geholte als geliefert — bevor dieser Lauf Neues holt.
-    markiert = protokoll.ziele_abgleichen(lieferziel_namen(einst))
+    nur_ablegen = einst.mail.erstversand == "nicht"
+    markiert = protokoll.ziele_abgleichen(lieferziel_namen(einst), bestand_markieren=nur_ablegen)
+    erstlauf = protokoll.erstlauf_offen()
+    if erstlauf:
+        protokoll.erstlauf_setzen("offen")
     try:
         # Lokale Ziele (Ordner) beim Abruf; Lieferziele (Mail) schicken danach, was fehlt.
         ziele = [ziel_verzeichnis.erstellen(name, einst.belegordner, ablage=einst.ablage)
@@ -232,6 +236,13 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
         ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=str(fehler))
     except Exception as fehler:  # noqa: BLE001 - nie abstürzen, immer melden
         ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=f"{type(fehler).__name__}: {str(fehler).splitlines()[0][:200]}")
+    if erstlauf:
+        if nur_ablegen:
+            # Erster Lauf eines neuen Kontos: alles Geholte nur ablegen, nicht verschicken.
+            gezaehlt = [protokoll.als_schon_markieren(name) for name in lieferziel_namen(einst)]
+            ergebnis.erstlauf_abgelegt = max(gezaehlt, default=0)
+        if ergebnis.status in {"ok", "unvollstaendig"}:  # Liste gelesen: ab jetzt normal
+            protokoll.erstlauf_setzen("fertig")
     ergebnis.anzeige = ergebnis.anzeige or konto.anzeige
     ergebnis.ab = ab.isoformat() if ab else ""
     if zukunft:  # z. B. von Hand in die Datei geschrieben; die Oberfläche lässt das nicht zu
@@ -284,6 +295,8 @@ def zusammenfassung(ergebnisse: list[Ergebnis], belegordner: Path) -> str:
                     f"  Kontrolle: {uebersicht} {erg.erwartet} Rechnungen, "
                     f"davon geholt: {erg.vorhanden} — {passt}"
                 )
+        if erg.erstlauf_abgelegt:
+            zeilen.append(f"  {erg.erstlauf_abgelegt} Beleg(e) abgelegt, nicht verschickt (erster Lauf)")
         for stand in erg.lieferungen.values():
             name = stand["anzeige"]
             if stand["schon_markiert"]:

@@ -185,9 +185,17 @@ Anhang** — an eine oder mehrere Adressen, je Rechnung und Adresse eine Mail. B
 Lexware Office und viele andere Buchhaltungsprogramme haben dafür eine eigene Empfangsadresse für
 Belege — die trägst du als Empfänger ein. Auch dein Steuerbüro kann Empfänger sein.
 
-**Neues Konto:** Beim ersten Lauf gehen alle verfügbaren Rechnungen dieses Kontos raus — oder nur die
-aus dem eingestellten Zeitraum „Belege ab“. Erweiterst du den Zeitraum später, werden die dann
-zusätzlich geholten älteren Rechnungen ebenfalls verschickt.
+**Erster Versand** (Auswahl in den Einstellungen): Was passiert mit Belegen, die es beim Einschalten des
+Mailversands schon gibt, mit dem Bestand für eine neu eingetragene Adresse und mit den Belegen aus dem
+ersten Lauf eines neuen Kontos?
+- **nicht verschicken (nur ablegen)** — die Vorgabe: Sie landen im Belegordner und gelten als verschickt.
+  Gemailt wird erst, was danach neu dazukommt. Die Zusammenfassung sagt dann z. B. „12 Beleg(e) abgelegt,
+  nicht verschickt (erster Lauf)“.
+- **auch verschicken**: Beim Einschalten bzw. für eine neue Adresse geht der schon geholte Bestand einmal
+  raus, beim ersten Lauf eines neuen Kontos alles aus dem Zeitraum „Belege ab“. Danach nur noch Neues.
+
+Als „erster Lauf“ zählt, bis ein Lauf die Rechnungsliste des Kontos einmal gelesen hat. Erweiterst du den
+Zeitraum „Belege ab“ später, werden die dann zusätzlich geholten älteren Rechnungen verschickt.
 
 **Das Programm bringt keinen Versanddienst mit.** Verschickt wird über **dein eigenes Postfach** —
 genauso, als würdest du die Mail selbst in deinem Mailprogramm schreiben. Deshalb fragt die Einrichtung

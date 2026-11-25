@@ -32,6 +32,16 @@ def datenordner(tmp_path, monkeypatch):
     assert str(pfade.datenordner()).startswith(str(tmp_path)), "Test lief gegen den echten Datenordner"
 
 
+@pytest.fixture(autouse=True)
+def bestehendes_konto(datenordner, tmp_path):
+    """Diese Tests prüfen den Versand eines eingespielten Kontos: Der erste Lauf (bei dem
+    mit erstversand = "nicht" nur abgelegt wird) liegt schon hinter ihm. Den ersten Lauf
+    selbst prüfen die Tests in test_oberflaeche.py."""
+    from belegabruf.protokoll import Protokoll
+
+    Protokoll("airbnb", "privat", tmp_path / "Belege").erstlauf_setzen("fertig")
+
+
 class Server:
     """Gemeinsamer Zustand des gefälschten Mailservers."""
 

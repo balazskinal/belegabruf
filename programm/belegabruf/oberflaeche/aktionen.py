@@ -136,7 +136,7 @@ class Steuerung:
             "mail_an": einst.mail_an,
             "mail": {"server": m.server, "port": m.port, "verschluesselung": m.verschluesselung,
                      "benutzer": m.benutzer, "absender": m.absender, "empfaenger": list(m.empfaenger),
-                     "passwort": "hinterlegt" if _passwort_da(m) else "fehlt"},
+                     "passwort": "hinterlegt" if _passwort_da(m) else "fehlt", "erstversand": m.erstversand},
             "beschaeftigt": self.beschaeftigt(),
             "auftrag_art": self.auftrag.art if self.beschaeftigt() else None,
             "datei_fremd": _fremd(),
@@ -485,13 +485,19 @@ def einstellungen_aus_eingaben(daten: dict) -> Einstellungen:
         ablage = alt.ablage if alt else "jahr"
     if ablage not in einstellungen.ABLAGEN:
         sammler.feld("ablage", "Unterordner: bitte „nach Jahr“ oder „nach Jahr und Monat“ wählen.")
+    erstversand = roh_mail.get("erstversand")
+    if erstversand is None or erstversand == "":
+        erstversand = (alt.mail.erstversand if alt else "nicht")
+    if erstversand not in einstellungen.ERSTVERSAND:
+        sammler.feld("erstversand", "Bitte „nicht verschicken“ oder „auch verschicken“ wählen.")
+        erstversand = "nicht"
     sammler.pruefen()
 
     alte_mail = alt.mail if alt else MailEinstellung()
     m = MailEinstellung(
         server=server, port=port, verschluesselung=verschluesselung,
         benutzer=benutzer, absender=absender, empfaenger=empfaenger,
-        passwort_eintrag=alte_mail.passwort_eintrag,
+        passwort_eintrag=alte_mail.passwort_eintrag, erstversand=erstversand,
     )
     neu = Einstellungen(
         belegordner=ordner, konten=konten,

@@ -128,6 +128,14 @@ vorbelegt, Port springt mit der Verschlüsselung) ändern keine Entscheidung.
 10. **„Belegabruf (Terminal)“ bleibt**, liegt aber im Unterordner `Fehlersuche/`, damit oben nur ein
     Starter liegt. Er richtet nichts ein, sondern verweist auf „Belegabruf“, falls noch nichts da ist.
 
+### Nachtrag (Balazs, 25.11.2026): erster Versand per Mail
+
+11. Im Abschnitt „Versand per Mail“ die Auswahl **„Erster Versand: Belege, die es beim Einschalten schon
+    gibt, und Belege aus dem ersten Lauf eines neuen Kontos — nicht verschicken (nur ablegen) / auch
+    verschicken“**, Vorgabe „nicht“. Eine Erklärung darunter wechselt mit der Auswahl; sie ersetzt den
+    früheren Warnsatz. Die Zusammenfassung nennt „N Beleg(e) abgelegt, nicht verschickt (erster Lauf)“.
+    Einzelheiten in ADR-004 (Nachtrag).
+
 ## Folgen
 
 Windows-Test ist Pflicht, bevor 2.0.0 veröffentlicht wird.

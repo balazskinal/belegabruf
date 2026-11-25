@@ -87,6 +87,9 @@
   button.info-knopf:hover { color: var(--akzent); }
   .feld-fehler, .feld-fehler:focus-visible { border-color: var(--schlecht) !important; outline: 2px solid var(--schlecht); outline-offset: 0; }
   .feldsatz { color: var(--schlecht); font-size: 13px; margin: 3px 0 0; }
+  fieldset.erstversand { border: 1px solid var(--linie); border-radius: 7px; margin: 14px 0 0; padding: 4px 12px 10px; }
+  fieldset.erstversand legend { font-size: 13px; color: var(--leise); padding: 0 4px; }
+  fieldset.erstversand .ankreuzen { margin-top: 6px; }
   .kontozeile + .feldsatz { margin: -2px 0 6px; }
   .oben10 { margin-top: 10px; }
   .oben14 { margin-top: 14px; }
@@ -181,9 +184,8 @@
           deiner Mailadresse direkt an deine Buchhaltungssoftware schicken – sevDesk, Lexware Office und viele andere
           haben dafür eine eigene Empfangsadresse für Belege; die trägst du unten als Empfänger ein. Auch dein
           Steuerbüro kann Empfänger sein. Verschickt wird über <strong>dein eigenes Postfach</strong> — jede neue
-          Rechnung als eigene Mail mit PDF an die Adressen unten. Was schon geholt ist, gilt für eine neue Adresse als
-          verschickt. Achtung: Bei einem neuen Konto gehen beim ersten Lauf alle verfügbaren Rechnungen raus – oder nur
-          die aus dem eingestellten Zeitraum „Belege ab“.</p>
+          Rechnung als eigene Mail mit PDF an die Adressen unten. Was mit Belegen geschieht, die es schon gibt, legst
+          du unten bei „Erster Versand“ fest.</p>
         <label class="ankreuzen"><input type="checkbox" id="mail-an"> Rechnungen zusätzlich per Mail verschicken</label>
         <div id="mail-felder">
           <label for="mailanbieter">Mailanbieter</label>
@@ -212,6 +214,13 @@
           </div>
           <label for="empfaenger">Empfänger (mehrere mit Komma trennen)</label>
           <input type="text" id="empfaenger" placeholder="belege@example.com" spellcheck="false">
+          <fieldset id="erstversand" class="erstversand">
+            <legend id="erstversand-titel">Erster Versand: Belege, die es beim Einschalten schon gibt, und Belege aus
+              dem ersten Lauf eines neuen Kontos</legend>
+            <label class="ankreuzen"><input type="radio" name="erstversand" value="nicht" checked> nicht verschicken (nur ablegen)</label>
+            <label class="ankreuzen"><input type="radio" name="erstversand" value="auch"> auch verschicken</label>
+            <p class="leise" id="erstversand-erklaerung"></p>
+          </fieldset>
         </div>
         <div id="fremd-hinweis" class="meldung warn versteckt oben16"></div>
         <div class="knoepfe oben16">
@@ -273,6 +282,18 @@ function zeigeFehler(text) {
   const f = $("fehler");
   f.textContent = text || "";
   f.classList.toggle("versteckt", !text);
+}
+
+// ── Erster Versand: Erklärung passend zur Auswahl ─────────────────────────────
+const ERSTVERSAND_TEXT = {
+  nicht: "Beim Einschalten, für eine neu eingetragene Adresse und beim ersten Lauf eines neuen Kontos werden die "
+    + "Belege nur abgelegt und als verschickt vermerkt. Gemailt wird erst, was danach neu dazukommt.",
+  auch: "Beim Einschalten bzw. für eine neue Adresse gehen alle schon geholten Belege einmal raus, beim ersten Lauf "
+    + "eines neuen Kontos alles aus dem Zeitraum „Belege ab“. Danach nur noch Neues.",
+};
+function erstversandErklaeren() {
+  const wert = (document.querySelector("input[name=erstversand]:checked") || {}).value || "nicht";
+  $("erstversand-erklaerung").textContent = ERSTVERSAND_TEXT[wert];
 }
 
 // ── Infoboxen ──────────────────────────────────────────────────────────────
@@ -456,6 +477,8 @@ function formularFuellen() {
   $("server").value = m.server; $("port").value = m.port; $("verschluesselung").value = m.verschluesselung;
   $("benutzer").value = m.benutzer; $("absender").value = m.absender; $("empfaenger").value = m.empfaenger.join(", ");
   absenderVonHand = Boolean(m.absender) && m.absender !== m.benutzer;
+  for (const r of document.querySelectorAll("input[name=erstversand]")) r.checked = r.value === (m.erstversand || "nicht");
+  erstversandErklaeren();
   $("mailanbieter").value = anbieterErkennen();
   anbieterHinweis();
   mailFelderZeigen();
@@ -755,7 +778,8 @@ $("formular").addEventListener("submit", async (ereignis) => {
     mail_an: $("mail-an").checked,
     mail: { server: $("server").value, port: $("port").value, verschluesselung: $("verschluesselung").value,
             benutzer: $("benutzer").value, absender: $("absender").value,
-            empfaenger: $("empfaenger").value.split(",").map((s) => s.trim()).filter(Boolean) },
+            empfaenger: $("empfaenger").value.split(",").map((s) => s.trim()).filter(Boolean),
+            erstversand: (document.querySelector("input[name=erstversand]:checked") || {}).value || "nicht" },
   };
   try {
     const r = await api("POST", "/api/einstellungen", daten);
@@ -783,6 +807,9 @@ $("passwort-formular").addEventListener("submit", async (ereignis) => {
   } catch (e) { zeigeFehler(e.message); }
   feld.value = "";
 });
+
+for (const r of document.querySelectorAll("input[name=erstversand]")) r.addEventListener("change", erstversandErklaeren);
+$("erstversand").setAttribute("aria-describedby", "erstversand-erklaerung");
 
 $("passwort-loeschen").addEventListener("click", async () => {
   zeigeFehler("");

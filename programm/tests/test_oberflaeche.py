@@ -1493,22 +1493,35 @@ def test_infoboxen_an_allen_vier_stellen(server, tmp_path):
         b.close()
 
 
-def test_mailtext_nennt_belegadressen_und_zeitraum(seite):
-    text = " ".join(seite.locator("#mail-erklaerung").text_content().split())
-    assert "sevDesk, Lexware Office" in text and "Steuerbüro" in text
-    assert "oder nur die aus dem eingestellten Zeitraum „Belege ab“" in text
-    assert seite.locator("#mail-erklaerung a").count() == 0  # Produktnamen ohne Links
+# ── Erster Versand per Mail: „nicht verschicken“ (Vorgabe) oder „auch verschicken“ ──
 
 
-def test_neues_konto_mit_zeitraum_verschickt_nur_den_zeitraum(tmp_path, monkeypatch, umgebung):
-    """Die Aussage auf der Seite stimmt: Mail schon an, neues Konto mit „Belege ab“ —
-    beim ersten Lauf gehen nur die Rechnungen aus dem Zeitraum raus."""
-    class Drei(Attrappe):
+class _MailZiel:
+    def __init__(self, adresse="belege@example.com"):
+        self.name = f"mail:{adresse}"
+        self.anzeigename = f"Mail an {adresse}"
+        self.gesendet = []
+
+    def senden(self, sendung, vor_senden):
+        vor_senden()
+        self.gesendet.append(sendung.rechnungsnummer)
+
+    def schliessen(self):
+        pass
+
+
+def _mail_lauf(tmp_path, monkeypatch, belege, erstversand="nicht", belege_ab="alle", empfaenger=("belege@example.com",),
+               status="ok"):
+    """Ein Abruf mit Attrappe: holt `belege` (Kennung, Datum), schickt an falsche Mailziele."""
+    class Quelle_(Attrappe):
         def belege_holen(self, umgebung_):
-            erg = Ergebnis(self.name, self.konto.name)
-            for kennung, datum in (("alt", "2026-01-10"), ("neu1", "2026-10-02"), ("neu2", "2026-11-04")):
+            erg = Ergebnis(self.name, self.konto.name, status=status)
+            for kennung, datum in belege:
                 if umgebung_.zu_alt(date.fromisoformat(datum)):
                     erg.uebersprungen += 1
+                    continue
+                if umgebung_.bekannt(f"rechnung:{kennung}"):
+                    erg.schon_da += 1
                     continue
                 umgebung_.abliefern(Beleg(quelle="airbnb", konto=self.konto.name, art="rechnung",
                                           schluessel=f"rechnung:{kennung}", dateiname=f"{datum}_{kennung}.pdf",
@@ -1517,28 +1530,117 @@ def test_neues_konto_mit_zeitraum_verschickt_nur_den_zeitraum(tmp_path, monkeypa
                 erg.neu += 1
             return erg
 
-    class Ziel:
-        name = "mail:belege@example.com"
-        anzeigename = "Mail an belege@example.com"
+    ziele = [_MailZiel(a) for a in empfaenger]
+    monkeypatch.setattr(ablauf, "quelle_fuer", lambda konto: Quelle_(konto, Path("/x")))
+    monkeypatch.setattr(ablauf, "lieferziele_erstellen", lambda einst: ziele)
+    konto = Konto(quelle="airbnb", name="neu", belege_ab=belege_ab)
+    einst = einstellungen.Einstellungen(
+        belegordner=tmp_path / "B", konten=[konto], ziele=["ordner", "mail"],
+        mail=einstellungen.MailEinstellung(server="smtp.example.com", benutzer="ich@example.com",
+                                           absender="ich@example.com", empfaenger=list(empfaenger),
+                                           erstversand=erstversand))
+    return ablauf.abrufen(einst, konto, lambda t: None), ziele
 
-        def __init__(self):
-            self.gesendet = []
 
-        def senden(self, sendung, vor_senden):
-            vor_senden()
-            self.gesendet.append(sendung.rechnungsnummer)
+def test_erstversand_nicht_erster_lauf_neues_konto_nur_ablegen(tmp_path, monkeypatch, umgebung):
+    erg, (ziel,) = _mail_lauf(tmp_path, monkeypatch, [("a1", "2026-10-02"), ("a2", "2026-11-04")])
+    assert ziel.gesendet == [] and erg.erstlauf_abgelegt == 2
+    text = ablauf.zusammenfassung([erg], tmp_path)
+    assert "2 Beleg(e) abgelegt, nicht verschickt (erster Lauf)" in text
+    assert (tmp_path / "B" / "airbnb" / "2026" / "2026-10-02_a1.pdf").exists()  # abgelegt
+    # zweiter Lauf: nur das Neue geht raus
+    erg, (ziel,) = _mail_lauf(tmp_path, monkeypatch, [("a1", "2026-10-02"), ("a2", "2026-11-04"), ("a3", "2026-11-20")])
+    assert ziel.gesendet == ["a3"] and erg.erstlauf_abgelegt == 0
 
-        def schliessen(self):
-            pass
 
-    ziel = Ziel()
-    monkeypatch.setattr(ablauf, "quelle_fuer", lambda konto: Drei(konto, Path("/x")))
-    monkeypatch.setattr(ablauf, "lieferziele_erstellen", lambda einst: [ziel])
-    konto = Konto(quelle="airbnb", name="neu", belege_ab="01.10.2026")
-    einst = einstellungen.Einstellungen(belegordner=tmp_path / "B", konten=[konto], ziele=["ordner", "mail"],
-                                        mail=einstellungen.MailEinstellung(server="smtp.example.com",
-                                                                           benutzer="ich@example.com",
-                                                                           absender="ich@example.com",
-                                                                           empfaenger=["belege@example.com"]))
-    erg = ablauf.abrufen(einst, konto, lambda t: None)
-    assert erg.uebersprungen == 1 and sorted(ziel.gesendet) == ["neu1", "neu2"]
+def test_erstversand_auch_neues_konto_schickt_zeitraum(tmp_path, monkeypatch, umgebung):
+    erg, (ziel,) = _mail_lauf(tmp_path, monkeypatch, [("alt", "2026-01-10"), ("n1", "2026-10-02"), ("n2", "2026-11-04")],
+                              erstversand="auch", belege_ab="01.10.2026")
+    assert erg.uebersprungen == 1 and sorted(ziel.gesendet) == ["n1", "n2"] and erg.erstlauf_abgelegt == 0
+
+
+def test_erstversand_nicht_neue_adresse_bekommt_nur_neues(tmp_path, monkeypatch, umgebung):
+    # erster Lauf mit einer Adresse, zweiter (normal), dann kommt eine zweite Adresse dazu
+    _mail_lauf(tmp_path, monkeypatch, [("a1", "2026-10-02")])
+    _mail_lauf(tmp_path, monkeypatch, [("a1", "2026-10-02"), ("a2", "2026-10-20")])
+    erg, (alt, neu) = _mail_lauf(tmp_path, monkeypatch, [("a1", "2026-10-02"), ("a2", "2026-10-20"), ("a3", "2026-11-04")],
+                                 empfaenger=("belege@example.com", "steuer@example.com"))
+    assert alt.gesendet == ["a3"] and neu.gesendet == ["a3"]  # a1, a2 gelten für die neue Adresse als verschickt
+    assert erg.lieferungen["mail:steuer@example.com"]["schon_markiert"] == 2
+
+
+def test_erstversand_auch_neue_adresse_bekommt_bestand(tmp_path, monkeypatch, umgebung):
+    _mail_lauf(tmp_path, monkeypatch, [("a1", "2026-10-02")], erstversand="auch")
+    erg, (alt, neu) = _mail_lauf(tmp_path, monkeypatch, [("a1", "2026-10-02"), ("a2", "2026-11-04")], erstversand="auch",
+                                 empfaenger=("belege@example.com", "steuer@example.com"))
+    assert alt.gesendet == ["a2"] and sorted(neu.gesendet) == ["a1", "a2"]
+
+
+def test_erstlauf_bleibt_offen_bis_die_liste_gelesen_ist(tmp_path, monkeypatch, umgebung):
+    # erster Versuch: Anmeldung mittendrin abgelaufen → gilt weiter als erster Lauf
+    erg, (ziel,) = _mail_lauf(tmp_path, monkeypatch, [("a1", "2026-10-02")], status="abgelaufen")
+    assert ziel.gesendet == []
+    erg, (ziel,) = _mail_lauf(tmp_path, monkeypatch, [("a1", "2026-10-02"), ("a2", "2026-11-04")])
+    assert ziel.gesendet == [] and erg.erstlauf_abgelegt == 1  # a2 kam im (fortgesetzten) ersten Lauf
+    erg, (ziel,) = _mail_lauf(tmp_path, monkeypatch, [("a1", "2026-10-02"), ("a2", "2026-11-04"), ("a3", "2026-11-20")])
+    assert ziel.gesendet == ["a3"]
+
+
+def test_bisheriges_protokoll_ist_kein_erster_lauf(tmp_path, monkeypatch, umgebung):
+    """Nach dem Update: ein Protokoll mit Rechnungen, aber ohne Erstlauf-Zeile, ist nicht neu."""
+    from belegabruf.protokoll import Protokoll
+
+    p = Protokoll("airbnb", "neu", tmp_path / "B")
+    p.eintragen(Beleg(quelle="airbnb", konto="neu", art="rechnung", schluessel="rechnung:a1", dateiname="x.pdf",
+                      inhalt=b"", jahr=2026, rechnungsdatum=date(2026, 10, 2)), None, ["ordner"])
+    p.schalten("mail:belege@example.com", True)
+    p.als_schon_markieren("mail:belege@example.com")
+    erg, (ziel,) = _mail_lauf(tmp_path, monkeypatch, [("a1", "2026-10-02"), ("a2", "2026-11-04")])
+    assert ziel.gesendet == ["a2"] and erg.erstlauf_abgelegt == 0
+
+
+def test_erstversand_in_der_datei_und_pruefung(tmp_path):
+    datei = tmp_path / "e.toml"
+    datei.write_text('ziele = ["ordner"]\n[mail]\nserver = ""\n', encoding="utf-8")
+    assert einstellungen.laden(datei).mail.erstversand == "nicht"  # alte Datei ohne Schlüssel
+    datei.write_text('[mail]\nerstversand = "auch"\n', encoding="utf-8")
+    einst = einstellungen.laden(datei)
+    assert einst.mail.erstversand == "auch"
+    assert einstellungen.aus_text(einstellungen.als_text(einst)).mail.erstversand == "auch"
+    einst.mail.erstversand = "immer"
+    with pytest.raises(einstellungen.EinstellungsFehler, match="erstversand"):
+        einstellungen.pruefen(einst)
+
+
+def test_erstversand_in_der_seite(seite, tmp_path):
+    p = seite
+    p.fill("#belegordner", str(tmp_path / "Belege"))
+    p.check("#mail-an")
+    assert p.is_checked("input[name=erstversand][value=nicht]")
+    assert "nur abgelegt" in p.inner_text("#erstversand-erklaerung")
+    assert p.get_attribute("#erstversand", "aria-describedby") == "erstversand-erklaerung"
+    assert "Achtung: Bei einem neuen Konto" not in p.inner_text("#mail-erklaerung")
+    p.check("input[name=erstversand][value=auch]")
+    assert "einmal raus" in p.inner_text("#erstversand-erklaerung")
+    for feld, wert in (("#server", "smtp.example.com"), ("#benutzer", "ich@example.com"),
+                       ("#empfaenger", "belege@example.com")):
+        p.fill(feld, wert)
+    p.click("#speichern")
+    p.wait_for_selector("#gespeichert:not(.versteckt)")
+    assert einstellungen.laden().mail.erstversand == "auch"
+    p.reload()
+    p.wait_for_selector("#version:not(:empty)")
+    p.click("#reiter-einstellungen")
+    assert p.is_checked("input[name=erstversand][value=auch]")
+
+
+def test_erstversand_ungueltig_vom_server_abgewiesen(server, tmp_path):
+    daten = _eingaben(tmp_path, mail={"erstversand": "immer"})
+    antwort, inhalt = _anfrage(server, "POST", "/api/einstellungen", _mit(server), daten)
+    assert antwort.status == 400 and "erstversand" in json.loads(inhalt)["felder"]
+
+
+def test_mailtext_nennt_belegadressen(seite):
+    text = " ".join(seite.locator("#mail-erklaerung").text_content().split())
+    assert "sevDesk, Lexware Office" in text and "Steuerbüro" in text
+    assert seite.locator("#mail-erklaerung a").count() == 0  # Produktnamen ohne Links
