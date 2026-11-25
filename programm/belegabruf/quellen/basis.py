@@ -59,6 +59,10 @@ class Ergebnis:
     hinweise: list[str] = field(default_factory=list)
     fehler: str = ""
     neue_dateien: list[str] = field(default_factory=list)
+    # Lieferziele (z. B. Mail je Empfänger): Name im Protokoll → Stand dieses Laufs mit
+    # anzeige, geliefert, offen, fehler (Klartext, nie mit Passwort), unklar
+    # (Rechnungsnummern), schon_markiert (beim allerersten Einschalten).
+    lieferungen: dict[str, dict] = field(default_factory=dict)
 
     def als_dict(self) -> dict:
         return dict(self.__dict__)

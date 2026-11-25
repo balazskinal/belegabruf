@@ -7,6 +7,10 @@ eigenen Rechner. Es kann:
 - **Skool:** die Rechnungen für bezahlte Mitgliedschaften in Skool-Communities (siehe [Skool](#skool)).
 - **Xentra:** die Rechnungen für das Xentra-Abonnement und Provisionen (siehe [Xentra](#xentra)).
 
+**Seit Version 1.3** verschickt es neue Rechnungen auf Wunsch zusätzlich **per Mail** — z. B. an die
+Belegadresse deines Buchhaltungsprogramms oder an deine Steuerberatung. Verschickt wird über **dein
+eigenes Postfach**; einen Versanddienst bringt das Programm nicht mit.
+
 **Das ist kein Dienst — jeder betreibt seine eigene Kopie.** Niemand außer dir sieht deine
 Anmeldung oder deine Belege. Es gibt keinen Server, kein Konto bei uns, keinen Support-Vertrag.
 
@@ -33,6 +37,10 @@ Belegordner löschst oder verschiebst.** Das merkt sich ein **Protokoll** bei de
 im Belegordner). Den Belegordner darfst du also jederzeit leeren oder an die Buchhaltung bzw. den
 Steuerberater weiterreichen, ohne dass alles wiederkommt. Gastnamen kommen nirgends vor — weder in
 Dateinamen noch im Protokoll.
+
+5. Ist der **Mailversand** eingeschaltet, geht jede neue Rechnung als eigene Mail mit PDF an die
+   eingestellten Adressen (siehe [Versand per Mail](#versand-per-mail)). Die Datei bleibt trotzdem im
+   Belegordner.
 
 **Wichtig:** Airbnb zeigt nur die **letzten 12 Monate**. Was älter ist, ist weg. Am besten einmal
 im Monat laufen lassen. Liegt der letzte Lauf über zwei Monate zurück, warnt das Programm beim Start.
@@ -84,6 +92,7 @@ Administratorrechte nötig.
    - Ein Name für dein Konto — nur für dich, z. B. „privat“. Hast du mehrere Airbnb-Konten
      (z. B. einen Zugang als Co-Gastgeber), kannst du mehrere eintragen; jedes bekommt seine eigene Anmeldung.
    - Der Belegordner (Vorschlag: `Dokumente/Belege`)
+   - Ob die Rechnungen auch per Mail verschickt werden sollen (Vorschlag: nein; siehe unten)
 6. Zum Schluss öffnet sich das Airbnb-Anmeldefenster. Melde dich an. Fertig.
 
 ## Skool
@@ -140,6 +149,70 @@ geholt wurde. Stattdessen beim Start **E** und dann **2 „Fehlende Dateien neu 
 kommt alles wieder, was im Protokoll steht, aber im Belegordner fehlt — soweit Airbnb es noch anbietet
 (die letzten 12 Monate).
 
+## Versand per Mail
+
+Auf Wunsch verschickt das Programm jede **neu geholte** Rechnung als **eigene Mail mit dem PDF im
+Anhang** — an eine oder mehrere Adressen, je Rechnung und Adresse eine Mail. Betreff zum Beispiel
+„Beleg Airbnb AIUC-… vom 27.10.2026“. So kommt die Rechnung überall an, wo es eine Belegadresse gibt
+(Buchhaltungsprogramm, Steuerberatung), und wird dort gelesen wie jede andere Belegmail.
+
+**Das Programm bringt keinen Versanddienst mit.** Verschickt wird über **dein eigenes Postfach** —
+genauso, als würdest du die Mail selbst in deinem Mailprogramm schreiben. Deshalb fragt die Einrichtung
+nach den Zugangsdaten deines Postfachs. Die Mails liegen danach je nach Anbieter auch in deinem Ordner
+„Gesendet“.
+
+**Einschalten:** „Einrichten“ doppelklicken und bei „Per Mail verschicken?“ mit **j** antworten.
+Dann fragt es nach den Angaben deines Mailkontos — die findest du bei deinem Mailanbieter unter
+„SMTP“ oder „Postausgangsserver“:
+
+| Frage | Beispiel |
+|---|---|
+| Postausgangsserver | `smtp.example.com` |
+| Verschlüsselung | SSL (meist Port 465) oder STARTTLS (meist Port 587) — **ohne Verschlüsselung wird nichts verschickt** |
+| Benutzername | meist deine Mailadresse, z. B. `ich@example.com` |
+| Absenderadresse | `ich@example.com` |
+| Empfänger | z. B. `belege@example.com`, mehrere mit Komma |
+| Passwort | wird verdeckt eingegeben (man sieht nichts — das ist Absicht) |
+
+Zum Schluss meldet es sich einmal am Mailserver an und wieder ab — **ohne eine Mail zu schicken** —
+und sagt, ob es klappt.
+
+**Das Passwort** kommt in den **Passwortspeicher deines Rechners** (Mac: Schlüsselbund, Windows:
+Anmeldeinformationsverwaltung) und **nie in eine Datei**. In den Einstellungen steht nur, unter
+welchem Eintrag es liegt (Vorschlag: `belegabruf/mail`). Austauschen oder löschen ebenfalls über
+„Einrichten“. Auf dem Mac fragt der Schlüsselbund beim ersten Versand, ob das Programm den Eintrag
+lesen darf — dort **„Immer erlauben“** wählen (nach einem Update kann die Frage wiederkommen).
+
+**Gmail und Microsoft 365:** Mit dem normalen Passwort klappt es dort meist nicht.
+- **Gmail:** Zwei-Faktor-Anmeldung einschalten und ein **App-Passwort** anlegen (Google-Konto →
+  Sicherheit → App-Passwörter). Server `smtp.gmail.com`, STARTTLS, Port 587.
+- **Microsoft 365 / Outlook:** Für das Postfach muss **SMTP AUTH** eingeschaltet sein (macht die
+  Verwaltung im Microsoft-365-Admin-Center); mit Zwei-Faktor zusätzlich ein App-Passwort. Server
+  `smtp.office365.com`, STARTTLS, Port 587.
+- Anmeldung über OAuth („Mit Google/Microsoft anmelden“) ist **nicht vorgesehen**.
+
+**Alter Bestand:** Kommt eine Empfängeradresse **zum allerersten Mal** dazu, gilt alles, was bis
+dahin geholt ist, für sie als **schon verschickt** und geht nicht raus. Verschickt wird nur, was danach
+neu dazukommt. Schaltest du den Versand (oder eine Adresse) später aus und wieder ein, wird nichts
+mehr als verschickt markiert: Dann geht alles raus, was in der Zwischenzeit geholt wurde. **Wer
+zwischendurch von Hand verschicken will, schaltet den Versand deshalb nicht aus** — sonst kommen diese
+Rechnungen beim Wiedereinschalten doppelt an.
+
+**Achtung bei Neuinstallation oder neuem Konto:** Ist der Mailversand schon eingeschaltet, wenn ein
+Konto zum ersten Mal abgerufen wird (neuer Rechner ohne die alten Protokolle, oder ein neu
+hinzugefügtes Konto), gibt es noch nichts, was als verschickt gelten könnte. Dann gehen beim ersten Lauf
+**alle verfügbaren Rechnungen** raus — bei Airbnb bis zu 12 Monate. Wer das nicht will, ruft zuerst
+einmal ohne Mailversand ab und schaltet die Mail erst danach ein.
+
+**Nie doppelt:** Das Protokoll merkt sich je Adresse, was verschickt ist. Klappt der Versand nicht
+(kein Internet, falsches Passwort, der Server lehnt ab), bleibt die Rechnung im Belegordner, die
+Zusammenfassung zeigt die Meldung des Servers, und der **nächste Lauf versucht es erneut**. Kommt
+nach dem Senden keine Antwort vom Server, ist unklar, ob die Mail angekommen ist. Dann schickt das
+Programm sie **nicht** noch einmal und sagt dir, bei welcher Rechnung du beim Empfänger nachsehen
+sollst.
+
+**Was das Programm am Mailserver tut:** nur anmelden, senden, abmelden. Es liest keine Postfächer.
+
 ## Wo was liegt
 
 | Was | Wo |
@@ -147,7 +220,8 @@ kommt alles wieder, was im Protokoll steht, aber im Belegordner fehlt — soweit
 | Deine Belege | der Belegordner, den du beim Einrichten angegeben hast |
 | Einstellungen | Mac: `~/Library/Application Support/belegabruf/einstellungen.toml` · Windows: `%APPDATA%\belegabruf\einstellungen.toml` |
 | Anmeldungen (Browserprofile) | im selben Ordner unter `profile/` — **darf man jederzeit löschen** |
-| Protokolle (was schon geholt ist) | im selben Ordner unter `protokolle/<anbieter>/<konto>.csv` — **nie löschen** |
+| Protokolle (was schon geholt und verschickt ist) | im selben Ordner unter `protokolle/<anbieter>/<konto>.csv` — **nie löschen** |
+| Mail-Passwort | im Passwortspeicher des Betriebssystems, nie in einer Datei |
 
 Die Einstellungsdatei ist eine Textdatei mit Erklärungen und lässt sich mit jedem Texteditor
 ändern. Ein Konto lässt sich dort mit `aktiv = "nein"` vorübergehend ausschalten.
@@ -178,6 +252,9 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 
 ## Was neu ist
 
+- **1.3.0** — Neue Rechnungen auf Wunsch zusätzlich **per Mail** verschicken (über dein eigenes
+  Postfach, siehe [Versand per Mail](#versand-per-mail)). Beim Update einmal „Einrichten“
+  doppelklicken; die Frage nach dem Mailversand steht auf „nein“, bis du sie mit „j“ beantwortest.
 - **1.2.0** — Zwei neue Anbieter: **Xentra** (Abo- und Provisionsrechnungen) und **Skool**
   (Rechnungen für bezahlte Communities, immer als helles PDF). Beim Update einmal „Einrichten“
   doppelklicken und die neuen Anbieter dazunehmen.
@@ -215,7 +292,8 @@ uv run belege holen --fehlende                  # dazu Fehlendes neu holen
 ```
 
 `belege holen` gibt mit `--json` ein maschinenlesbares Ergebnis aus (Fortschritt geht nach stderr).
-Exit-Code: 0 = alles gut, 2 = Anmeldung nötig oder abgelaufen, 1 = Fehler. So lassen sich die
+Exit-Code: 0 = alles gut, 2 = Anmeldung nötig oder abgelaufen, nicht alles geholt oder nicht alles
+verschickt (später noch einmal), 1 = Fehler. So lassen sich die
 Bausteine später auch aus einer Automatisierung (z. B. n8n) aufrufen.
 
 ### Aufbau
@@ -223,22 +301,25 @@ Bausteine später auch aus einer Automatisierung (z. B. n8n) aufrufen.
 ```
 Start Mac/, Start Windows/   Startdateien (wechseln nach programm/ und rufen "belege" auf)
 programm/
-  pyproject.toml, uv.lock    Abhängigkeiten (Python, Playwright, PyMuPDF)
+  pyproject.toml, uv.lock    Abhängigkeiten (Python, Playwright, PyMuPDF, keyring)
   tests/
   belegabruf/
     cli.py            Kommandozeile und Ablauf beim Doppelklick
     ablauf.py         Gerüst: prüfen, anmelden lassen, holen, abliefern
     quellen/          ein Baustein je Anbieter: airbnb.py, skool.py, xentra.py
       basis.py        die feste Schnittstelle für Bausteine
-    ziele/            wohin Belege geliefert werden (Version 1: ordner.py)
+    ziele/            wohin Belege geliefert werden: ordner.py, mail.py
     protokoll.py      Protokoll je Anbieter und Konto — entscheidet, was schon geholt ist
     pruefung.py       nie eine Anmelde-, 404- oder leere Seite als Beleg speichern
 ```
 
 Ein **Baustein (Quelle)** kann genau drei Dinge: `sitzung_pruefen()`, `anmelden_lassen()` und
 `belege_holen()`. Er speichert nichts selbst, sondern übergibt jeden Beleg an die **Ziele**. Das
-Ziel „ordner“ legt Dateien ab; weitere Ziele (z. B. Upload an eine Buchhaltungssoftware) kommen als
-eigene Datei in `ziele/` dazu, ohne dass sich die Quellen ändern.
+Ziel „ordner“ legt Dateien ab und ist immer dabei. **Lieferziele** wie „mail“ schicken danach weiter,
+was laut Protokoll noch fehlt (`ablauf.liefern`, Schnittstelle `ziele/basis.py: Lieferziel`); das
+Protokoll führt je Lieferziel „geliefert / schon / unklar / offen“. Weitere Ziele (z. B. Upload an
+eine Buchhaltungssoftware per API) kommen als eigene Datei in `ziele/` dazu, ohne dass sich die
+Quellen ändern. Zugangsdaten liegen nur im Passwortspeicher (`keyring`).
 
 Tests (im Ordner `programm`): `uv run --group dev pytest`
 
@@ -270,4 +351,5 @@ Die GitHub Action baut das ZIP und hängt es an das Release.
 ## Offen
 
 - **Windows:** noch von niemandem getestet (Abnahmepunkt 5). Wer es ausprobiert, bitte Rückmeldung.
-- Weitere Bausteine und das Ziel „Upload an die Buchhaltung“ folgen in späteren Versionen.
+- **Mail:** Der erste echte Versand steht noch aus; getestet ist gegen einen nachgebauten Mailserver.
+- Weitere Bausteine und das Ziel „Upload an die Buchhaltung per API“ folgen in späteren Versionen.

@@ -1,6 +1,6 @@
 [project]
 name = "belegabruf"
-version = "1.2.0"
+version = "1.3.0"
 description = "Holt Rechnungen aus eingeloggten Anbieter-Konten per Doppelklick auf den eigenen Rechner."
 license = "MIT"
 authors = [{ name = "Balázs Kinál" }]
@@ -8,6 +8,7 @@ requires-python = ">=3.12"
 dependencies = [
     "playwright>=1.48",
     "pymupdf>=1.24",
+    "keyring>=25",
 ]
 
 [project.scripts]

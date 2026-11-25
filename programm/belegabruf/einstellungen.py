@@ -41,12 +41,44 @@ class Konto:
         return f"{self.quelle} ({self.name})"
 
 
+#: Vorgabe für den Eintrag im Passwortspeicher des Betriebssystems: "Dienst/Konto".
+STANDARD_PASSWORT_EINTRAG = "belegabruf/mail"
+
+
+def dienst_und_konto(eintrag: str) -> tuple[str, str]:
+    dienst, _, konto = eintrag.partition("/")
+    return dienst.strip(), konto.strip()
+
+
+@dataclass
+class MailEinstellung:
+    """Ziel mail. Hier steht nie das Passwort selbst, nur wo es im Passwortspeicher
+    des Betriebssystems liegt (Schlüsselbund bzw. Anmeldeinformationsverwaltung)."""
+
+    server: str = ""
+    port: int = 465
+    verschluesselung: str = "ssl"  # ssl | starttls — ohne Verschlüsselung kein Versand
+    benutzer: str = ""
+    absender: str = ""
+    empfaenger: list[str] = field(default_factory=list)
+    passwort_eintrag: str = STANDARD_PASSWORT_EINTRAG  # "Dienst/Konto"
+
+    @property
+    def dienst_und_konto(self) -> tuple[str, str]:
+        return dienst_und_konto(self.passwort_eintrag)
+
+
 @dataclass
 class Einstellungen:
     belegordner: Path
     konten: list[Konto]
     ziele: list[str] = field(default_factory=lambda: ["ordner"])
     sichtbar: bool = False  # Abruf im sichtbaren Fenster (nur zur Fehlersuche)
+    mail: MailEinstellung = field(default_factory=MailEinstellung)
+
+    @property
+    def mail_an(self) -> bool:
+        return "mail" in self.ziele
 
     def aktive_konten(self, quelle: str | None = None, konto: str | None = None) -> list[Konto]:
         return [
@@ -83,12 +115,56 @@ def laden(datei: Path | None = None) -> Einstellungen:
     ziele = roh.get("ziele") or ["ordner"]
     if isinstance(ziele, str):
         ziele = [ziele]
+    ziele = [str(z).strip().lower() for z in ziele]
+    if "ordner" not in ziele:  # Der Belegordner ist immer dabei.
+        ziele.insert(0, "ordner")
+    mail = _mail_lesen(roh.get("mail") or {}, pruefen="mail" in ziele)
     return Einstellungen(
         belegordner=belegordner,
         konten=konten,
-        ziele=[str(z).strip().lower() for z in ziele],
+        ziele=ziele,
         sichtbar=_wahrheitswert(roh.get("sichtbar"), False),
+        mail=mail,
     )
+
+
+def _mail_lesen(roh: object, pruefen: bool) -> MailEinstellung:
+    if not isinstance(roh, dict):
+        raise EinstellungsFehler("[mail] muss ein Abschnitt sein.")
+    empfaenger = roh.get("empfaenger") or []
+    if isinstance(empfaenger, str):
+        empfaenger = [empfaenger]
+    try:
+        port = int(roh.get("port") or 465)
+    except (TypeError, ValueError) as fehler:
+        raise EinstellungsFehler(f"[mail] port = \"{roh.get('port')}\" ist keine Zahl.") from fehler
+    mail = MailEinstellung(
+        server=str(roh.get("server") or "").strip(),
+        port=port,
+        verschluesselung=str(roh.get("verschluesselung") or "ssl").strip().lower(),
+        benutzer=str(roh.get("benutzer") or "").strip(),
+        absender=str(roh.get("absender") or "").strip(),
+        empfaenger=[str(e).strip() for e in empfaenger if str(e).strip()],
+        passwort_eintrag=str(roh.get("passwort_eintrag") or STANDARD_PASSWORT_EINTRAG).strip(),
+    )
+    if mail.verschluesselung not in {"ssl", "starttls"}:
+        raise EinstellungsFehler(
+            f"[mail] verschluesselung = \"{mail.verschluesselung}\": erlaubt sind nur \"ssl\" und \"starttls\". "
+            "Ohne Verschlüsselung wird keine Mail verschickt.")
+    if not all(mail.dienst_und_konto):
+        raise EinstellungsFehler(
+            f"[mail] passwort_eintrag = \"{mail.passwort_eintrag}\" muss die Form \"Dienst/Konto\" haben.")
+    for adresse in mail.empfaenger + ([mail.absender] if mail.absender else []):
+        if "@" not in adresse or "," in adresse or " " in adresse:
+            raise EinstellungsFehler(f"[mail] \"{adresse}\" ist keine Mailadresse.")
+    if pruefen:
+        fehlt = [n for n in ("server", "benutzer", "absender") if not getattr(mail, n)]
+        if not mail.empfaenger:
+            fehlt.append("empfaenger")
+        if fehlt:
+            raise EinstellungsFehler(
+                "Bei ziele steht \"mail\", aber in [mail] fehlt: " + ", ".join(fehlt) + ".")
+    return mail
 
 
 def _toml_text(wert: str) -> str:
@@ -102,12 +178,13 @@ def als_text(einst: Einstellungen) -> str:
         "# Du kannst diese Datei mit jedem Texteditor ändern oder einfach noch einmal",
         "# \"Einrichten\" doppelklicken. Zeilen mit # am Anfang sind nur Erklärungen.",
         "# Hier stehen keine Passwörter — angemeldet wird immer im Browserfenster.",
+        "# Das Mail-Passwort liegt im Passwortspeicher des Betriebssystems, nie hier.",
         "",
         "# Wohin die Belege gespeichert werden.",
         f"belegordner = {_toml_text(str(einst.belegordner))}",
         "",
-        "# Wohin die Belege geliefert werden. Version 1 kennt nur \"ordner\"",
-        "# (der Belegordner oben). Später kommt \"sevdesk\" dazu.",
+        "# Wohin die Belege geliefert werden: \"ordner\" (der Belegordner oben, immer dabei)",
+        "# und auf Wunsch \"mail\" (Versand per Mail, siehe Abschnitt [mail] unten).",
         "ziele = [" + ", ".join(_toml_text(z) for z in einst.ziele) + "]",
         "",
         "# Abruf im sichtbaren Browserfenster? Nur zur Fehlersuche: \"ja\".",
@@ -127,6 +204,22 @@ def als_text(einst: Einstellungen) -> str:
         ]
         for schluessel, wert in konto.optionen.items():
             zeilen.append(f"{schluessel} = {_toml_text(str(wert))}")
+    m = einst.mail
+    zeilen += [
+        "",
+        "# Nur wichtig, wenn bei ziele \"mail\" steht: Jede neue Rechnung geht als eigene Mail",
+        "# mit PDF-Anhang an jeden Empfänger. verschluesselung: \"ssl\" (meist Port 465) oder",
+        "# \"starttls\" (meist Port 587). passwort_eintrag: wo das Passwort im Passwortspeicher",
+        "# liegt, als \"Dienst/Konto\" (nicht das Passwort selbst!). Ändern über \"Einrichten\".",
+        "[mail]",
+        f"server = {_toml_text(m.server)}",
+        f"port = {int(m.port)}",
+        f"verschluesselung = {_toml_text(m.verschluesselung)}",
+        f"benutzer = {_toml_text(m.benutzer)}",
+        f"absender = {_toml_text(m.absender)}",
+        "empfaenger = [" + ", ".join(_toml_text(e) for e in m.empfaenger) + "]",
+        f"passwort_eintrag = {_toml_text(m.passwort_eintrag)}",
+    ]
     return "\n".join(zeilen) + "\n"
 
 
