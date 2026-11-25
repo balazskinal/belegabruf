@@ -305,7 +305,20 @@ function formularFuellen() {
   $("mail-an").checked = zustand.mail_an;
   $("server").value = m.server; $("port").value = m.port; $("verschluesselung").value = m.verschluesselung;
   $("benutzer").value = m.benutzer; $("absender").value = m.absender; $("empfaenger").value = m.empfaenger.join(", ");
+  absenderVonHand = Boolean(m.absender) && m.absender !== m.benutzer;
   mailFelderZeigen();
+}
+
+// Absender vorbelegen: Ein Benutzername mit @ wird als Absender übernommen, solange der
+// Absender nicht von Hand geändert wurde. (Empfänger bleibt leer.)
+let absenderVonHand = false;
+function absenderVorbelegen() {
+  const benutzer = $("benutzer").value.trim();
+  if (absenderVonHand || !benutzer.includes("@")) return;
+  if ($("absender").value !== benutzer) {
+    $("absender").value = benutzer;
+    $("absender").dispatchEvent(new Event("change"));  // nimmt eine Markierung weg
+  }
 }
 
 function mailFelderZeigen() {
@@ -391,6 +404,8 @@ $("konto-dazu").addEventListener("click", () => {
   $("kontenliste").append(kontozeile({ quelle: zustand.quellen[0].name }));
   namenZeigen();
 });
+$("benutzer").addEventListener("input", absenderVorbelegen);
+$("absender").addEventListener("input", () => { absenderVonHand = $("absender").value.trim() !== ""; });
 $("mail-an").addEventListener("change", () => {
   for (const id of ["server", "port", "verschluesselung", "benutzer", "absender", "empfaenger"]) markierungWeg($(id));
   mailFelderZeigen();

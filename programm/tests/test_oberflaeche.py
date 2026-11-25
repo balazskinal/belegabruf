@@ -848,3 +848,21 @@ def test_speichern_markiert_fehlenden_kontonamen(seite, tmp_path):
     assert erstes.evaluate("e => e.classList.contains('feld-fehler')")
     assert "braucht jedes einen Namen" in p.inner_text("#formular .feldsatz")
     assert not pfade.einstellungsdatei().exists()
+
+
+def test_absender_wird_aus_benutzername_vorbelegt(seite):
+    p = seite
+    p.check("#mail-an")
+    p.locator("#benutzer").press_sequentially("ich")
+    assert p.input_value("#absender") == ""  # ohne @ nichts
+    p.locator("#benutzer").press_sequentially("@example.com")
+    assert p.input_value("#absender") == "ich@example.com"
+    assert p.input_value("#empfaenger") == ""
+    # von Hand geändert: bleibt stehen
+    p.fill("#absender", "rechnungen@example.com")
+    p.fill("#benutzer", "anderer@example.com")
+    assert p.input_value("#absender") == "rechnungen@example.com"
+    # von Hand geleert: wieder vorbelegen
+    p.fill("#absender", "")
+    p.fill("#benutzer", "neu@example.com")
+    assert p.input_value("#absender") == "neu@example.com"
