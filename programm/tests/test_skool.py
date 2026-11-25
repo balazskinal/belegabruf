@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -225,3 +226,13 @@ def test_abgemeldet(tmp_path, falsches_skool):
     assert quelle.sitzung_pruefen() is False
     erg = quelle.belege_holen(_umgebung(set(), []))
     assert erg.status == "abgelaufen" and erg.neu == 0
+
+
+def test_zusammenfassung_spricht_von_uebersicht():
+    from belegabruf import ablauf
+    from belegabruf.quellen.basis import Ergebnis
+
+    erg = Ergebnis("skool", "test", neu=2, erwartet=2, vorhanden=2)
+    text = ablauf.zusammenfassung([erg], Path("/x"))
+    assert "Skool (test): fertig" in text
+    assert "Kontrolle: Übersicht nennt 2 Rechnungen, davon geholt: 2 — ✓ passt" in text
