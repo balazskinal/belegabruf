@@ -233,6 +233,53 @@ def als_text(einst: Einstellungen) -> str:
     return "\n".join(zeilen) + "\n"
 
 
+BEKANNT_OBEN = {"belegordner", "ziele", "sichtbar", "konto", "mail"}
+BEKANNT_MAIL = {"server", "port", "verschluesselung", "benutzer", "absender", "empfaenger", "passwort_eintrag"}
+#: Kommentarzeilen, die frühere Versionen selbst geschrieben haben (keine „eigenen“).
+FRUEHERE_KOMMENTARE = {
+    '# Wohin die Belege geliefert werden. Version 1 kennt nur "ordner"',
+    '# (der Belegordner oben). Später kommt "sevdesk" dazu.',
+}
+
+
+def fremde_inhalte(datei: Path | None = None) -> list[str]:
+    """Was in der vorhandenen Einstellungsdatei steht, das beim Neuschreiben verloren
+    ginge: eigene Kommentare und unbekannte Einträge. (Zusätzliche Angaben in einem
+    [[konto]] bleiben erhalten.) Leere Liste, wenn nichts verloren ginge."""
+    datei = datei or pfade.einstellungsdatei()
+    if not datei.exists():
+        return []
+    text = datei.read_text(encoding="utf-8")
+    try:
+        roh = tomllib.loads(text)
+        einst = aus_text(text)
+    except (tomllib.TOMLDecodeError, EinstellungsFehler):
+        return ["die Datei ist fehlerhaft und wird ersetzt"]
+    funde = [f"Eintrag „{k}“" for k in roh if k not in BEKANNT_OBEN]
+    mail_roh = roh.get("mail") if isinstance(roh.get("mail"), dict) else {}
+    funde += [f"Eintrag „mail.{k}“" for k in mail_roh if k not in BEKANNT_MAIL]
+    eigene = {z.strip() for z in text.splitlines() if z.strip().startswith("#")}
+    vorlage = {z.strip() for z in als_text(einst).splitlines() if z.strip().startswith("#")}
+    if eigene - vorlage - FRUEHERE_KOMMENTARE:
+        funde.append("eigene Kommentare")
+    return funde
+
+
+def sichern(datei: Path | None = None) -> Path | None:
+    """Legt eine Kopie der vorhandenen Datei daneben (einstellungen.toml.vorher)."""
+    import shutil
+    from datetime import datetime
+
+    datei = datei or pfade.einstellungsdatei()
+    if not datei.exists():
+        return None
+    ziel = datei.with_name(datei.name + ".vorher")
+    if ziel.exists():
+        ziel = datei.with_name(f"{datei.name}.vorher-{datetime.now():%Y%m%d-%H%M%S}")
+    shutil.copy2(datei, ziel)
+    return ziel
+
+
 def speichern(einst: Einstellungen, datei: Path | None = None) -> Path:
     datei = datei or pfade.einstellungsdatei()
     datei.parent.mkdir(parents=True, exist_ok=True)

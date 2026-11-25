@@ -67,7 +67,7 @@ def starten() -> int:
         if "Executable doesn't exist" in text or "playwright install" in text:
             print('Der Browser fehlt noch. Bitte einmal "Einrichten" doppelklicken.')
         else:
-            print(f"Das Fenster ließ sich nicht öffnen ({type(fehler).__name__}).")
+            print(f"Das Fenster „Belegabruf“ ist zu oder ließ sich nicht öffnen ({type(fehler).__name__}).")
         code = 1
     st = server.steuerung
     if st.beschaeftigt():
@@ -77,4 +77,5 @@ def starten() -> int:
     server.shutdown()
     server.server_close()
     print("Belegabruf ist beendet. Dieses Fenster kann jetzt zu.")
+    print('Wieder öffnen: Doppelklick auf "Belege holen".')
     return code

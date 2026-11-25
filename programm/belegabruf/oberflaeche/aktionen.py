@@ -126,17 +126,25 @@ class Steuerung:
                      "benutzer": m.benutzer, "absender": m.absender, "empfaenger": list(m.empfaenger),
                      "passwort": "hinterlegt" if _passwort_da(m) else "fehlt"},
             "beschaeftigt": self.beschaeftigt(),
+            "auftrag_art": self.auftrag.art if self.beschaeftigt() else None,
+            "datei_fremd": _fremd(),
         }
 
     # Einstellungen ------------------------------------------------------------
 
     def einstellungen_speichern(self, daten: dict) -> dict:
-        if self.beschaeftigt():
-            raise Eingabefehler("Bitte warten, bis der laufende Vorgang fertig ist.")
-        einst = einstellungen_aus_eingaben(daten)
-        einst.belegordner.mkdir(parents=True, exist_ok=True)
-        einstellungen.speichern(einst)
-        return self.zustand()
+        # Unter derselben Sperre wie das Starten eines Auftrags: Kein Speichern mitten im
+        # Abruf, und kein Abruf startet mitten im Speichern.
+        with self._sperre:
+            if self.beschaeftigt():
+                raise Eingabefehler("Bitte warten, bis der laufende Vorgang fertig ist.")
+            einst = einstellungen_aus_eingaben(daten)
+            einst.belegordner.mkdir(parents=True, exist_ok=True)
+            gesichert = einstellungen.sichern() if einstellungen.fremde_inhalte() else None
+            einstellungen.speichern(einst)
+        zustand = self.zustand()
+        zustand["gesichert"] = gesichert.name if gesichert else ""
+        return zustand
 
     def mail_passwort_setzen(self, daten: dict) -> dict:
         wert = daten.get("passwort")
@@ -222,6 +230,13 @@ class Steuerung:
 
 
 # ── Hilfen ───────────────────────────────────────────────────────────────────
+
+
+def _fremd() -> list[str]:
+    try:
+        return einstellungen.fremde_inhalte()
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def _geladen() -> Einstellungen:

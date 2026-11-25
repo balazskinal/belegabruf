@@ -372,3 +372,162 @@ def test_fehler_wird_angezeigt(seite, tmp_path):
     p.click("#speichern")
     p.wait_for_selector("#fehler:not(.versteckt)")
     assert "vollständigen Pfad" in p.inner_text("#fehler")
+
+
+# ── Gleichzeitigkeit, Beenden, eigene Inhalte der Einstellungsdatei ──────────
+
+
+class LangsameAttrappe(Attrappe):
+    """Holt so lange, bis der Test das Tor öffnet."""
+
+    import threading as _t
+    tor = _t.Event()
+
+    def belege_holen(self, umgebung):
+        LangsameAttrappe.tor.wait(10)
+        return super().belege_holen(umgebung)
+
+
+def test_nur_ein_vorgang_zur_zeit_auch_serverseitig(server, tmp_path, monkeypatch):
+    import time
+
+    monkeypatch.setattr(ablauf, "quelle_fuer", lambda konto: LangsameAttrappe(konto, Path("/x")))
+    monkeypatch.setattr(ablauf.zustand, "lauf_merken", lambda *a: None)
+    LangsameAttrappe.tor.clear()
+    _speichern(server, tmp_path)
+    assert _anfrage(server, "POST", "/api/holen", _mit(server), {})[0].status == 200
+    time.sleep(0.3)
+    # Während des Abrufs: kein zweites Holen, kein Anmelden, kein Prüfen, kein Speichern
+    for pfad, rumpf in (("/api/holen", {}), ("/api/anmelden", {"quelle": "airbnb", "name": "privat"}),
+                        ("/api/pruefen", {}), ("/api/einstellungen", _eingaben(tmp_path))):
+        antwort, inhalt = _anfrage(server, "POST", pfad, _mit(server), rumpf)
+        assert antwort.status == 400, pfad
+        assert "warten" in json.loads(inhalt)["fehler"]
+    zustand = json.loads(_anfrage(server, "GET", "/api/zustand", _mit(server))[1])
+    assert zustand["beschaeftigt"] and zustand["auftrag_art"] == "holen"
+    LangsameAttrappe.tor.set()
+    for _ in range(50):
+        if not server.steuerung.beschaeftigt():
+            break
+        time.sleep(0.1)
+    assert _anfrage(server, "POST", "/api/anmelden", _mit(server), {"quelle": "airbnb", "name": "privat"})[0].status == 200
+
+
+def test_knoepfe_in_der_seite_gesperrt(seite, server, tmp_path, monkeypatch):
+    monkeypatch.setattr(ablauf, "quelle_fuer", lambda konto: LangsameAttrappe(konto, Path("/x")))
+    LangsameAttrappe.tor.clear()
+    p = seite
+    p.fill("#belegordner", str(tmp_path / "Belege"))
+    p.fill("#kontenliste input[type=text]", "privat")
+    p.click("#speichern")
+    p.wait_for_selector("#gespeichert:not(.versteckt)")
+    p.click("#holen")
+    p.wait_for_function("() => document.querySelector('#holen').disabled")
+    for knopf in ("#alle-pruefen", "#speichern", "#konten button:has-text('Anmelden')", "#konten button:has-text('Prüfen')"):
+        assert p.is_disabled(knopf), knopf
+    LangsameAttrappe.tor.set()
+    p.wait_for_function("() => !document.querySelector('#holen').disabled")
+    assert p.is_enabled("#konten button:has-text('Anmelden')")
+
+
+def _starten_mit(monkeypatch, fenster):
+    from belegabruf import oberflaeche
+
+    erzeugt = []
+    alt = oberflaeche.Bedienserver
+
+    class Merker(alt):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            erzeugt.append(self)
+
+    monkeypatch.setattr(oberflaeche, "Bedienserver", Merker)
+    monkeypatch.setattr(oberflaeche, "_fenster_offen_halten", fenster)
+    code = oberflaeche.starten()
+    return code, erzeugt[0]
+
+
+def _laeuft_noch(s) -> bool:
+    try:
+        _anfrage(s, "GET", "/api/zustand", _mit(s))
+        return True
+    except OSError:
+        return False
+
+
+def test_fenster_zu_waehrend_abruf_wartet_und_beendet_sauber(monkeypatch, tmp_path, capsys):
+    import threading
+    import time
+
+    fertig = threading.Event()
+
+    def fenster(server):
+        # Ein Vorgang läuft, dann schließt der Nutzer das Fenster.
+        def arbeit(a):
+            time.sleep(1.0)
+            fertig.set()
+        server.steuerung.starten("holen", arbeit)
+
+    code, server = _starten_mit(monkeypatch, fenster)
+    assert fertig.is_set()  # nicht mittendrin abgebrochen
+    assert code == 0 and not _laeuft_noch(server)  # kein verwaister Server
+    ausgabe = capsys.readouterr().out
+    assert "Warte, bis der laufende Vorgang fertig ist" in ausgabe and "beendet" in ausgabe
+    assert "Belege holen" in ausgabe  # sagt, wie man es wieder öffnet
+
+
+def test_abgestuerztes_fenster_beendet_sauber(monkeypatch, capsys):
+    def fenster(server):
+        raise RuntimeError("Target page, context or browser has been closed")
+
+    code, server = _starten_mit(monkeypatch, fenster)
+    assert code == 1 and not _laeuft_noch(server)
+    assert "Belege holen" in capsys.readouterr().out
+
+
+def test_eigene_inhalte_warnung_und_sicherung(server, tmp_path):
+    datei = pfade.einstellungsdatei()
+    datei.parent.mkdir(parents=True, exist_ok=True)
+    datei.write_text(
+        f'# Meine Notiz: Konto privat ist das alte\nbelegordner = "{tmp_path / "Belege"}"\n'
+        'ziele = ["ordner"]\nlieblingsfarbe = "blau"\n\n[[konto]]\nquelle = "airbnb"\nname = "privat"\n'
+        'aktiv = "ja"\nadresse = "https://www.airbnb.de"\n', encoding="utf-8")
+    zustand = json.loads(_anfrage(server, "GET", "/api/zustand", _mit(server))[1])
+    assert "Eintrag „lieblingsfarbe“" in zustand["datei_fremd"] and "eigene Kommentare" in zustand["datei_fremd"]
+    antwort, inhalt = _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path))
+    assert antwort.status == 200 and json.loads(inhalt)["gesichert"] == "einstellungen.toml.vorher"
+    vorher = datei.with_name("einstellungen.toml.vorher").read_text(encoding="utf-8")
+    assert "Meine Notiz" in vorher and "lieblingsfarbe" in vorher
+    neu = datei.read_text(encoding="utf-8")
+    assert 'adresse = "https://www.airbnb.de"' in neu  # Zusatzangaben im Konto bleiben
+    # Danach ist nichts Fremdes mehr da → keine Warnung, keine weitere Sicherung
+    assert json.loads(_anfrage(server, "GET", "/api/zustand", _mit(server))[1])["datei_fremd"] == []
+    _, inhalt = _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path))
+    assert json.loads(inhalt)["gesichert"] == ""
+
+
+def test_eigene_datei_ohne_fremdes_keine_warnung(server, tmp_path):
+    _speichern(server, tmp_path)
+    assert json.loads(_anfrage(server, "GET", "/api/zustand", _mit(server))[1])["datei_fremd"] == []
+
+
+def test_warnung_steht_vor_dem_speichern_in_der_seite(server, tmp_path, monkeypatch):
+    if not _chromium_da():
+        pytest.skip("Chromium nicht installiert")
+    datei = pfade.einstellungsdatei()
+    datei.parent.mkdir(parents=True, exist_ok=True)
+    datei.write_text(f'# eigene Notiz\nbelegordner = "{tmp_path / "Belege"}"\n', encoding="utf-8")
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(channel="chromium")
+        p = b.new_page()
+        p.goto(server.adresse)
+        p.wait_for_selector("#version:not(:empty)")
+        p.click("#einstellungen summary")
+        assert "eigene Kommentare" in p.inner_text("#fremd-hinweis")
+        p.fill("#kontenliste input[type=text]", "privat")
+        p.click("#speichern")
+        p.wait_for_selector("#gespeichert:not(.versteckt)")
+        assert "einstellungen.toml.vorher" in p.inner_text("#gespeichert")
+        b.close()

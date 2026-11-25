@@ -148,6 +148,7 @@
           <label for="empfaenger">Empfänger (mehrere mit Komma trennen)</label>
           <input type="text" id="empfaenger" placeholder="belege@example.com" spellcheck="false">
         </div>
+        <div id="fremd-hinweis" class="meldung warn versteckt oben16"></div>
         <div class="knoepfe oben16">
           <button type="submit" class="haupt" id="speichern">Einstellungen speichern</button>
         </div>
@@ -288,6 +289,12 @@ async function laden(formularAuch) {
   $("bereich-konten").classList.toggle("versteckt", !zustand.eingerichtet);
   if (!zustand.eingerichtet) $("einstellungen").open = true;
   $("passwort-status").textContent = zustand.mail.passwort;
+  const fremd = zustand.datei_fremd || [];
+  $("fremd-hinweis").textContent = fremd.length
+    ? "Hinweis: Deine Einstellungsdatei enthält " + fremd.join(", ") + ". Beim Speichern schreibt Belegabruf die Datei neu; "
+      + "die bisherige Fassung wird vorher unverändert als „einstellungen.toml.vorher“ daneben gesichert."
+    : "";
+  $("fremd-hinweis").classList.toggle("versteckt", !fremd.length);
   kontenZeigen();
   if (formularAuch) formularFuellen();
   knoepfeSperren(zustand.beschaeftigt);
@@ -360,7 +367,10 @@ $("formular").addEventListener("submit", async (ereignis) => {
             empfaenger: $("empfaenger").value.split(",").map((s) => s.trim()).filter(Boolean) },
   };
   try {
-    await api("POST", "/api/einstellungen", daten);
+    const r = await api("POST", "/api/einstellungen", daten);
+    $("gespeichert").textContent = r.gesichert
+      ? `Gespeichert. Die bisherige Datei liegt unverändert als „${r.gesichert}“ daneben.`
+      : "Gespeichert.";
     $("gespeichert").classList.remove("versteckt");
     await laden(true);
   } catch (e) { zeigeFehler(e.message); }
