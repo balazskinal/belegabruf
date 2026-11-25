@@ -159,6 +159,24 @@ class Einstellungen:
         ]
 
 
+def kollision_text(anbieter: str, a: Konto, b: Konto, kurz: str) -> str:
+    """Meldung, wenn zwei Konten desselben Anbieters für das Programm dasselbe sind.
+    Geht es um die Kennung „standard“ eines (früher) namenlosen Kontos, sagt sie das."""
+    standard = [k for k in (a, b) if k.name == STANDARD_KENNUNG]
+    if kurz == STANDARD_KENNUNG and standard:
+        frueher = standard[0]
+        anderes = b if frueher is a else a
+        if not frueher.anzeigetitel:
+            return (f"Bei {anbieter} gibt es schon ein Konto ohne Namen; das heißt intern „standard“. "
+                    f"Gib einem der beiden einen Namen (nicht „Standard“).")
+        return (f"Das Konto „{frueher.anzeigetitel}“ bei {anbieter} war früher ohne Namen und heißt intern "
+                f"deshalb „standard“ (daran hängt seine Anmeldung). Bitte dem Konto "
+                f"„{anderes.anzeigetitel or anderes.name}“ einen anderen Namen geben.")
+    return (f"Die Konten „{a.anzeigetitel or a.name}“ und „{b.anzeigetitel or b.name}“ bei {anbieter} sind für "
+            f"das Programm dasselbe (beide ergeben den Ordnernamen „{kurz}“). Bitte einem der beiden einen "
+            "deutlich anderen Namen geben.")
+
+
 def konten_unterscheidbar(konten: list[Konto]) -> None:
     """Regeln für Kontonamen je Anbieter:
 
@@ -185,10 +203,7 @@ def konten_unterscheidbar(konten: list[Konto]) -> None:
                 kurz = pfade.kurzname(wert)
                 anderes = verzeichnis.get(kurz)
                 if anderes is not None and anderes is not k:
-                    raise EinstellungsFehler(
-                        f"Die Konten „{anderes.anzeigetitel or anderes.name}“ und „{k.anzeigetitel or k.name}“ "
-                        f"bei {anbieter} sind für das Programm dasselbe (beide ergeben den Ordnernamen "
-                        f"„{kurz}“). Bitte einem der beiden einen deutlich anderen Namen geben.")
+                    raise EinstellungsFehler(kollision_text(anbieter, anderes, k, kurz))
                 verzeichnis[kurz] = k
 
 

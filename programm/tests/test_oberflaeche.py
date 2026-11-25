@@ -1364,3 +1364,23 @@ def test_datum_in_der_zukunft_aus_der_datei_gibt_hinweis(monkeypatch, tmp_path):
     konto = Konto(quelle="airbnb", name="standard", titel="", belege_ab="01.01.2099")
     erg = ablauf.abrufen(einstellungen.Einstellungen(belegordner=tmp_path / "B", konten=[konto]), konto, lambda t: None)
     assert any("Zukunft" in h for h in erg.hinweise)
+
+
+# ── Prüfbefund N4: verständliche Meldung bei der Kennung „standard“ ──────────
+
+
+def test_kollision_mit_standard_kennung_verstaendlich(server, tmp_path):
+    # früher namenlos, inzwischen „Privat“ (Kennung standard); neues Konto „Standard“
+    _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path, konten=[{"quelle": "airbnb", "name": ""}]))
+    zwei = [{"quelle": "airbnb", "name": "Privat", "kennung": "standard"}, {"quelle": "airbnb", "name": "Standard"}]
+    antwort, inhalt = _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path, konten=zwei))
+    satz = json.loads(inhalt)["felder"]["konto-1-name"]
+    assert antwort.status == 400
+    assert "„Privat“" in satz and "früher ohne Namen" in satz and "„Standard“ einen anderen Namen" in satz
+
+
+def test_kollision_mit_namenlosem_konto_in_der_datei(tmp_path):
+    a = Konto(quelle="airbnb", name="standard", titel="")
+    b = Konto(quelle="airbnb", name="Standard", titel="Standard")
+    text = einstellungen.kollision_text("Airbnb", a, b, "standard")
+    assert text.startswith("Bei Airbnb gibt es schon ein Konto ohne Namen") and "einem der beiden einen Namen" in text

@@ -414,11 +414,12 @@ def einstellungen_aus_eingaben(daten: dict) -> Einstellungen:
             sammler.feld(f"konto-{nr}-name", f"Bei mehreren {anbieter}-Konten braucht jedes einen Namen.")
             continue
         for n, a in gleiche:
-            if n < nr and (pfade.kurzname(a.name) == pfade.kurzname(k.name)
-                           or (k.anzeigetitel and pfade.kurzname(a.anzeigetitel) == pfade.kurzname(k.anzeigetitel))):
-                sammler.feld(f"konto-{nr}-name",
-                             f"Die Konten „{a.anzeigetitel or a.name}“ und „{k.anzeigetitel or k.name}“ bei {anbieter} "
-                             "sind für das Programm dasselbe. Bitte einen deutlich anderen Namen.")
+            if n >= nr:
+                continue
+            gleich_kennung = pfade.kurzname(a.name) == pfade.kurzname(k.name)
+            if gleich_kennung or (k.anzeigetitel and pfade.kurzname(a.anzeigetitel) == pfade.kurzname(k.anzeigetitel)):
+                kurz = pfade.kurzname(k.name if gleich_kennung else k.anzeigetitel)
+                sammler.feld(f"konto-{nr}-name", einstellungen.kollision_text(anbieter, a, k, kurz))
                 break
     konten = [k for _, k in zeilen]
 
