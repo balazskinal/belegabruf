@@ -87,8 +87,10 @@ class FalschesSMTP:
     def data(self, rumpf):
         self.server.befehle.append("data")
         v = self.server.verhalten
-        if v == "data_ablehnen":
+        if v == "data_ablehnen":  # schon der DATA-Befehl wird abgelehnt: smtplib wirft
             raise smtplib.SMTPDataError(552, b"5.3.4 message too big")
+        if v in ("inhalt_554", "inhalt_451"):  # erst nach dem Inhalt: smtplib gibt (code, text) zurück
+            return (554, b"5.7.1 rejected as spam") if v == "inhalt_554" else (451, b"4.3.0 try again later")
         if v == "keine_antwort":
             self.server.mails.append((self._von, self._an, rumpf))  # kam an, Antwort fehlt
             raise smtplib.SMTPServerDisconnected("Connection unexpectedly closed")
@@ -538,3 +540,46 @@ def test_einrichten_vorgabe_ist_nein(tmp_path, monkeypatch):
     s = _falscher_server(monkeypatch)
     einst = _einrichten(monkeypatch, tmp_path, VORNE + [""], _Speicher())
     assert not einst.mail_an and s.befehle == []
+
+
+@pytest.mark.parametrize("verhalten, code", [("inhalt_554", "554"), ("inhalt_451", "451")])
+def test_ablehnung_nach_dem_inhalt_bleibt_offen(tmp_path, server, verhalten, code):
+    """smtplib.data() wirft hier nicht, sondern gibt den Code zurück — das zählt als abgelehnt."""
+    einst = _einst(tmp_path, empfaenger=(A, B))
+    Falsch.rechnungen = [("a1", "2026-11-03", "AIUC-1")]
+    server.verhalten = verhalten
+    erg = _lauf(einst)
+    assert _stand(erg, A)["geliefert"] == 0 and _stand(erg, A)["offen"] == 1
+    assert code in _stand(erg, A)["fehler"] and _stand(erg, A)["unklar"] == []
+    assert _protokoll(einst).zustand("rechnung:a1", "mail:beleg@example.com") == "offen"
+    # RSET nach der Ablehnung, dann versucht der nächste Empfänger es sauber
+    i = server.befehle.index("data")
+    assert server.befehle[i + 1] == "rset"
+    assert _stand(erg, B)["offen"] == 1  # lehnt bei B genauso ab
+    server.verhalten = "ok"
+    erg = _lauf(einst)  # nächster Lauf versucht es erneut
+    assert _stand(erg, A)["geliefert"] == 1 and _stand(erg, B)["geliefert"] == 1
+
+
+def test_rset_nach_ablehnung_des_data_befehls(tmp_path, server):
+    einst = _einst(tmp_path)
+    Falsch.rechnungen = [("a1", "2026-11-03", "AIUC-1")]
+    server.verhalten = "data_ablehnen"
+    _lauf(einst)
+    i = server.befehle.index("data")
+    assert server.befehle[i + 1] == "rset"
+
+
+def test_steuerzeichen_halten_den_versand_nicht_auf(tmp_path, server, monkeypatch):
+    einst = _einst(tmp_path)
+    Falsch.rechnungen = [("a1", "2026-11-03", "AIUC-1\r\nBcc: x@example.com")]
+    erg = _lauf(einst)
+    assert _stand(erg)["geliefert"] == 1 and _stand(erg)["fehler"] == ""
+    m = email.message_from_bytes(server.mails[0][2], policy=policy.default)
+    assert m["Subject"] == "Beleg Airbnb AIUC-1 Bcc: x@example.com vom 03.11.2026"
+    assert m["Bcc"] is None
+
+
+def test_einzeilig():
+    assert mail.einzeilig("a\r\nb\tc\x00d") == "a b c d"
+    assert mail.einzeilig(None) == ""
