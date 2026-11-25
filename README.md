@@ -53,10 +53,12 @@ im Monat laufen lassen. Liegt der letzte Lauf über zwei Monate zurück, warnt d
 belegabruf-v…/
   Start Mac/          ← nur das hier benutzen, wenn du einen Mac hast
     Einrichten.command
-    Belege holen.command
+    Belege holen.command             ← öffnet das Fenster „Belegabruf“
+    Belegabruf (Terminal).command    ← das bisherige Menü im Terminal (z. B. zur Fehlersuche)
   Start Windows/      ← nur das hier benutzen, wenn du Windows hast
     Einrichten.cmd
     Belege holen.cmd
+    Belegabruf (Terminal).cmd
   programm/           ← das eigentliche Programm, hier musst du nichts anfassen
   README.md           ← diese Anleitung
   LICENSE
@@ -87,13 +89,19 @@ Administratorrechte nötig.
      Informationen“** und dann **„Trotzdem ausführen“** klicken.
 4. Ein schwarzes Fenster geht auf und lädt alles Nötige (ein Hilfsprogramm namens *uv*, Python und
    einen eigenen Browser). Das dauert beim ersten Mal ein paar Minuten.
-5. Dann kommen ein paar Fragen. **Enter übernimmt jeweils den Vorschlag in [Klammern].**
-   - Welche Anbieter (Airbnb, Skool, Xentra)
-   - Ein Name für dein Konto — nur für dich, z. B. „privat“. Hast du mehrere Airbnb-Konten
-     (z. B. einen Zugang als Co-Gastgeber), kannst du mehrere eintragen; jedes bekommt seine eigene Anmeldung.
-   - Der Belegordner (Vorschlag: `Dokumente/Belege`)
-   - Ob die Rechnungen auch per Mail verschickt werden sollen (Vorschlag: nein; siehe unten)
-6. Zum Schluss öffnet sich das Airbnb-Anmeldefenster. Melde dich an. Fertig.
+5. Dann öffnet sich das Fenster **„Belegabruf“**. Dort unter **Einstellungen**:
+   - den **Belegordner** (Vorschlag: `Dokumente/Belege`),
+   - deine **Konten**: Anbieter (Airbnb, Skool, Xentra) und ein Name nur für dich, z. B. „privat“. Hast du
+     mehrere Konten beim selben Anbieter (z. B. einen Zugang als Co-Gastgeber), trag sie einzeln ein —
+     jedes bekommt seine eigene Anmeldung,
+   - auf Wunsch den **Versand per Mail** (siehe unten),
+
+   dann **„Einstellungen speichern“**.
+6. Oben bei **Konten** je Konto einmal **„Anmelden“**: Es öffnet sich ein eigenes Fenster, dort meldest
+   du dich ganz normal an. Danach steht beim Konto „angemeldet“. Fertig.
+
+Das schwarze Terminalfenster bleibt dabei klein offen — **nicht schließen, solange Belegabruf läuft.**
+Beenden über den Knopf **„Beenden“** im Fenster „Belegabruf“ (oder das Fenster schließen).
 
 ## Skool
 
@@ -130,24 +138,30 @@ aber nur, was neu ist.
 ## Benutzen
 
 Doppelklick auf **„Belege holen“**: auf dem Mac `Start Mac/Belege holen.command`, unter Windows
-`Start Windows/Belege holen.cmd`.
+`Start Windows/Belege holen.cmd`. Es öffnet sich das Fenster **„Belegabruf“**:
 
-- **Enter** = los
-- **E** = Einstellungen:
-  - **1** = Einstellungen ändern (die Fragen von oben noch einmal)
-  - **2** = Fehlende Dateien neu holen (siehe unten)
-- **Q** = beenden
+- **Konten** — je Konto der Zustand der Anmeldung (angemeldet, abgelaufen, unbekannt), dazu
+  **„Prüfen“** und **„Anmelden“**.
+- **„Belege holen“** — holt alles Neue. Der Fortschritt läuft mit, am Ende steht die Zusammenfassung:
+  wie viele neu, wie viele schon da, ob die Anzahl passt, was verschickt wurde.
+- **„Fehlende Dateien neu holen“** — siehe unten.
+- **Einstellungen** — Belegordner, Konten (hinzufügen, an/aus), Versand per Mail.
+- **„Beenden“** — oben rechts.
 
-Während des Abrufs musst du nichts tun und kannst den Rechner normal weiterbenutzen.
+Während des Abrufs musst du nichts tun und kannst den Rechner normal weiterbenutzen. Das kleine
+Terminalfenster daneben bitte offen lassen, solange Belegabruf läuft.
 
-**Läuft die Anmeldung mittendrin ab** (Airbnb verlangt manchmal schnell eine neue Anmeldung),
-meldet das Programm das in der Zusammenfassung. Beim nächsten Start kommt das Anmeldefenster, und
-der Rest wird nachgeholt.
+**Läuft die Anmeldung ab** (Airbnb verlangt manchmal schnell eine neue Anmeldung), steht beim Konto
+„abgelaufen“ und in der Zusammenfassung „nicht angemeldet“. Dann einmal **„Anmelden“** und noch einmal
+**„Belege holen“** — der Rest wird nachgeholt.
 
 **Eine Datei noch einmal holen:** Einfach löschen reicht nicht — das Protokoll weiß, dass sie schon
-geholt wurde. Stattdessen beim Start **E** und dann **2 „Fehlende Dateien neu holen“** wählen. Dann
-kommt alles wieder, was im Protokoll steht, aber im Belegordner fehlt — soweit Airbnb es noch anbietet
-(die letzten 12 Monate).
+geholt wurde. Stattdessen **„Fehlende Dateien neu holen“** wählen (die Zahl am Knopf sagt, wie viele
+fehlen). Dann kommt alles wieder, was im Protokoll steht, aber im Belegordner fehlt — soweit der
+Anbieter es noch anbietet (bei Airbnb die letzten 12 Monate).
+
+**Lieber im Terminal?** Das bisherige Menü gibt es weiter: Doppelklick auf **„Belegabruf (Terminal)“**
+(Enter = los, E = Einstellungen, Q = beenden).
 
 ## Versand per Mail
 
@@ -161,20 +175,20 @@ genauso, als würdest du die Mail selbst in deinem Mailprogramm schreiben. Desha
 nach den Zugangsdaten deines Postfachs. Die Mails liegen danach je nach Anbieter auch in deinem Ordner
 „Gesendet“.
 
-**Einschalten:** „Einrichten“ doppelklicken und bei „Per Mail verschicken?“ mit **j** antworten.
-Dann fragt es nach den Angaben deines Mailkontos — die findest du bei deinem Mailanbieter unter
-„SMTP“ oder „Postausgangsserver“:
+**Einschalten:** Im Fenster „Belegabruf“ unter **Einstellungen** „Rechnungen zusätzlich per Mail
+verschicken“ ankreuzen und die Angaben deines Mailkontos eintragen — die findest du bei deinem
+Mailanbieter unter „SMTP“ oder „Postausgangsserver“:
 
-| Frage | Beispiel |
+| Feld | Beispiel |
 |---|---|
 | Postausgangsserver | `smtp.example.com` |
 | Verschlüsselung | SSL (meist Port 465) oder STARTTLS (meist Port 587) — **ohne Verschlüsselung wird nichts verschickt** |
 | Benutzername | meist deine Mailadresse, z. B. `ich@example.com` |
 | Absenderadresse | `ich@example.com` |
 | Empfänger | z. B. `belege@example.com`, mehrere mit Komma |
-| Passwort | wird verdeckt eingegeben (man sieht nichts — das ist Absicht) |
+| Passwort | eigenes Feld „Mail-Passwort“ → „Passwort hinterlegen“; danach steht dort nur „hinterlegt“ |
 
-Zum Schluss meldet es sich einmal am Mailserver an und wieder ab — **ohne eine Mail zu schicken** —
+Mit **„Mail-Anmeldung prüfen“** meldet es sich einmal am Mailserver an und wieder ab — **ohne eine Mail zu schicken** —
 und sagt, ob es klappt.
 
 **Das Passwort** kommt in den **Passwortspeicher deines Rechners** (Mac: Schlüsselbund, Windows:
@@ -244,7 +258,7 @@ Beim Start steht ein Hinweis, wenn es eine neuere Version gibt. Dann:
 
 1. Den **alten Ordner `belegabruf-v…` komplett löschen** (mit Start-Ordnern und `programm`).
 2. Die neue ZIP-Datei von [Neueste Version](https://github.com/balazskinal/belegabruf/releases/latest) laden und auspacken.
-3. „Einrichten“ doppelklicken (lädt eventuell neue Bausteine; deine Antworten bleiben als Vorschlag stehen).
+3. „Einrichten“ doppelklicken (lädt eventuell neue Bausteine; deine Einstellungen bleiben erhalten).
 
 Einstellungen, Anmeldungen, Protokolle und Belege bleiben dabei erhalten — sie liegen nicht im
 Programmordner.
@@ -252,6 +266,11 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 
 ## Was neu ist
 
+- **2.0.0** — **Bedienung im Fenster statt im Terminal.** „Belege holen“ öffnet das Fenster
+  „Belegabruf“: Einstellungen als Formular (auch Mail-Passwort, direkt in den Passwortspeicher), je
+  Konto Anmelden und Prüfen, Belege holen mit Fortschritt und Zusammenfassung. Das bisherige Menü gibt es
+  weiter über „Belegabruf (Terminal)“. Beim Update einmal „Einrichten“ doppelklicken.
+  **Windows ist noch ungetestet.**
 - **1.3.0** — Neue Rechnungen auf Wunsch zusätzlich **per Mail** verschicken (über dein eigenes
   Postfach, siehe [Versand per Mail](#versand-per-mail)). Beim Update einmal „Einrichten“
   doppelklicken; die Frage nach dem Mailversand steht auf „nein“, bis du sie mit „j“ beantwortest.
@@ -283,8 +302,9 @@ Warum das Programm so gebaut ist, steht in den **Entscheidungen** unter
 Im Ordner `programm` (mit installiertem [uv](https://docs.astral.sh/uv/)):
 
 ```bash
-uv run belege                                   # wie Doppelklick
-uv run belege einrichten
+uv run belege oberflaeche                       # Fenster „Belegabruf“ (wie Doppelklick auf „Belege holen“)
+uv run belege start                             # Menü im Terminal (wie „Belegabruf (Terminal)“)
+uv run belege einrichten                        # Einrichten als Fragen im Terminal
 uv run belege pruefen --json                    # sind die Konten angemeldet?
 uv run belege anmelden --quelle airbnb --konto privat
 uv run belege holen --quelle airbnb --json      # unbeaufsichtigt, öffnet nie ein Fenster
@@ -296,6 +316,14 @@ Exit-Code: 0 = alles gut, 2 = Anmeldung nötig oder abgelaufen, nicht alles geho
 verschickt (später noch einmal), 1 = Fehler. So lassen sich die
 Bausteine später auch aus einer Automatisierung (z. B. n8n) aufrufen.
 
+### Sicherheit der Bedienoberfläche
+
+Das Fenster „Belegabruf“ spricht mit einem kleinen Server im Programm selbst. Er ist **nur auf diesem
+Rechner** erreichbar (`127.0.0.1`, freier Port) und nur mit einem **Zufallsschlüssel**, den nur das Fenster
+kennt. Anfragen mit fremdem `Host` (Schutz vor DNS-Rebinding), fremdem `Origin` oder ohne Schlüssel lehnt
+er ab; es gibt kein CORS, keine Protokolldatei, und Passwörter gehen nur hinein (direkt in den
+Passwortspeicher), nie heraus. Die Tests dazu stehen in `programm/tests/test_oberflaeche.py`.
+
 ### Aufbau
 
 ```
@@ -304,7 +332,9 @@ programm/
   pyproject.toml, uv.lock    Abhängigkeiten (Python, Playwright, PyMuPDF, keyring)
   tests/
   belegabruf/
-    cli.py            Kommandozeile und Ablauf beim Doppelklick
+    cli.py            Kommandozeile und Menü im Terminal
+    oberflaeche/      Fenster „Belegabruf“: lokaler Server (server.py), Aktionen (aktionen.py),
+                      Bedienseite (seite.html) — ruft dieselben Bausteine wie das CLI
     ablauf.py         Gerüst: prüfen, anmelden lassen, holen, abliefern
     quellen/          ein Baustein je Anbieter: airbnb.py, skool.py, xentra.py
       basis.py        die feste Schnittstelle für Bausteine
@@ -350,6 +380,7 @@ Die GitHub Action baut das ZIP und hängt es an das Release.
 
 ## Offen
 
-- **Windows:** noch von niemandem getestet (Abnahmepunkt 5). Wer es ausprobiert, bitte Rückmeldung.
+- **Windows:** noch von niemandem getestet — auch die Bedienoberfläche aus 2.0.0 nicht. Wer es
+  ausprobiert, bitte Rückmeldung.
 - **Mail:** Der erste echte Versand steht noch aus; getestet ist gegen einen nachgebauten Mailserver.
 - Weitere Bausteine und das Ziel „Upload an die Buchhaltung per API“ folgen in späteren Versionen.

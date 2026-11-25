@@ -175,9 +175,9 @@
 
 <script nonce="{{NONCE}}">
 "use strict";
-// Den Schlüssel aus der Adresse merken und dort entfernen (er soll nicht sichtbar bleiben).
+// Der Schlüssel steht in der Adresse des App-Fensters (ohne Adressleiste). Er bleibt dort,
+// damit „Neu laden“ funktioniert; weitergegeben wird er nie (Referrer-Policy: no-referrer).
 const SCHLUESSEL = new URLSearchParams(location.search).get("k") || "";
-history.replaceState(null, "", "/");
 
 const $ = (id) => document.getElementById(id);
 let zustand = null;

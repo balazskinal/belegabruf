@@ -1,7 +1,8 @@
 # ADR-004: Abliefern — zuerst per Mail, danach per API
 
 - **Datum:** 25.11.2026
-- **Status:** ✅ gilt · Mail-Weg = Version 1.3.0 · sevDesk-API = Version 1.4.0
+- **Status:** ✅ gilt · Mail-Weg = Version 1.3.0 · sevDesk-API = Version 2.1.0 (früher als 1.4.0 geplant;
+  verschoben hinter die Oberfläche 2.0.0, siehe ADR-005)
 
 ## Kontext
 
@@ -31,7 +32,7 @@ API (25.11.2026, an echten Belegen) hat gezeigt:
    - Eine Mail je Rechnung und Empfänger, nie doppelt (Protokoll, ADR-002). Beim **allerersten**
      Einschalten eines Empfängers gilt alles schon Geholte als verschickt. Bleibt die Antwort des Servers
      nach dem Senden aus, gilt die Mail als „unklar“ und wird nicht noch einmal geschickt.
-2. **Version 1.4: Ziel „sevdesk“ über die API.** Nur `uploadTempFile` und `saveVoucher` (dazu `GET
+2. **Version 2.1: Ziel „sevdesk“ über die API.** Nur `uploadTempFile` und `saveVoucher` (dazu `GET
    /SevClient` beim Einrichten). Eingetragen wird nur, was das Programm ohnehin weiß (Datum,
    Rechnungsnummer, Lieferant); Betrag und Konto ergänzt man in sevDesk. Die **Steuerregel** wählt jeder
    selbst in der Einrichtung — es gibt keine Vorgabe.

@@ -1,7 +1,7 @@
 # ADR-005: Bedienoberfläche im Browserfenster statt Terminal
 
 - **Datum:** 25.11.2026
-- **Status:** ✅ Richtung gilt · 📋 eingeplant als **Version 2.0.0** · drei Punkte offen (unten)
+- **Status:** ✅ gilt · 🚧 gebaut als **Version 2.0.0** (PR offen) · offene Punkte entschieden 25.11.2026
 
 ## Kontext
 
@@ -31,12 +31,25 @@ bringt das Programm ohnehin ein eigenes Chromium mit (Playwright, eigenes Profil
 - **Eigene Fenster-Oberfläche (Tkinter o. Ä.):** auf dem Mac unzuverlässig, doppelte Pflege.
 - **Signierte App:** würde das Terminal ganz beseitigen, kostet aber Entwicklerkonten und Pflege.
 
-## Offen (vor dem Bau klären)
+## Entschieden 25.11.2026 (Balazs)
 
-1. **Terminalfenster:** klein bzw. minimiert mit Hinweis „nicht schließen“, oder versteckt (Beenden nur
-   über die Bedienseite)?
-2. **Terminal-Menü** neben der Oberfläche behalten (Fehlersuche) oder entfernen?
-3. **Sprache:** nur Deutsch oder Deutsch/Englisch?
+1. **Terminalfenster:** bleibt offen, klein bzw. minimiert, mit dem gut sichtbaren Satz „Nicht schließen,
+   solange Belegabruf läuft“. Es wird nicht versteckt.
+2. **Terminal-Menü bleibt.** Die Startdatei „Belege holen“ öffnet künftig die Oberfläche; das bisherige
+   Menü gibt es weiter über eine eigene Startdatei „Belegabruf (Terminal)“ in `Start Mac/` und
+   `Start Windows/`.
+3. **Sprache:** nur Deutsch.
+4. **Versionen:** Die Oberfläche wird **2.0.0**; der sevDesk-API-Weg (PR #3) kommt später als **2.1.0**.
+
+## Nachtrag 25.11.2026: Anmeldung im eigenen Fenster statt als Tab
+
+Punkt 3 der Entscheidung („Anmeldungen als neuer Tab im selben Fenster“) lässt sich so nicht bauen: Die
+Anmeldung eines Kontos lebt in dessen **dauerhaftem Browserprofil**, und jedes dauerhafte Profil ist bei
+Chromium eine **eigene Browser-Instanz** — ein Tab im Fenster der Bedienseite kann dieses Profil nicht
+benutzen. Deshalb öffnet „Anmelden“ je Konto ein **eigenes Fenster** mit dem Profil des Kontos, wie bisher.
+Die Bedienseite zeigt den Zustand und erkennt die Anmeldung von selbst. Abruf und Prüfen laufen wie bisher
+unsichtbar im Hintergrund. Die Bedienseite selbst läuft als App-Fenster (ohne Adressleiste) mit einem
+eigenen, leeren Profil (`profile/_bedienseite`).
 
 ## Folgen
 
