@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from typing import Callable
 
@@ -11,6 +12,8 @@ from belegabruf.browser import BrowserFehlt, ProfilBelegt
 from belegabruf.einstellungen import Einstellungen, Konto
 from belegabruf.protokoll import Protokoll, altes_protokoll_uebernehmen
 from belegabruf.quellen.basis import Beleg, Ergebnis, Quelle, SitzungAbgelaufen, Umgebung
+from belegabruf.ziele import mail
+from belegabruf.ziele.basis import Abgelehnt, Lieferziel, Sendung, Unklar
 
 Melden = Callable[[str], None]
 
@@ -52,6 +55,121 @@ def anmelden(konto: Konto, melden: Melden) -> bool:
         return False
 
 
+# ── Lieferziele (Mail je Empfänger; später weitere) ──────────────────────────
+
+
+def lieferziel_namen(einst: Einstellungen) -> list[str]:
+    """Die eingeschalteten Lieferziele, wie sie im Protokoll heißen."""
+    namen: list[str] = []
+    if einst.mail_an:
+        for adresse in einst.mail.empfaenger:
+            name = mail.ziel_name(adresse)
+            if name not in namen:
+                namen.append(name)
+    return namen
+
+
+def lieferziele_erstellen(einst: Einstellungen) -> list[Lieferziel]:
+    """Baut die Lieferziele. Liest dazu das Passwort aus dem Passwortspeicher."""
+    ziele: list[Lieferziel] = []
+    if einst.mail_an and einst.mail.empfaenger:
+        postausgang = mail.Postausgang(einst.mail, mail.passwort_lesen(*einst.mail.dienst_und_konto))
+        gesehen = set()
+        for adresse in einst.mail.empfaenger:
+            if mail.ziel_name(adresse) not in gesehen:
+                gesehen.add(mail.ziel_name(adresse))
+                ziele.append(mail.MailZiel(postausgang, adresse))
+    return ziele
+
+
+def _anzeige(name: str) -> str:
+    return f"Mail an {name.removeprefix('mail:')}" if name.startswith("mail:") else name
+
+
+def _sendung(protokoll: Protokoll, schluessel: str) -> Sendung | None:
+    zeile = protokoll.eintrag(schluessel) or {}
+    datei = protokoll.lokale_datei(schluessel)
+    if datei is None or not datei.exists():
+        return None
+    try:
+        datum = date.fromisoformat(zeile.get("rechnungsdatum") or "")
+    except ValueError:
+        datum = None
+    return Sendung(
+        quelle=zeile.get("quelle") or protokoll.quelle, schluessel=schluessel,
+        rechnungsnummer=zeile.get("rechnungsnummer") or "", rechnungsdatum=datum,
+        gutschrift="_Gutschrift" in datei.name, dateiname=datei.name, inhalt=datei.read_bytes(),
+    )
+
+
+def liefern(einst: Einstellungen, protokoll: Protokoll, erg: Ergebnis, melden: Melden,
+            markiert: dict[str, int] | None = None, ziele: list[Lieferziel] | None = None) -> None:
+    """Schickt an jedes Lieferziel, was ihm laut Protokoll noch fehlt — neue
+    Rechnungen und solche, bei denen es letztes Mal nicht geklappt hat. Nie doppelt:
+    Direkt vor dem Senden steht „unklar“ im Protokoll, erst danach „geliefert“."""
+    namen = lieferziel_namen(einst)
+    for name in namen:
+        erg.lieferungen[name] = {"anzeige": _anzeige(name), "geliefert": 0, "offen": 0, "fehler": "",
+                                 "unklar": [], "schon_markiert": (markiert or {}).get(name, 0)}
+    if not namen or not any(protokoll.offen_fuer(n) for n in namen):
+        return
+    if ziele is None:
+        try:
+            ziele = lieferziele_erstellen(einst)
+        except mail.PasswortFehlt as fehler:
+            ziele, grund = [], str(fehler)
+        except Exception as fehler:  # noqa: BLE001 - Passwortspeicher gesperrt o. Ä.
+            ziele, grund = [], (f"Der Passwortspeicher ließ sich nicht lesen ({type(fehler).__name__}). "
+                                "Beim nächsten Start noch einmal versuchen.")
+        if not ziele:
+            for name in namen:
+                erg.lieferungen[name]["fehler"] = grund
+                erg.lieferungen[name]["offen"] = len(protokoll.offen_fuer(name))
+            return
+
+    alle_anhalten = False
+    ohne_datei: set[str] = set()
+    try:
+        for ziel in ziele:
+            stand = erg.lieferungen[ziel.name]
+            offen = protokoll.offen_fuer(ziel.name)
+            if alle_anhalten or not offen:
+                continue
+            melden(f"{len(offen)} Rechnung(en): {ziel.anzeigename} …")
+            for schluessel in offen:
+                sendung = _sendung(protokoll, schluessel)
+                if sendung is None:
+                    ohne_datei.add(schluessel)
+                    continue
+                try:
+                    ziel.senden(sendung, lambda: protokoll.als_unklar(schluessel, ziel.name))
+                except Abgelehnt as fehler:
+                    protokoll.als_offen(schluessel, ziel.name)  # sicher nicht angekommen
+                    stand["fehler"] = f"Rechnung {sendung.rechnungsnummer}: {fehler}"
+                    alle_anhalten = fehler.alle_anhalten
+                    break
+                except Unklar as fehler:
+                    stand["unklar"].append(sendung.rechnungsnummer)
+                    stand["fehler"] = f"Rechnung {sendung.rechnungsnummer}: {fehler}"
+                    alle_anhalten = True  # Verbindung ist weg; nächster Lauf
+                    break
+                protokoll.als_geliefert(schluessel, ziel.name)
+                stand["geliefert"] += 1
+    finally:
+        for ziel in ziele:
+            try:
+                ziel.schliessen()
+            except Exception:  # noqa: BLE001
+                pass
+    for name in namen:
+        erg.lieferungen[name]["offen"] = len(protokoll.offen_fuer(name))
+    if ohne_datei:
+        erg.hinweise.append(
+            f"{len(ohne_datei)} Rechnung(en) sind noch nicht überall angekommen, liegen aber nicht mehr im "
+            "Belegordner. E → „Fehlende Dateien neu holen“, dann werden sie verschickt."
+        )
+
+
 def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool = False) -> Ergebnis:
     """Holt die Belege eines Kontos. Stürzt nie ab, sondern meldet im Ergebnis.
 
@@ -60,8 +178,13 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
     """
     uebernahme(einst)
     protokoll = protokoll_fuer(einst, konto)
+    # Erst die Schalter abgleichen: Beim allerersten Einschalten eines Ziels gilt alles
+    # bis jetzt Geholte als geliefert — bevor dieser Lauf Neues holt.
+    markiert = protokoll.ziele_abgleichen(lieferziel_namen(einst))
     try:
-        ziele = [ziel_verzeichnis.erstellen(name, einst.belegordner) for name in einst.ziele]
+        # Lokale Ziele (Ordner) beim Abruf; Lieferziele (Mail) schicken danach, was fehlt.
+        ziele = [ziel_verzeichnis.erstellen(name, einst.belegordner)
+                 for name in einst.ziele if name not in ziel_verzeichnis.LIEFERZIELE]
         quelle = quelle_fuer(konto)
     except KeyError as fehler:
         return Ergebnis(konto.quelle, konto.name, status="fehler", fehler=str(fehler).strip("'\""))
@@ -82,7 +205,9 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
             if ort is not None and lokal is None:
                 lokal = ort
         if protokoll.eintrag(beleg.schluessel) is None or beleg.art == "rechnung":
-            protokoll.eintragen(beleg, lokal, [z.name for z in ziele])
+            # Was schon verschickt ist, bleibt so — auch wenn die Datei neu geholt wird.
+            protokoll.eintragen(beleg, lokal, [z.name for z in ziele]
+                                + protokoll.bisherige_lieferungen(beleg.schluessel))
         return [str(lokal)] if lokal else []
 
     umgebung = Umgebung(
@@ -102,6 +227,12 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
         ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=f"{type(fehler).__name__}: {str(fehler).splitlines()[0][:200]}")
     if ergebnis.status in {"ok", "unvollstaendig"}:
         zustand.lauf_merken(konto.quelle, konto.name)
+    try:
+        liefern(einst, protokoll, ergebnis, melden, markiert)
+    except Exception as fehler:  # noqa: BLE001 - nie abstürzen, immer melden
+        for name, stand in ergebnis.lieferungen.items():
+            stand["fehler"] = stand["fehler"] or f"Versand abgebrochen ({type(fehler).__name__})."
+            stand["offen"] = len(protokoll.offen_fuer(name))
     fehlen = len(protokoll.fehlende("rechnung"))
     if fehlen:
         ergebnis.hinweise.append(
@@ -136,6 +267,28 @@ def zusammenfassung(ergebnisse: list[Ergebnis], belegordner: Path) -> str:
                     f"  Kontrolle: Monatsübersichten nennen {erg.erwartet} Rechnungen, "
                     f"davon geholt: {erg.vorhanden} — {passt}"
                 )
+        for stand in erg.lieferungen.values():
+            name = stand["anzeige"]
+            if stand["schon_markiert"]:
+                zeilen.append(f"  {name}: neu eingeschaltet — {stand['schon_markiert']} schon geholte "
+                              "Rechnung(en) gelten als verschickt und gehen nicht raus")
+            teile = []
+            if stand["geliefert"]:
+                teile.append(f"{stand['geliefert']} verschickt")
+            if stand["offen"]:
+                teile.append(f"{stand['offen']} noch nicht verschickt (liegen im Belegordner, "
+                             "der nächste Lauf versucht es erneut)")
+            if teile:
+                zeilen.append(f"  {name}: " + ", ".join(teile))
+            elif not stand["unklar"]:
+                zeilen.append(f"  {name}: nichts Neues zu verschicken")
+            if stand["fehler"]:
+                zeilen.append(f"  ! {name}: {stand['fehler']}")
+            for nummer in stand["unklar"]:
+                zeilen.append(
+                    f"  ! {name}: Bei Rechnung {nummer} kam nach dem Senden keine Antwort. Ob die Mail "
+                    "angekommen ist, ist unklar — bitte beim Empfänger nachsehen und sie notfalls von Hand "
+                    "schicken. (Das Programm schickt sie nicht noch einmal, damit sie nicht doppelt ankommt.)")
         for abw in erg.abweichungen:
             zeilen.append(f"  ! {abw}")
         for hinweis in erg.hinweise:

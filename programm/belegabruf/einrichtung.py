@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from belegabruf import einstellungen, pfade, quellen
-from belegabruf.einstellungen import Einstellungen, Konto
+from belegabruf.einstellungen import Einstellungen, Konto, MailEinstellung
 
 
 def _frage(text: str, standard: str = "") -> str:
@@ -96,14 +96,130 @@ def einrichten() -> Einstellungen:
     print("\nWo sollen die Belege hin? (Ordner wird angelegt, falls es ihn noch nicht gibt.)")
     ordner = Path(_frage("Belegordner", standard_ordner)).expanduser()
 
+    mail_an, mail_einst = _mail_abfragen(alt)
+
     neu = Einstellungen(
         belegordner=ordner,
         konten=konten,
-        ziele=alt.ziele if alt else ["ordner"],
+        ziele=["ordner", "mail"] if mail_an else ["ordner"],
         sichtbar=alt.sichtbar if alt else False,
+        mail=mail_einst,
     )
     ordner.mkdir(parents=True, exist_ok=True)
     datei = einstellungen.speichern(neu)
     print(f"\n✓ Gespeichert in {datei}")
     print("  (Die Datei kannst du auch mit einem Texteditor ändern.)")
     return neu
+
+
+# ── Mail ─────────────────────────────────────────────────────────────────────
+
+
+def _adresse_ok(adresse: str) -> bool:
+    name, at, domain = adresse.partition("@")
+    return bool(name and at and "." in domain and " " not in adresse and "," not in adresse)
+
+
+def _passwort_eingeben(dienst: str, konto: str) -> bool:
+    """Fragt das Passwort verdeckt ab (es erscheint nicht auf dem Bildschirm) und legt
+    es in den Passwortspeicher. Es wird nie in eine Datei geschrieben."""
+    import getpass
+
+    from belegabruf.ziele import mail
+
+    print("  Gib das Passwort für das Mailkonto ein (bei Gmail/Microsoft 365: das App-Passwort, siehe\n"
+          "  README). Man sieht beim Tippen oder Einfügen nichts — das ist Absicht.")
+    try:
+        wert = getpass.getpass("  Passwort (leer = abbrechen): ")
+    except (EOFError, KeyboardInterrupt):
+        wert = ""
+    if not wert:
+        print("  Kein Passwort eingegeben.")
+        return False
+    mail.passwort_speichern(dienst, konto, wert)
+    print("  ✓ Im Passwortspeicher deines Rechners abgelegt.")
+    return True
+
+
+def _mail_abfragen(alt: Einstellungen | None) -> tuple[bool, MailEinstellung]:
+    from belegabruf.ziele import mail
+
+    einst = alt.mail if alt else MailEinstellung()
+    vorher_an = bool(alt and alt.mail_an)
+    print(
+        "\nRechnungen zusätzlich per Mail verschicken?\n"
+        "  Jede neue Rechnung geht dann als eigene Mail mit PDF an die Adressen, die du angibst —\n"
+        "  z. B. an die Belegadresse deines Buchhaltungsprogramms oder an deine Steuerberatung.\n"
+        "  Was bis jetzt schon geholt ist, gilt für eine neue Adresse als verschickt und geht nicht raus."
+    )
+    if not _ja("Per Mail verschicken?", vorher_an):
+        dienst, konto = einst.dienst_und_konto
+        if vorher_an and dienst == "belegabruf" and mail.passwort_vorhanden(dienst, konto):
+            if _ja("  Das Mail-Passwort aus dem Passwortspeicher löschen?", True):
+                mail.passwort_loeschen(dienst, konto)
+                print("  ✓ Gelöscht.")
+        return False, einst
+
+    print("\n  Die Angaben findest du bei deinem Mailanbieter unter „SMTP“ oder „Postausgangsserver“.")
+    server = ""
+    while not server:
+        server = _frage("  Postausgangsserver (SMTP), z. B. smtp.example.com", einst.server)
+    print("  Verschlüsselung: 1) SSL (meist Port 465)  2) STARTTLS (meist Port 587). Ohne gibt es keinen Versand.")
+    while True:
+        wahl = _frage("  Nummer", "2" if einst.verschluesselung == "starttls" else "1")
+        if wahl in {"1", "2"}:
+            break
+        print("  Bitte 1 oder 2.")
+    verschluesselung = "ssl" if wahl == "1" else "starttls"
+    port_vorschlag = einst.port if einst.server and einst.verschluesselung == verschluesselung else (
+        465 if verschluesselung == "ssl" else 587)
+    while True:
+        port = _frage("  Port", str(port_vorschlag))
+        if port.isdigit():
+            break
+        print("  Bitte eine Zahl.")
+    benutzer = ""
+    while not benutzer:
+        benutzer = _frage("  Benutzername (meist die Mailadresse)", einst.benutzer)
+    absender = ""
+    while not _adresse_ok(absender):
+        absender = _frage("  Absenderadresse", einst.absender or (benutzer if _adresse_ok(benutzer) else ""))
+    while True:
+        antwort = _frage("  Empfänger (mehrere mit Komma trennen)", ", ".join(einst.empfaenger))
+        empfaenger = [a.strip() for a in antwort.split(",") if a.strip()]
+        falsch = [a for a in empfaenger if not _adresse_ok(a)]
+        if empfaenger and not falsch:
+            break
+        print("  Bitte gültige Mailadressen" + (f" (nicht: {', '.join(falsch)})" if falsch else "") + ".")
+    print("\n  Das Passwort liegt im Passwortspeicher deines Rechners (Mac: Schlüsselbund, Windows:\n"
+          "  Anmeldeinformationsverwaltung), nie in einer Datei. Unter welchem Eintrag? Enter übernimmt\n"
+          "  den Vorschlag.")
+    while True:
+        eintrag = _frage("  Eintrag (Dienst/Konto)", einst.passwort_eintrag)
+        dienst, _, konto = eintrag.partition("/")
+        if dienst.strip() and konto.strip():
+            break
+        print("  Bitte in der Form Dienst/Konto, z. B. belegabruf/mail.")
+    einst = MailEinstellung(server=server, port=int(port), verschluesselung=verschluesselung,
+                            benutzer=benutzer, absender=absender, empfaenger=empfaenger,
+                            passwort_eintrag=f"{dienst.strip()}/{konto.strip()}")
+    dienst, konto = einst.dienst_und_konto
+
+    if mail.passwort_vorhanden(dienst, konto):
+        print("  Unter diesem Eintrag liegt schon ein Passwort.")
+        if _ja("  Austauschen?", False):
+            _passwort_eingeben(dienst, konto)
+    elif not _passwort_eingeben(dienst, konto):
+        print("  Ohne Passwort wird nichts verschickt. Du kannst es später über „Einrichten“ eingeben.")
+        return True, einst
+
+    print("  Prüfe die Anmeldung am Mailserver (es wird keine Mail verschickt) …")
+    try:
+        meldung = mail.anmeldung_pruefen(einst, mail.passwort_lesen(dienst, konto))
+    except Exception as fehler:  # noqa: BLE001
+        meldung = f"Der Passwortspeicher ließ sich nicht lesen ({type(fehler).__name__})."
+    if meldung:
+        print(f"  ✗ {meldung}\n  Bitte noch einmal „Einrichten“ und die Angaben prüfen.")
+    else:
+        print("  ✓ Anmeldung klappt.")
+    return True, einst
