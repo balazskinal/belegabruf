@@ -52,7 +52,8 @@ def _konten_abfragen(quelle: str, vorhanden: list[Konto]) -> list[Konto]:
             print("  Diesen Namen gibt es schon.")
             continue
         konten.append(Konto(quelle=quelle, name=name))
-        if not _ja(f"  Noch ein {anzeige}-Konto (z. B. ein Zugang als Co-Gastgeber)?", False):
+        beispiel = " (z. B. ein Zugang als Co-Gastgeber)" if quelle == "airbnb" else ""
+        if not _ja(f"  Noch ein {anzeige}-Konto{beispiel}?", False):
             break
     return konten
 
@@ -70,7 +71,7 @@ def einrichten() -> Einstellungen:
     print("\nWelche Anbieter willst du abrufen?")
     for nr, name in enumerate(verfuegbar, 1):
         print(f"  {nr}) {quellen.anzeigename(name)}")
-    vorher = sorted({k.quelle for k in alt.konten}) if alt else verfuegbar
+    vorher = sorted({k.quelle for k in alt.konten}) if alt else verfuegbar[:1]
     standard = ",".join(str(verfuegbar.index(q) + 1) for q in vorher if q in verfuegbar) or "1"
     while True:
         antwort = _frage("Nummern, mit Komma getrennt", standard)
