@@ -1,6 +1,7 @@
 """Kommandozeile.
 
-    belege                      Start per Doppelklick: prüfen, anmelden lassen, holen
+    belege oberflaeche          Bedienseite im Browserfenster (Doppelklick auf „Belege holen“)
+    belege start                Menü im Terminal: prüfen, anmelden lassen, holen
     belege einrichten           Fragen beantworten, Einstellungsdatei schreiben
     belege pruefen [--json]     Sind die Konten angemeldet?
     belege anmelden --quelle airbnb [--konto NAME]
@@ -247,7 +248,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="belege", description="Belege aus Anbieter-Konten holen.")
     parser.add_argument("--version", action="version", version=f"belegabruf {__version__}")
     unter = parser.add_subparsers(dest="befehl")
-    unter.add_parser("start", help="wie Doppelklick auf 'Belege holen'")
+    unter.add_parser("oberflaeche", help="Bedienseite im Browserfenster öffnen")
+    unter.add_parser("start", help="Menü im Terminal (wie 'Belegabruf (Terminal)')")
     unter.add_parser("einrichten", help="Einstellungen abfragen und speichern")
     for name, hilfe in (("holen", "unbeaufsichtigt holen"), ("pruefen", "Anmeldungen prüfen"),
                         ("anmelden", "Anmeldefenster öffnen")):
@@ -262,6 +264,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        if args.befehl == "oberflaeche":
+            from belegabruf import oberflaeche
+
+            return oberflaeche.starten()
         if args.befehl in (None, "start"):
             return start()
         if args.befehl == "einrichten":

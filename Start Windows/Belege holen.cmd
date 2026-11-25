@@ -1,5 +1,5 @@
 @echo off
-rem Belege holen (Windows). Per Doppelklick starten.
+rem Belege holen - Bedienseite im Browserfenster (Windows). Per Doppelklick starten.
 chcp 65001 >nul
 rem Das eigentliche Programm liegt im Ordner "programm" daneben.
 cd /d "%~dp0..\programm"
@@ -10,7 +10,9 @@ where uv >nul 2>nul
 if errorlevel 1 goto nichteingerichtet
 if not exist .venv goto nichteingerichtet
 
-uv run --no-dev --quiet belege start
+rem Dieses Fenster klein machen; es muss offen bleiben, solange Belegabruf laeuft.
+mode con: cols=62 lines=12
+uv run --no-dev --quiet belege oberflaeche
 exit /b %errorlevel%
 
 :nichteingerichtet

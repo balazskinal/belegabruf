@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Belegabruf</title>
+<link rel="icon" href="data:,">
+<style nonce="{{NONCE}}">
+  :root {
+    --grund: #f6f7f9; --flaeche: #fff; --text: #1c2430; --leise: #5b6676; --linie: #dde2e8;
+    --akzent: #1f5fbf; --akzent-text: #fff; --gut: #1d7a3e; --warn: #a15c00; --schlecht: #b42318;
+    --gut-grund: #e7f5ec; --warn-grund: #fff4e0; --schlecht-grund: #fdecea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --grund: #15191f; --flaeche: #1e242c; --text: #e6e9ee; --leise: #9aa5b4; --linie: #313945;
+      --akzent: #5b9bff; --akzent-text: #0b1220; --gut: #5fcf86; --warn: #f0b35a; --schlecht: #ff7a6e;
+      --gut-grund: #17321f; --warn-grund: #3a2c12; --schlecht-grund: #3d1a17;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--grund); color: var(--text);
+         font: 15px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 20px 16px 60px; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 17px; margin: 0 0 12px; }
+  .version { color: var(--leise); }
+  .abstand { flex: 1; }
+  section { background: var(--flaeche); border: 1px solid var(--linie); border-radius: 10px;
+            padding: 16px; margin-bottom: 16px; }
+  button { font: inherit; border: 1px solid var(--linie); background: var(--flaeche); color: var(--text);
+           padding: 7px 14px; border-radius: 7px; cursor: pointer; }
+  button.haupt { background: var(--akzent); border-color: var(--akzent); color: var(--akzent-text); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
+  .knoepfe { display: flex; gap: 8px; flex-wrap: wrap; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--linie); vertical-align: middle; }
+  th { color: var(--leise); font-weight: 500; font-size: 13px; }
+  .marke { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 13px; }
+  .angemeldet { background: var(--gut-grund); color: var(--gut); }
+  .abgelaufen { background: var(--schlecht-grund); color: var(--schlecht); }
+  .unbekannt { background: var(--grund); color: var(--leise); border: 1px solid var(--linie); }
+  .aus { color: var(--leise); }
+  #protokoll { background: var(--grund); border: 1px solid var(--linie); border-radius: 7px; padding: 10px;
+               max-height: 240px; overflow: auto; font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace;
+               white-space: pre-wrap; margin: 0; }
+  #zusammenfassung { list-style: none; padding: 0; margin: 12px 0 0; }
+  #zusammenfassung li { padding: 3px 0 3px 18px; }
+  #zusammenfassung li.konto { padding-left: 0; font-weight: 600; margin-top: 8px; }
+  #zusammenfassung li.warnung { color: var(--warn); }
+  #zusammenfassung li.hinweis { color: var(--leise); }
+  #zusammenfassung li.ordner { padding-left: 0; color: var(--leise); margin-top: 8px; }
+  label { display: block; font-size: 13px; color: var(--leise); margin: 10px 0 3px; }
+  input[type=text], input[type=password], input[type=number], select {
+    font: inherit; width: 100%; padding: 7px 9px; border: 1px solid var(--linie); border-radius: 7px;
+    background: var(--flaeche); color: var(--text); }
+  .reihe { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 12px; }
+  .kontozeile { display: grid; grid-template-columns: 140px 1fr auto auto; gap: 8px; align-items: center; margin: 6px 0; }
+  .kontozeile input[type=checkbox] { width: 18px; height: 18px; }
+  .ankreuzen { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 15px; margin-top: 12px; }
+  .meldung { padding: 9px 12px; border-radius: 7px; margin: 10px 0 0; }
+  .meldung.gut { background: var(--gut-grund); color: var(--gut); }
+  .meldung.schlecht { background: var(--schlecht-grund); color: var(--schlecht); }
+  .meldung.warn { background: var(--warn-grund); color: var(--warn); }
+  .leise { color: var(--leise); font-size: 13px; }
+  .versteckt { display: none; }
+  .oben10 { margin-top: 10px; }
+  .oben14 { margin-top: 14px; }
+  .oben16 { margin-top: 16px; }
+  .oben18 { margin-top: 18px; }
+  .oben22 { margin-top: 22px; }
+  details > summary { cursor: pointer; font-weight: 600; font-size: 17px; }
+  @media (max-width: 560px) { .kontozeile { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Belegabruf</h1><span class="version" id="version"></span>
+    <span class="abstand"></span>
+    <button id="beenden" type="button">Beenden</button>
+  </header>
+
+  <div id="neu" class="meldung warn versteckt"></div>
+  <div id="fehler" class="meldung schlecht versteckt" role="alert"></div>
+  <div id="ende" class="meldung gut versteckt">Belegabruf ist beendet. Du kannst dieses Fenster schließen.</div>
+
+  <section id="willkommen" class="versteckt">
+    <h2>Willkommen</h2>
+    <p>Belegabruf ist noch nicht eingerichtet. Trag unten den Belegordner und deine Konten ein und klick auf
+      „Einstellungen speichern“. Danach meldest du dich je Konto einmal an.</p>
+  </section>
+
+  <section id="bereich-konten">
+    <h2>Konten</h2>
+    <table>
+      <thead><tr><th>Anbieter</th><th>Konto</th><th>Anmeldung</th><th></th></tr></thead>
+      <tbody id="konten"></tbody>
+    </table>
+    <p id="keine-konten" class="leise versteckt">Noch kein Konto eingetragen — unten bei „Einstellungen“ hinzufügen.</p>
+    <div class="knoepfe oben14">
+      <button id="holen" class="haupt" type="button">Belege holen</button>
+      <button id="fehlende" type="button">Fehlende Dateien neu holen</button>
+      <button id="alle-pruefen" type="button">Alle Anmeldungen prüfen</button>
+    </div>
+    <p class="leise" id="ordner-hinweis"></p>
+  </section>
+
+  <section id="bereich-lauf" class="versteckt">
+    <h2 id="lauf-titel">Fortschritt</h2>
+    <pre id="protokoll" aria-live="polite"></pre>
+    <ul id="zusammenfassung"></ul>
+  </section>
+
+  <section>
+    <details id="einstellungen">
+      <summary>Einstellungen</summary>
+      <form id="formular" autocomplete="off">
+        <label for="belegordner">Belegordner (hier landen die PDFs)</label>
+        <input type="text" id="belegordner" spellcheck="false">
+
+        <h2 class="oben18">Konten</h2>
+        <p class="leise">Mehrere Konten beim selben Anbieter sind möglich (z. B. ein Zugang als Co-Gastgeber).
+          Der Name ist nur für dich.</p>
+        <div id="kontenliste"></div>
+        <button type="button" id="konto-dazu">Konto hinzufügen</button>
+
+        <h2 class="oben18">Versand per Mail</h2>
+        <p class="leise">Das Programm bringt keinen Versanddienst mit. Verschickt wird über <strong>dein eigenes
+          Postfach</strong> — jede neue Rechnung als eigene Mail mit PDF an die Adressen unten. Was schon geholt ist,
+          gilt für eine neue Adresse als verschickt. Achtung: Bei einem neuen Konto gehen beim ersten Lauf alle
+          verfügbaren Rechnungen raus.</p>
+        <label class="ankreuzen"><input type="checkbox" id="mail-an"> Rechnungen zusätzlich per Mail verschicken</label>
+        <div id="mail-felder">
+          <div class="reihe">
+            <div><label for="server">Postausgangsserver (SMTP)</label><input type="text" id="server" placeholder="smtp.example.com" spellcheck="false"></div>
+            <div><label for="verschluesselung">Verschlüsselung</label>
+              <select id="verschluesselung"><option value="ssl">SSL (meist Port 465)</option><option value="starttls">STARTTLS (meist Port 587)</option></select></div>
+            <div><label for="port">Port</label><input type="number" id="port" min="1" max="65535"></div>
+          </div>
+          <div class="reihe">
+            <div><label for="benutzer">Benutzername (meist die Mailadresse)</label><input type="text" id="benutzer" spellcheck="false"></div>
+            <div><label for="absender">Absenderadresse</label><input type="text" id="absender" spellcheck="false"></div>
+          </div>
+          <label for="empfaenger">Empfänger (mehrere mit Komma trennen)</label>
+          <input type="text" id="empfaenger" placeholder="belege@example.com" spellcheck="false">
+        </div>
+        <div class="knoepfe oben16">
+          <button type="submit" class="haupt" id="speichern">Einstellungen speichern</button>
+        </div>
+        <div id="gespeichert" class="meldung gut versteckt">Gespeichert.</div>
+      </form>
+
+      <div id="passwort-bereich">
+        <h2 class="oben22">Mail-Passwort</h2>
+        <p class="leise">Das Passwort geht direkt in den Passwortspeicher deines Rechners (Mac: Schlüsselbund,
+          Windows: Anmeldeinformationsverwaltung). Es wird nie angezeigt. Bei Gmail bzw. Microsoft 365 meist ein
+          App-Passwort. Status: <strong id="passwort-status">–</strong></p>
+        <form id="passwort-formular" autocomplete="off">
+          <label for="passwort">Passwort für das Mailkonto</label>
+          <input type="password" id="passwort" autocomplete="new-password">
+          <div class="knoepfe oben10">
+            <button type="submit" id="passwort-speichern">Passwort hinterlegen</button>
+            <button type="button" id="mail-pruefen">Mail-Anmeldung prüfen</button>
+          </div>
+        </form>
+        <div id="mail-ergebnis" class="meldung versteckt"></div>
+      </div>
+    </details>
+  </section>
+</main>
+
+<script nonce="{{NONCE}}">
+"use strict";
+// Den Schlüssel aus der Adresse merken und dort entfernen (er soll nicht sichtbar bleiben).
+const SCHLUESSEL = new URLSearchParams(location.search).get("k") || "";
+history.replaceState(null, "", "/");
+
+const $ = (id) => document.getElementById(id);
+let zustand = null;
+let gesehen = 0;
+let abfrage = null;
+
+async function api(methode, pfad, daten) {
+  const optionen = { method: methode, headers: { "X-Belegabruf-Schluessel": SCHLUESSEL } };
+  if (methode === "POST") {
+    optionen.headers["Content-Type"] = "application/json";
+    optionen.body = JSON.stringify(daten || {});
+  }
+  const antwort = await fetch(pfad, optionen);
+  let inhalt = {};
+  try { inhalt = await antwort.json(); } catch (e) { inhalt = {}; }
+  if (!antwort.ok) throw new Error(inhalt.fehler || "Das hat nicht geklappt.");
+  return inhalt;
+}
+
+function zeigeFehler(text) {
+  const f = $("fehler");
+  f.textContent = text || "";
+  f.classList.toggle("versteckt", !text);
+}
+
+function element(tag, text, klasse) {
+  const e = document.createElement(tag);
+  if (text !== undefined) e.textContent = text;
+  if (klasse) e.className = klasse;
+  return e;
+}
+
+const ZUSTAND_TEXT = { angemeldet: "angemeldet", abgelaufen: "abgelaufen", unbekannt: "unbekannt" };
+
+function kontenZeigen() {
+  const koerper = $("konten");
+  koerper.replaceChildren();
+  for (const k of zustand.konten) {
+    const zeile = element("tr", undefined, k.aktiv ? "" : "aus");
+    zeile.append(element("td", k.anzeige), element("td", k.name + (k.aktiv ? "" : " (aus)")));
+    const zelle = element("td");
+    zelle.append(element("span", ZUSTAND_TEXT[k.zustand] || k.zustand, "marke " + k.zustand));
+    zeile.append(zelle);
+    const knoepfe = element("td");
+    const k1 = element("button", "Prüfen"); k1.type = "button";
+    k1.addEventListener("click", () => starten("/api/pruefen", { quelle: k.quelle, name: k.name }));
+    const k2 = element("button", "Anmelden"); k2.type = "button";
+    k2.addEventListener("click", () => starten("/api/anmelden", { quelle: k.quelle, name: k.name }));
+    k1.dataset.auftrag = k2.dataset.auftrag = "1";
+    knoepfe.append(k1, " ", k2);
+    zeile.append(knoepfe);
+    koerper.append(zeile);
+  }
+  $("keine-konten").classList.toggle("versteckt", zustand.konten.length > 0);
+  const fehlen = zustand.konten.reduce((s, k) => s + (k.fehlende || 0), 0);
+  $("fehlende").textContent = "Fehlende Dateien neu holen" + (fehlen ? ` (${fehlen})` : "");
+  $("fehlende").disabled = !fehlen;
+  $("ordner-hinweis").textContent = "Belegordner: " + zustand.belegordner;
+}
+
+function kontozeile(k) {
+  const zeile = element("div", undefined, "kontozeile");
+  const wahl = element("select");
+  wahl.setAttribute("aria-label", "Anbieter");
+  for (const q of zustand.quellen) {
+    const o = element("option", q.anzeige); o.value = q.name;
+    if (q.name === k.quelle) o.selected = true;
+    wahl.append(o);
+  }
+  const name = element("input"); name.type = "text"; name.value = k.name || ""; name.placeholder = "Name, z. B. privat";
+  name.setAttribute("aria-label", "Kontoname");
+  const an = element("label", undefined, "ankreuzen"); an.style.margin = "0";
+  const box = element("input"); box.type = "checkbox"; box.checked = k.aktiv !== false;
+  an.append(box, " an");
+  const weg = element("button", "Entfernen"); weg.type = "button";
+  weg.addEventListener("click", () => zeile.remove());
+  zeile.append(wahl, name, an, weg);
+  zeile.lesen = () => ({ quelle: wahl.value, name: name.value, aktiv: box.checked });
+  return zeile;
+}
+
+function formularFuellen() {
+  $("belegordner").value = zustand.belegordner;
+  const liste = $("kontenliste");
+  liste.replaceChildren(...zustand.konten.map(kontozeile));
+  if (!zustand.konten.length) liste.append(kontozeile({ quelle: zustand.quellen[0].name, name: "privat" }));
+  const m = zustand.mail;
+  $("mail-an").checked = zustand.mail_an;
+  $("server").value = m.server; $("port").value = m.port; $("verschluesselung").value = m.verschluesselung;
+  $("benutzer").value = m.benutzer; $("absender").value = m.absender; $("empfaenger").value = m.empfaenger.join(", ");
+  mailFelderZeigen();
+}
+
+function mailFelderZeigen() {
+  const an = $("mail-an").checked;
+  $("mail-felder").classList.toggle("versteckt", !an);
+  $("passwort-bereich").classList.toggle("versteckt", !an && !zustand.mail_an);
+}
+
+async function laden(formularAuch) {
+  zustand = await api("GET", "/api/zustand");
+  $("version").textContent = zustand.version;
+  if (zustand.neuere_version) {
+    $("neu").textContent = `Es gibt eine neuere Version (${zustand.neuere_version}). Herunterladen unter ${zustand.neueste_seite} — alten Ordner löschen, neues ZIP auspacken; Einstellungen und Anmeldungen bleiben.`;
+    $("neu").classList.remove("versteckt");
+  }
+  $("willkommen").classList.toggle("versteckt", zustand.eingerichtet);
+  $("bereich-konten").classList.toggle("versteckt", !zustand.eingerichtet);
+  if (!zustand.eingerichtet) $("einstellungen").open = true;
+  $("passwort-status").textContent = zustand.mail.passwort;
+  kontenZeigen();
+  if (formularAuch) formularFuellen();
+  knoepfeSperren(zustand.beschaeftigt);
+  if (zustand.beschaeftigt && !abfrage) beobachten();
+}
+
+function knoepfeSperren(beschaeftigt) {
+  for (const id of ["holen", "fehlende", "alle-pruefen", "speichern"]) {
+    if (beschaeftigt) $(id).disabled = true;
+  }
+  if (!beschaeftigt) { $("holen").disabled = false; $("alle-pruefen").disabled = false; $("speichern").disabled = false; }
+  document.querySelectorAll("[data-auftrag]").forEach((b) => { b.disabled = beschaeftigt; });
+}
+
+const TITEL = { holen: "Belege holen", pruefen: "Anmeldungen prüfen", anmelden: "Anmelden" };
+
+async function starten(pfad, daten) {
+  zeigeFehler("");
+  try {
+    const r = await api("POST", pfad, daten);
+    $("lauf-titel").textContent = TITEL[r.gestartet] || "Fortschritt";
+    $("protokoll").textContent = "";
+    $("zusammenfassung").replaceChildren();
+    $("bereich-lauf").classList.remove("versteckt");
+    gesehen = 0;
+    knoepfeSperren(true);
+    beobachten();
+  } catch (e) { zeigeFehler(e.message); }
+}
+
+function beobachten() {
+  if (abfrage) return;
+  abfrage = setInterval(async () => {
+    try {
+      const s = await api("GET", "/api/auftrag?seit=" + gesehen);
+      if (s.meldungen.length) {
+        $("bereich-lauf").classList.remove("versteckt");
+        $("protokoll").textContent += s.meldungen.join("\n") + "\n";
+        $("protokoll").scrollTop = $("protokoll").scrollHeight;
+      }
+      gesehen = s.anzahl;
+      if (!s.laeuft) {
+        clearInterval(abfrage); abfrage = null;
+        if (s.zusammenfassung) {
+          const liste = $("zusammenfassung");
+          liste.replaceChildren(...s.zusammenfassung.map((z) => element("li", z.text, z.art)));
+        }
+        await laden(false);
+      }
+    } catch (e) { clearInterval(abfrage); abfrage = null; zeigeFehler(e.message); }
+  }, 700);
+}
+
+$("holen").addEventListener("click", () => starten("/api/holen", { fehlende: false }));
+$("fehlende").addEventListener("click", () => starten("/api/holen", { fehlende: true }));
+$("alle-pruefen").addEventListener("click", () => starten("/api/pruefen", {}));
+$("konto-dazu").addEventListener("click", () => $("kontenliste").append(kontozeile({ quelle: zustand.quellen[0].name, name: "" })));
+$("mail-an").addEventListener("change", mailFelderZeigen);
+
+$("formular").addEventListener("submit", async (ereignis) => {
+  ereignis.preventDefault();
+  zeigeFehler("");
+  $("gespeichert").classList.add("versteckt");
+  const daten = {
+    belegordner: $("belegordner").value,
+    konten: [...$("kontenliste").children].filter((z) => z.lesen).map((z) => z.lesen()).filter((k) => k.name.trim()),
+    mail_an: $("mail-an").checked,
+    mail: { server: $("server").value, port: $("port").value, verschluesselung: $("verschluesselung").value,
+            benutzer: $("benutzer").value, absender: $("absender").value,
+            empfaenger: $("empfaenger").value.split(",").map((s) => s.trim()).filter(Boolean) },
+  };
+  try {
+    await api("POST", "/api/einstellungen", daten);
+    $("gespeichert").classList.remove("versteckt");
+    await laden(true);
+  } catch (e) { zeigeFehler(e.message); }
+});
+
+$("passwort-formular").addEventListener("submit", async (ereignis) => {
+  ereignis.preventDefault();
+  zeigeFehler("");
+  const feld = $("passwort");
+  try {
+    const r = await api("POST", "/api/mail-passwort", { passwort: feld.value });
+    $("passwort-status").textContent = r.passwort;
+  } catch (e) { zeigeFehler(e.message); }
+  feld.value = "";
+});
+
+$("mail-pruefen").addEventListener("click", async () => {
+  zeigeFehler("");
+  const kasten = $("mail-ergebnis");
+  kasten.className = "meldung"; kasten.textContent = "Prüfe die Anmeldung …";
+  try {
+    const r = await api("POST", "/api/mail-pruefen", {});
+    kasten.className = "meldung " + (r.ok ? "gut" : "schlecht");
+    kasten.textContent = r.meldung;
+  } catch (e) { kasten.className = "meldung schlecht"; kasten.textContent = e.message; }
+});
+
+$("beenden").addEventListener("click", async () => {
+  try {
+    const r = await api("POST", "/api/beenden", {});
+    $("ende").textContent = r.wartet
+      ? "Belegabruf wird beendet, sobald der laufende Vorgang fertig ist."
+      : "Belegabruf ist beendet. Du kannst dieses Fenster schließen.";
+    $("ende").classList.remove("versteckt");
+    document.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+  } catch (e) { zeigeFehler(e.message); }
+});
+
+laden(true).catch((e) => zeigeFehler(e.message));
+</script>
+</body>
+</html>

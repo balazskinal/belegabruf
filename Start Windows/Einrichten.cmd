@@ -30,6 +30,9 @@ echo Hole den Browser ^(Chromium^) ...
 uv run --no-dev playwright install chromium
 if errorlevel 1 ( echo Der Browser konnte nicht geladen werden. & pause & exit /b 1 )
 
-uv run --no-dev belege einrichten
-echo Fertig.
-pause
+echo.
+echo Fertig eingerichtet. Gleich oeffnet sich das Fenster "Belegabruf" - dort traegst du Belegordner und Konten ein.
+echo Spaeter reicht ein Doppelklick auf "Belege holen".
+echo.
+mode con: cols=62 lines=12
+uv run --no-dev --quiet belege oberflaeche

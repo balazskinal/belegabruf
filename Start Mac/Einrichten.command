@@ -19,5 +19,9 @@ uv sync --no-dev --quiet || { echo "Das hat nicht geklappt."; read -r -p "Enter 
 echo "Hole den Browser (Chromium) …"
 uv run --no-dev playwright install chromium || { echo "Der Browser konnte nicht geladen werden."; read -r -p "Enter zum Schließen"; exit 1; }
 
-uv run --no-dev belege einrichten
-read -r -p "Fertig. Enter zum Schließen."
+echo
+echo "Fertig eingerichtet. Gleich öffnet sich das Fenster „Belegabruf“ — dort trägst du Belegordner und Konten ein."
+echo "Später reicht ein Doppelklick auf \"Belege holen\"."
+echo
+printf '\033[8;12;62t'
+uv run --no-dev --quiet belege oberflaeche

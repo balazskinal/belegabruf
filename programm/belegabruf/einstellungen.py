@@ -93,10 +93,20 @@ def laden(datei: Path | None = None) -> Einstellungen:
     datei = datei or pfade.einstellungsdatei()
     if not datei.exists():
         raise EinstellungsFehler(f"Noch nicht eingerichtet (keine Datei {datei}).")
+    return aus_text(datei.read_text(encoding="utf-8"), str(datei))
+
+
+def pruefen(einst: Einstellungen) -> Einstellungen:
+    """Prüft Einstellungen, die nicht aus der Datei kommen (z. B. aus der Bedienseite),
+    nach denselben Regeln wie beim Laden. Gibt die geprüfte Fassung zurück."""
+    return aus_text(als_text(einst), "Eingaben")
+
+
+def aus_text(text: str, herkunft: str = "Einstellungen") -> Einstellungen:
     try:
-        roh = tomllib.loads(datei.read_text(encoding="utf-8"))
+        roh = tomllib.loads(text)
     except tomllib.TOMLDecodeError as fehler:
-        raise EinstellungsFehler(f"Die Einstellungsdatei {datei} ist fehlerhaft: {fehler}") from fehler
+        raise EinstellungsFehler(f"Die Einstellungsdatei {herkunft} ist fehlerhaft: {fehler}") from fehler
 
     belegordner = Path(str(roh.get("belegordner") or pfade.standard_belegordner())).expanduser()
     konten = []

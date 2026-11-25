@@ -17,6 +17,10 @@ from typing import Callable, Iterator
 
 from playwright.sync_api import BrowserContext, Page, sync_playwright
 
+#: Im Terminal: "Enter" beendet das Warten auf die Anmeldung. In der Bedienseite gibt es
+#: kein Terminal zum Tippen — dann nur Fenster schließen bzw. automatisch erkennen.
+ENTER_IM_TERMINAL = True
+
 # Menschliches Tempo: Pause zwischen zwei Abrufen (Sekunden).
 PAUSE_MIN = 2.0
 PAUSE_MAX = 5.0
@@ -116,11 +120,15 @@ def auf_mensch_warten(
             return
         enter.set()
 
-    threading.Thread(target=lese_enter, daemon=True).start()
-    hinweis(
-        "  Melde dich im Browserfenster an (auch Zwei-Faktor). Danach geht es von allein weiter —\n"
-        "  oder drück hier Enter, oder schließ das Fenster."
-    )
+    if ENTER_IM_TERMINAL:
+        threading.Thread(target=lese_enter, daemon=True).start()
+        hinweis(
+            "  Melde dich im Browserfenster an (auch Zwei-Faktor). Danach geht es von allein weiter —\n"
+            "  oder drück hier Enter, oder schließ das Fenster."
+        )
+    else:
+        hinweis("Melde dich im neuen Fenster an (auch Zwei-Faktor). Danach geht es von allein weiter — "
+                "oder schließ das Fenster, wenn du fertig bist.")
     ende = time.monotonic() + hoechstens_minuten * 60
     while time.monotonic() < ende:
         if enter.is_set():
