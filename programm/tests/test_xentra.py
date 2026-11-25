@@ -74,6 +74,9 @@ class _Antwort:
     def read(self, n=-1):
         return self._strom.read(n)
 
+    def read1(self, n=-1):
+        return self._strom.read1(n)
+
     def __enter__(self):
         return self
 
@@ -447,7 +450,7 @@ def test_troepfelnder_server_gesamtfrist(lokal, monkeypatch):
     import time
 
     monkeypatch.setattr(xentra, "GESAMTFRIST_S", 1)
-    monkeypatch.setattr(xentra, "_STUECK", 1)
+    assert xentra._STUECK >= 64 * 1024  # bewusst nicht verkleinert: genau das soll der Test prüfen
 
     def antworten(v):
         v.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 1000\r\nConnection: close\r\n\r\n")
