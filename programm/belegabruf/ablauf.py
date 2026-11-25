@@ -55,15 +55,17 @@ def anmelden(konto: Konto, melden: Melden) -> bool:
 
 
 def sevdesk_vorbereiten(einst: Einstellungen, protokoll: Protokoll) -> int:
-    """Ziel sevDesk ein- oder ausgeschaltet? Beim Einschalten gilt alles, was bis
-    jetzt geholt ist, als schon in sevDesk (wurde von Hand hochgeladen). Gibt die
-    Zahl der so markierten Rechnungen zurück."""
+    """Ziel sevDesk ein- oder ausgeschaltet? Nur beim **allerersten** Einschalten je
+    Konto gilt alles, was bis jetzt geholt ist, als schon in sevDesk (wurde von Hand
+    hochgeladen). Beim Wiedereinschalten wird nichts markiert: Was offen ist — auch
+    gescheiterte Uploads und alles aus der Zeit, in der sevDesk aus war —, wird
+    hochgeladen. Gibt die Zahl der markierten Rechnungen zurück."""
     if not einst.sevdesk_an:
         protokoll.sevdesk_schalten(False)
         return 0
-    if protokoll.sevdesk_war_an():
-        return 0
-    anzahl = protokoll.als_schon_in_sevdesk_markieren()
+    anzahl = 0
+    if not protokoll.sevdesk_je_geschaltet():
+        anzahl = protokoll.als_schon_in_sevdesk_markieren()
     protokoll.sevdesk_schalten(True)
     return anzahl
 

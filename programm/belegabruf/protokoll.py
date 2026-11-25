@@ -157,9 +157,15 @@ class Protokoll:
         zeile = self.eintrag(SEVDESK_SCHALTER)
         return bool(zeile) and zeile.get("ziele") == "an"
 
+    def sevdesk_je_geschaltet(self) -> bool:
+        """Stand schon einmal eine Schalterzeile im Protokoll (an oder aus)?"""
+        return self.eintrag(SEVDESK_SCHALTER) is not None
+
     def sevdesk_schalten(self, an: bool) -> None:
         if self.sevdesk_war_an() == an:
             return
+        if not an and not self.sevdesk_je_geschaltet():
+            return  # nie eingeschaltet: nichts zu merken, das erste Einschalten markiert noch
         self._anhaengen([{
             "zeitpunkt": datetime.now().isoformat(timespec="seconds"),
             "quelle": self.quelle, "konto": self.konto, "art": "einstellung",

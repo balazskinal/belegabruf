@@ -132,8 +132,12 @@ Datei**. In den Einstellungen steht nur, unter welchem Eintrag er liegt (Vorschl
 ebenfalls über „Einrichten“. Auf dem Mac fragt der Schlüsselbund beim ersten Mal, ob das Programm den
 Eintrag lesen darf — dort **„Immer erlauben“** wählen (nach einem Update kann die Frage wiederkommen).
 
-**Alter Bestand:** Beim Einschalten gilt alles, was bis dahin geholt ist, als **schon in sevDesk**
-und wird nicht hochgeladen. Hochgeladen wird nur, was danach neu dazukommt.
+**Alter Bestand:** Beim **allerersten** Einschalten gilt alles, was bis dahin geholt ist, als
+**schon in sevDesk** und wird nicht hochgeladen. Hochgeladen wird nur, was danach neu dazukommt.
+Schaltest du sevDesk später aus und wieder ein, wird nichts mehr markiert: Dann lädt das Programm
+alles hoch, was noch offen ist — auch, was in der Zwischenzeit geholt wurde. **Wer eine Pause
+braucht, schaltet sevDesk deshalb nicht aus, um zwischendurch von Hand hochzuladen** — sonst kommen
+diese Rechnungen beim Wiedereinschalten doppelt an.
 
 **Nie doppelt:** Das Protokoll merkt sich, was hochgeladen ist (mit der Beleg-ID aus sevDesk). Klappt ein Upload nicht (kein
 Internet, falscher Schlüssel, sevDesk lehnt ab), bleibt der Beleg im Belegordner, die Zusammenfassung

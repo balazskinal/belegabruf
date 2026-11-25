@@ -320,15 +320,38 @@ def test_schluessel_fehlt(tmp_path, attrappe, monkeypatch):
     assert attrappe.aufrufe == []
 
 
-def test_aus_und_wieder_an_markiert_neu(tmp_path, attrappe):
+def test_aus_und_wieder_an_markiert_nichts(tmp_path, attrappe):
     einst = _einst(tmp_path)
     Falsch.rechnungen = [("a1", "2026-11-03", "AIUC-1")]
     _lauf(einst)
     Falsch.rechnungen += [("a2", "2026-11-05", "AIUC-2")]
     _lauf(_einst(tmp_path, an=False))  # ausgeschaltet: a2 kommt nur in den Ordner
-    erg = _lauf(einst)  # wieder an: a2 gilt als schon drin (von Hand hochgeladen)
-    assert erg.als_schon_markiert == 1 and erg.hochgeladen == 0
     assert len(attrappe.entwuerfe) == 1
+    erg = _lauf(einst)  # wieder an: nichts markiert, a2 wird hochgeladen
+    assert erg.als_schon_markiert == 0 and erg.hochgeladen == 1
+    assert [e["voucher"]["description"] for e in attrappe.entwuerfe] == ["AIUC-1", "AIUC-2"]
+
+
+def test_aus_und_wieder_an_laedt_gescheiterte_hoch(tmp_path, attrappe):
+    einst = _einst(tmp_path)
+    Falsch.rechnungen = [("a1", "2026-11-03", "AIUC-1")]
+    attrappe.verhalten = "401"
+    assert _lauf(einst).nicht_hochgeladen == 1  # gescheitert
+    _lauf(_einst(tmp_path, an=False))
+    _lauf(_einst(tmp_path, an=False))  # mehrmals aus ändert nichts
+    attrappe.verhalten = "ok"
+    erg = _lauf(einst)
+    assert erg.als_schon_markiert == 0 and erg.hochgeladen == 1
+    assert "sevdesk" in _protokoll(einst).ziele_von("rechnung:a1")
+
+
+def test_erstes_einschalten_nach_langer_zeit_aus(tmp_path, attrappe):
+    """Nie eingeschaltet, lange nur Ordner: das erste Einschalten markiert alles."""
+    Falsch.rechnungen = [("a1", "2026-10-01", "AIUC-1")]
+    _lauf(_einst(tmp_path, an=False))
+    _lauf(_einst(tmp_path, an=False))
+    erg = _lauf(_einst(tmp_path))
+    assert erg.als_schon_markiert == 1 and attrappe.entwuerfe == []
 
 
 def test_datei_fehlt_vor_upload(tmp_path, attrappe):
