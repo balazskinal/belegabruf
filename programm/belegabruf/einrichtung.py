@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from belegabruf import einstellungen, pfade, quellen
@@ -30,6 +31,11 @@ def _ja(text: str, standard: bool) -> bool:
         print("  Bitte j oder n eingeben.")
 
 
+def _titelschluessel(titel: str) -> str:
+    """Vergleichsschlüssel für Namen; ein leerer Name bleibt leer (nicht „standard“)."""
+    return pfade.kurzname(titel) if titel.strip() else ""
+
+
 def _konten_abfragen(quelle: str, vorhanden: list[Konto]) -> list[Konto]:
     anzeige = quellen.anzeigename(quelle)
     if vorhanden:
@@ -38,12 +44,21 @@ def _konten_abfragen(quelle: str, vorhanden: list[Konto]) -> list[Konto]:
             print(f"   - {k.anzeigetitel or '(ohne Namen)'} ({'eingeschaltet' if k.aktiv else 'ausgeschaltet'})")
         if _ja(f"  {anzeige}-Konten so lassen?", True):
             return vorhanden
-    # Wer einen bisherigen Namen wieder eingibt, behält dessen Anmeldung und Protokoll.
-    bisher = {pfade.kurzname(k.anzeigetitel or k.name): k.name for k in vorhanden}
+    # Wer einen bisherigen Namen wieder eingibt (oder beim namenlosen Konto wieder nichts),
+    # behält dessen Kennung — also Anmeldung und Protokoll — und seine übrigen Angaben.
+    # Die Kennung eines bestehenden Kontos ändert sich hier nie stillschweigend.
+    bisher: dict[str, Konto] = {}
+    for k in vorhanden:
+        bisher.setdefault(_titelschluessel(k.anzeigetitel), k)
+    if len(vorhanden) == 1:
+        # Nur ein Konto bisher: Enter ohne Namen meint dieses Konto, auch wenn es einen Namen hatte.
+        bisher.setdefault("", vorhanden[0])
 
     def konto(titel: str) -> Konto:
-        return Konto(quelle=quelle, name=bisher.get(pfade.kurzname(titel or einstellungen.STANDARD_KENNUNG),
-                                                     einstellungen.kennung_fuer(titel)), titel=titel)
+        alt = bisher.get(_titelschluessel(titel))
+        if alt is not None:
+            return replace(alt, titel=titel, optionen=dict(alt.optionen))
+        return Konto(quelle=quelle, name=einstellungen.kennung_fuer(titel), titel=titel)
 
     def passt(liste: list[Konto]) -> bool:
         try:

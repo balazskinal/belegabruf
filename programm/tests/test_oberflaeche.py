@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from belegabruf import ablauf, browser, einstellungen, pfade
+from belegabruf.einstellungen import Konto
 from belegabruf.oberflaeche import aktionen
 from belegabruf.oberflaeche.server import KOPF_SCHLUESSEL, Bedienserver
 from belegabruf.quellen.basis import Beleg, Ergebnis, Quelle
@@ -1188,3 +1189,56 @@ def test_mailanbieter_wird_beim_laden_erkannt(host, tmp_path, port, art, erwarte
     finally:
         s.shutdown()
         s.server_close()
+
+
+# ── Prüfbefund M1: Terminal-Einrichtung behält Kennungen ─────────────────────
+
+
+def _terminal(monkeypatch, eingaben):
+    import builtins
+
+    folge = iter(eingaben)
+    monkeypatch.setattr(builtins, "input", lambda text="": next(folge, "n"))
+
+
+def test_terminal_namenloses_konto_mit_eigener_kennung_bleibt(monkeypatch):
+    from belegabruf import einrichtung
+
+    # So entsteht es, wenn man den Namen in der Oberfläche leert: Kennung „Privat“, kein Name.
+    alt = Konto(quelle="airbnb", name="Privat", titel="", aktiv=False, belege_ab="letzte-3-monate",
+                optionen={"adresse": "https://www.airbnb.de"})
+    _terminal(monkeypatch, ["n", ""])  # „so lassen?“ nein, dann Enter
+    konten = einrichtung._konten_abfragen("airbnb", [alt])
+    assert [(k.name, k.anzeigetitel) for k in konten] == [("Privat", "")]
+    k = konten[0]
+    assert (k.aktiv, k.belege_ab, k.optionen) == (False, "letzte-3-monate", {"adresse": "https://www.airbnb.de"})
+
+
+def test_terminal_namenlos_und_benannt_gemischt(monkeypatch):
+    from belegabruf import einrichtung
+
+    alt = [Konto(quelle="airbnb", name="standard", titel="Privat"), Konto(quelle="airbnb", name="Co", titel="Co")]
+    # „so lassen?“ nein; wieder „Privat“ und „Co“ eingeben → beide Kennungen bleiben
+    _terminal(monkeypatch, ["n", "Privat", "j", "Co", "n"])
+    konten = einrichtung._konten_abfragen("airbnb", alt)
+    assert [(k.name, k.anzeigetitel) for k in konten] == [("standard", "Privat"), ("Co", "Co")]
+
+
+def test_terminal_umbenannt_dann_wieder_eingegeben(monkeypatch):
+    from belegabruf import einrichtung
+
+    # In der Oberfläche umbenannt: Kennung „Privat“, Name „Ferienwohnung“
+    alt = [Konto(quelle="airbnb", name="Privat", titel="Ferienwohnung"), Konto(quelle="airbnb", name="Co", titel="Co")]
+    _terminal(monkeypatch, ["n", "ferienwohnung", "j", "Co", "n"])
+    konten = einrichtung._konten_abfragen("airbnb", alt)
+    assert [(k.name, k.anzeigetitel) for k in konten] == [("Privat", "ferienwohnung"), ("Co", "Co")]
+
+
+def test_terminal_einziges_konto_enter_behaelt_kennung(monkeypatch):
+    from belegabruf import einrichtung
+
+    _terminal(monkeypatch, ["n", ""])
+    konten = einrichtung._konten_abfragen("airbnb", [Konto(quelle="airbnb", name="Hauptkonto", titel="Hauptkonto")])
+    assert [(k.name, k.anzeigetitel) for k in konten] == [("Hauptkonto", "")]
+    datei_text = einstellungen.als_text(einstellungen.Einstellungen(belegordner=Path("/tmp/B"), konten=konten))
+    assert 'kennung = "Hauptkonto"' in datei_text
