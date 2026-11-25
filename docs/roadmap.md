@@ -9,13 +9,12 @@ Stand: 25.11.2026. Begründungen stehen in den [Entscheidungen](entscheidungen/R
 - **1.2.0** — Quellen Xentra (Abo- und Provisionsrechnungen aus „Abrechnung → Rechnungen“) und Skool
   (Rechnungen aus dem Zahlungsverlauf, immer als helles PDF). Beide gegen echte Konten durchgespielt.
 - **1.3.0** — Ziel Mail: jede neue Rechnung per Mail an eine oder mehrere Belegadressen, über das
-  eigene Postfach; Passwort im Passwortspeicher (ADR-003, ADR-004)
-- **1.4.0** — Ziel sevDesk über die API: Entwurf mit PDF, Datum, Rechnungsnummer, Lieferant und
-  Steuerregel; nur Upload-Aufrufe, Schlüssel im Passwortspeicher (ADR-003, ADR-004)
+  eigene Postfach; Passwort im Passwortspeicher (ADR-003, ADR-004). Mit echtem Postfach durchgespielt.
 
 ## In Arbeit
 
-- Nichts — als Nächstes kommt 2.0.0.
+- [ ] **1.4.0 — Ziel sevDesk über die API** (PR #3): Entwurf mit PDF, Datum, Rechnungsnummer,
+      Lieferant und Steuerregel; nur Upload-Aufrufe, Schlüssel im Passwortspeicher (ADR-003, ADR-004)
 
 ## Danach: 2.0.0 — Bedienoberfläche im Browserfenster (ADR-005)
 
