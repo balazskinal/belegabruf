@@ -1,8 +1,10 @@
 # Belegabruf
 
 Holt Rechnungen, die es nur im eingeloggten Konto eines Anbieters gibt, per Doppelklick auf den
-eigenen Rechner. **Version 1 kann Airbnb:** die Rechnungen über die Airbnb-Servicegebühren für
-Gastgeber, jede Buchung als eigenes PDF.
+eigenen Rechner. Es kann:
+
+- **Airbnb:** die Rechnungen über die Airbnb-Servicegebühren für Gastgeber, jede Buchung als eigenes PDF.
+- **Xentra:** die Rechnungen für das Xentra-Abonnement und Provisionen (siehe [Xentra](#xentra)).
 
 **Das ist kein Dienst — jeder betreibt seine eigene Kopie.** Niemand außer dir sieht deine
 Anmeldung oder deine Belege. Es gibt keinen Server, kein Konto bei uns, keinen Support-Vertrag.
@@ -77,11 +79,25 @@ Administratorrechte nötig.
 4. Ein schwarzes Fenster geht auf und lädt alles Nötige (ein Hilfsprogramm namens *uv*, Python und
    einen eigenen Browser). Das dauert beim ersten Mal ein paar Minuten.
 5. Dann kommen ein paar Fragen. **Enter übernimmt jeweils den Vorschlag in [Klammern].**
-   - Welche Anbieter (zurzeit nur Airbnb)
+   - Welche Anbieter (Airbnb, Xentra)
    - Ein Name für dein Konto — nur für dich, z. B. „privat“. Hast du mehrere Airbnb-Konten
      (z. B. einen Zugang als Co-Gastgeber), kannst du mehrere eintragen; jedes bekommt seine eigene Anmeldung.
    - Der Belegordner (Vorschlag: `Dokumente/Belege`)
 6. Zum Schluss öffnet sich das Airbnb-Anmeldefenster. Melde dich an. Fertig.
+
+## Xentra
+
+Xentra zeigt die Rechnungen unter *Abrechnung → Rechnungen*: Datum, Beschreibung, Betrag, Status und
+ein Knopf „PDF herunterladen“. Das Programm drückt diesen Knopf für jede Zeile — wie du es mit der
+Maus tun würdest —, lädt das PDF und speichert es als
+`xentra/<Jahr>/<Datum>_xentra_<Rechnungsnummer>.pdf`. Die Beschreibung kommt absichtlich nicht in den
+Dateinamen (bei Provisionen stehen dort Gastnamen). Am Ende vergleicht es, ob so viele Rechnungen
+vorliegen, wie die Liste zeigt.
+
+Das Programm **liest nur und lädt herunter**. Angeklickt werden nur der Reiter „Rechnungen“ und die
+Knöpfe „PDF herunterladen“ — nichts an Abo, Zahlungsmethode oder Einstellungen. Damit es merkt, was
+schon geholt ist, drückt es bei jedem Lauf alle Download-Knöpfe einmal; geladen und gespeichert wird
+aber nur, was neu ist.
 
 ## Benutzen
 
@@ -180,7 +196,7 @@ programm/
   belegabruf/
     cli.py            Kommandozeile und Ablauf beim Doppelklick
     ablauf.py         Gerüst: prüfen, anmelden lassen, holen, abliefern
-    quellen/          ein Baustein je Anbieter (Version 1: airbnb.py)
+    quellen/          ein Baustein je Anbieter: airbnb.py, xentra.py
       basis.py        die feste Schnittstelle für Bausteine
     ziele/            wohin Belege geliefert werden (Version 1: ordner.py)
     protokoll.py      Protokoll je Anbieter und Konto — entscheidet, was schon geholt ist
@@ -222,4 +238,7 @@ Die GitHub Action baut das ZIP und hängt es an das Release.
 ## Offen
 
 - **Windows:** noch von niemandem getestet (Abnahmepunkt 5). Wer es ausprobiert, bitte Rückmeldung.
+- **Xentra:** Der erste echte Lauf steht noch aus; getestet ist mit einer nachgebauten Seite. Ob
+  Xentra bei der Anmeldung einen zweiten Faktor verlangt, ist unbekannt — das Anmeldefenster wartet so
+  lange, bis du fertig bist.
 - Weitere Bausteine und das Ziel „Upload an die Buchhaltung“ folgen in späteren Versionen.

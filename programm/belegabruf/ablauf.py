@@ -132,8 +132,9 @@ def zusammenfassung(ergebnisse: list[Ergebnis], belegordner: Path) -> str:
                 zeilen.append(f"  {erg.kontrolle_neu} Monatsübersicht(en) neu (Ordner kontrolle)")
             if erg.erwartet is not None and erg.vorhanden is not None:
                 passt = "✓ passt" if erg.erwartet == erg.vorhanden else "✗ ABWEICHUNG"
+                uebersicht = "Monatsübersichten nennen" if erg.quelle == "airbnb" else "Übersicht nennt"
                 zeilen.append(
-                    f"  Kontrolle: Monatsübersichten nennen {erg.erwartet} Rechnungen, "
+                    f"  Kontrolle: {uebersicht} {erg.erwartet} Rechnungen, "
                     f"davon geholt: {erg.vorhanden} — {passt}"
                 )
         for abw in erg.abweichungen:
