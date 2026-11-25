@@ -21,8 +21,12 @@ Ablage: xentra/<Jahr>/<JJJJ-MM-TT>_xentra_<rechnungs-id>.pdf
 
 from __future__ import annotations
 
+import http.client
 import json
 import re
+import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from datetime import date
 from typing import Callable
@@ -87,30 +91,121 @@ def rechnungs_id_aus_anfrage(rumpf: str | None) -> str:
     return ""
 
 
+ADRESS_FELDER = ("download_url", "downloadUrl", "pdf_url", "pdfUrl", "url")
+
+
 def pdf_adresse_aus_antwort(rumpf: str | None) -> str:
-    """Die (befristete) PDF-Adresse aus der Antwort des Download-Aufrufs."""
+    """Die (befristete) PDF-Adresse aus der Antwort des Download-Aufrufs — gezielt aus
+    einem Feld wie ``download_url``, nie die erstbeste Adresse. Nur https."""
     if not rumpf:
         return ""
     try:
         daten = json.loads(rumpf)
     except (ValueError, TypeError):
         return ""
-    adressen: list[str] = []
+    gefunden: list[tuple[int, str]] = []
 
     def suchen(wert, tiefe=0):
         if tiefe > 5:
             return
-        if isinstance(wert, str) and wert.startswith("https://"):
-            adressen.append(wert)
-        elif isinstance(wert, dict):
-            for inhalt in wert.values():
-                suchen(inhalt, tiefe + 1)
+        if isinstance(wert, dict):
+            for schluessel, inhalt in wert.items():
+                if schluessel in ADRESS_FELDER and isinstance(inhalt, str):
+                    gefunden.append((ADRESS_FELDER.index(schluessel), inhalt))
+                else:
+                    suchen(inhalt, tiefe + 1)
         elif isinstance(wert, list):
             for inhalt in wert:
                 suchen(inhalt, tiefe + 1)
 
     suchen(daten)
-    return adressen[0] if adressen else ""
+    for _, adresse in sorted(gefunden, key=lambda g: g[0]):
+        if adresse.lower().startswith("https://"):
+            return adresse
+    return ""
+
+
+class PdfZuGross(Exception):
+    pass
+
+
+class _NurHttps(urllib.request.HTTPRedirectHandler):
+    """Weiterleitungen nur auf https, höchstens drei."""
+
+    max_redirections = 3
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not str(newurl).lower().startswith("https://"):
+            raise urllib.error.HTTPError(req.full_url, code, "Weiterleitung nicht auf https", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+# Eigener Zugang ohne Cookies und ohne Browserprofil: Die befristete PDF-Adresse braucht
+# keine Anmeldung, also bekommt sie auch keine. (build_opener hat keinen Cookie-Speicher.)
+_oeffner = urllib.request.build_opener(_NurHttps)
+
+
+class DownloadUnvollstaendig(Exception):
+    pass
+
+
+#: Gesamtfrist je Download, zusätzlich zur Frist je Leseschritt: Ein Server, der
+#: tröpfchenweise sendet, soll den Lauf nicht beliebig aufhalten.
+GESAMTFRIST_S = 120
+_STUECK = 64 * 1024
+
+
+def _adresse_erlaubt(adresse: str) -> bool:
+    return adresse.lower().startswith("https://")
+
+
+def pdf_herunterladen(adresse: str) -> bytes:
+    """Lädt das PDF ohne Cookies, nur über https, höchstens 20 MB, in höchstens
+    GESAMTFRIST_S Sekunden. Ein abgebrochener Download wird erkannt (Länge gegen
+    Content-Length, unvollständige Übertragung) und nie als Rechnung weitergegeben —
+    PyMuPDF würde ein gekürztes PDF sonst stillschweigend reparieren.
+    Fehlermeldungen nennen die Adresse nie (sie enthält ein Zugangstoken)."""
+    if not _adresse_erlaubt(adresse):
+        raise RuntimeError("PDF-Adresse ist nicht https")
+    ende = time.monotonic() + GESAMTFRIST_S
+    try:
+        anfrage = urllib.request.Request(adresse, headers={"User-Agent": "belegabruf", "Accept": "application/pdf"})
+        with _oeffner.open(anfrage, timeout=60) as antwort:
+            angekuendigt = None
+            laenge = antwort.headers.get("Content-Length")
+            if laenge and str(laenge).strip().isdigit():
+                angekuendigt = int(laenge)
+                if angekuendigt > pruefung.MAX_PDF_BYTES:
+                    raise PdfZuGross()
+            # read1 gibt zurück, was gerade da ist; read(n) würde warten, bis n Bytes da sind —
+            # dann griffe die Gesamtfrist bei einem tröpfelnden Server nicht.
+            lesen = getattr(antwort, "read1", antwort.read)
+            teile: list[bytes] = []
+            gesamt = 0
+            while True:
+                if time.monotonic() > ende:
+                    raise DownloadUnvollstaendig(f"Download dauerte länger als {GESAMTFRIST_S} Sekunden")
+                stueck = lesen(_STUECK)
+                if not stueck:
+                    break
+                teile.append(stueck)
+                gesamt += len(stueck)
+                if gesamt > pruefung.MAX_PDF_BYTES:
+                    raise PdfZuGross()
+            inhalt = b"".join(teile)
+    except (PdfZuGross, DownloadUnvollstaendig):
+        raise
+    except http.client.IncompleteRead:
+        raise DownloadUnvollstaendig("Download abgebrochen") from None
+    except urllib.error.HTTPError as fehler:
+        raise RuntimeError(f"PDF-Adresse antwortet mit {fehler.code}") from None
+    except urllib.error.URLError as fehler:
+        raise RuntimeError(f"PDF-Adresse nicht erreichbar ({type(fehler.reason).__name__})") from None
+    except Exception as fehler:  # noqa: BLE001 - z. B. InvalidURL: nie die Adresse weitergeben
+        raise RuntimeError(f"PDF nicht ladbar ({type(fehler).__name__})") from None
+    if angekuendigt is not None and len(inhalt) != angekuendigt:
+        raise DownloadUnvollstaendig(f"Download abgebrochen ({len(inhalt)} von {angekuendigt} Bytes)")
+    return inhalt
 
 
 def pdf_pruefen(inhalt: bytes | None) -> str | None:
@@ -159,7 +254,7 @@ def _aufrufen(seite, url: str):
 
 
 # JavaScript: sichtbare Zeilen mit PDF-Knopf, je Zeile nur Datum und Betrag (keine Beschreibung).
-_ZEILEN_JS = """(knopf) => {
+_ZEILEN_JS = r"""(knopf) => {
   const sichtbar = e => !!(e.offsetWidth || e.offsetHeight || e.getClientRects().length)
                         && getComputedStyle(e).visibility !== 'hidden';
   const knoepfe = [...document.querySelectorAll(knopf)].filter(sichtbar);
@@ -168,11 +263,11 @@ _ZEILEN_JS = """(knopf) => {
     let zeile = k.closest('tr, [role=row]');
     if (!zeile) {
       zeile = k.parentElement;
-      while (zeile && !/\\d{1,2}\\.\\d{1,2}\\.20\\d{2}/.test(zeile.innerText || '')) zeile = zeile.parentElement;
+      while (zeile && !/\d{1,2}\.\d{1,2}\.20\d{2}/.test(zeile.innerText || '')) zeile = zeile.parentElement;
     }
     const text = zeile ? zeile.innerText : '';
-    const datum = (text.match(/\\b\\d{1,2}\\.\\d{1,2}\\.20\\d{2}\\b/) || [''])[0];
-    const betrag = (text.match(/-?\\d[\\d.]*,\\d{2}\\s?€|€\\s?-?\\d[\\d.]*,\\d{2}/) || [''])[0];
+    const datum = (text.match(/\b\d{1,2}\.\d{1,2}\.20\d{2}\b/) || [''])[0];
+    const betrag = (text.match(/-?\d[\d.]*,\d{2}\s?€|€\s?-?\d[\d.]*,\d{2}/) || [''])[0];
     return [datum, betrag];
   });
 }"""
@@ -239,10 +334,8 @@ class Xentra(Quelle):
         return seite.locator(KNOPF).locator("visible=true").nth(nummer)
 
     def _pdf_laden(self, kontext, adresse: str) -> bytes:
-        antwort = kontext.request.get(adresse, timeout=60000)
-        if not antwort.ok:
-            raise RuntimeError(f"PDF-Adresse antwortet mit {antwort.status}")
-        return antwort.body()
+        # Bewusst nicht über den Browser (kontext.request): der schickte die Cookies mit.
+        return pdf_herunterladen(adresse)
 
     def _klicken(self, kontext, seite, zeile: Zeile) -> tuple[str, str]:
         """Klickt „PDF herunterladen“ und liest Rechnungs-ID und PDF-Adresse mit.
@@ -323,6 +416,16 @@ class Xentra(Quelle):
                     continue
                 try:
                     inhalt = self._pdf_laden(kontext, adresse)
+                except DownloadUnvollstaendig as fehler:
+                    erg.status = "unvollstaendig"
+                    erg.abweichungen.append(f"{bezeichnung} ({kennung}): {fehler}, nicht gespeichert — "
+                                            "der nächste Lauf versucht es erneut.")
+                    continue
+                except PdfZuGross:
+                    erg.status = "unvollstaendig"
+                    erg.abweichungen.append(f"{bezeichnung} ({kennung}): PDF größer als "
+                                            f"{pruefung.MAX_PDF_BYTES // (1024 * 1024)} MB, nicht gespeichert.")
+                    continue
                 except Exception as fehler:  # noqa: BLE001
                     erg.status = "unvollstaendig"
                     erg.abweichungen.append(f"{bezeichnung} ({kennung}): PDF nicht geladen ({_kurz(fehler)}).")

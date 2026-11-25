@@ -4,6 +4,7 @@ Holt Rechnungen, die es nur im eingeloggten Konto eines Anbieters gibt, per Dopp
 eigenen Rechner. Es kann:
 
 - **Airbnb:** die Rechnungen über die Airbnb-Servicegebühren für Gastgeber, jede Buchung als eigenes PDF.
+- **Skool:** die Rechnungen für bezahlte Mitgliedschaften in Skool-Communities (siehe [Skool](#skool)).
 - **Xentra:** die Rechnungen für das Xentra-Abonnement und Provisionen (siehe [Xentra](#xentra)).
 
 **Das ist kein Dienst — jeder betreibt seine eigene Kopie.** Niemand außer dir sieht deine
@@ -79,12 +80,30 @@ Administratorrechte nötig.
 4. Ein schwarzes Fenster geht auf und lädt alles Nötige (ein Hilfsprogramm namens *uv*, Python und
    einen eigenen Browser). Das dauert beim ersten Mal ein paar Minuten.
 5. Dann kommen ein paar Fragen. **Enter übernimmt jeweils den Vorschlag in [Klammern].**
-   - Welche Anbieter (Airbnb, Xentra)
+   - Welche Anbieter (Airbnb, Skool, Xentra)
    - Ein Name für dein Konto — nur für dich, z. B. „privat“. Hast du mehrere Airbnb-Konten
      (z. B. einen Zugang als Co-Gastgeber), kannst du mehrere eintragen; jedes bekommt seine eigene Anmeldung.
    - Der Belegordner (Vorschlag: `Dokumente/Belege`)
 6. Zum Schluss öffnet sich das Airbnb-Anmeldefenster. Melde dich an. Fertig.
 
+## Skool
+
+Skool zeigt die Rechnungen unter *Einstellungen → Zahlungsverlauf*, je Zahlung eine Rechnung. Einen
+PDF-Knopf gibt es dort nicht: Das Programm öffnet jede Rechnung im (unsichtbaren) Browser, prüft, dass
+Überschrift und Gesamtbetrag da sind, und speichert sie selbst als PDF:
+`skool/<Jahr>/<Datum>_<Community>_<Rechnungs-ID>.pdf`. Bist du Mitglied in mehreren bezahlten
+Communities, kommen alle mit; die Community steht im Dateinamen. Am Ende vergleicht es, ob so viele
+Rechnungen geholt sind, wie der Zahlungsverlauf nennt. Das PDF kommt immer im **hellen Design**
+heraus (gut zum Drucken und für die Texterkennung), auch wenn dein Skool-Konto auf Dunkel steht — das
+gilt nur für den Ausdruck, deine Einstellung bei Skool bleibt, wie sie ist.
+
+Das Programm **liest nur und lädt herunter**. Es klickt bei Skool nichts an — weder
+Zahlungsmethoden noch Kündigung.
+
+**Anmeldung mit Google:** Wer sich bei Skool sonst „Mit Google“ anmeldet, wird im Anmeldefenster des
+Programms womöglich von Google blockiert („Dieser Browser oder diese App ist möglicherweise nicht
+sicher“). Dann bei Skool mit **E-Mail und Passwort** anmelden. Hast du noch kein Skool-Passwort,
+leg vorher in deinem normalen Browser eins fest (bei der Skool-Anmeldung über „Passwort vergessen“).
 ## Xentra
 
 Xentra zeigt die Rechnungen unter *Abrechnung → Rechnungen*: Datum, Beschreibung, Betrag, Status und
@@ -157,6 +176,15 @@ Einstellungen, Anmeldungen, Protokolle und Belege bleiben dabei erhalten — sie
 Programmordner.
 Ein automatisches Selbst-Update gibt es bewusst nicht.
 
+## Was neu ist
+
+- **1.2.0** — Zwei neue Anbieter: **Xentra** (Abo- und Provisionsrechnungen) und **Skool**
+  (Rechnungen für bezahlte Communities, immer als helles PDF). Beim Update einmal „Einrichten“
+  doppelklicken und die neuen Anbieter dazunehmen.
+- **1.1.0** — Das Protokoll entscheidet, was schon geholt ist (nicht mehr der Belegordner); es liegt
+  bei den Einstellungen. Neu: „Fehlende Dateien neu holen“.
+- **1.0.0** — Erste Version: Airbnb-Rechnungen per Doppelklick.
+
 ## Rechtliches
 
 - Das Programm ruft **deine eigenen Rechnungen aus deinem eigenen Konto** ab, so wie du es von Hand
@@ -168,6 +196,10 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 ---
 
 ## Für Neugierige und Entwickler
+
+Warum das Programm so gebaut ist, steht in den **Entscheidungen** unter
+[`docs/entscheidungen/`](docs/entscheidungen/README.md); was als Nächstes kommt, in der
+[Roadmap](docs/roadmap.md).
 
 ### Kommandozeile
 
@@ -196,7 +228,7 @@ programm/
   belegabruf/
     cli.py            Kommandozeile und Ablauf beim Doppelklick
     ablauf.py         Gerüst: prüfen, anmelden lassen, holen, abliefern
-    quellen/          ein Baustein je Anbieter: airbnb.py, xentra.py
+    quellen/          ein Baustein je Anbieter: airbnb.py, skool.py, xentra.py
       basis.py        die feste Schnittstelle für Bausteine
     ziele/            wohin Belege geliefert werden (Version 1: ordner.py)
     protokoll.py      Protokoll je Anbieter und Konto — entscheidet, was schon geholt ist
@@ -238,7 +270,4 @@ Die GitHub Action baut das ZIP und hängt es an das Release.
 ## Offen
 
 - **Windows:** noch von niemandem getestet (Abnahmepunkt 5). Wer es ausprobiert, bitte Rückmeldung.
-- **Xentra:** Der erste echte Lauf steht noch aus; getestet ist mit einer nachgebauten Seite. Ob
-  Xentra bei der Anmeldung einen zweiten Faktor verlangt, ist unbekannt — das Anmeldefenster wartet so
-  lange, bis du fertig bist.
 - Weitere Bausteine und das Ziel „Upload an die Buchhaltung“ folgen in späteren Versionen.

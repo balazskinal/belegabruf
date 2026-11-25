@@ -6,12 +6,11 @@ Stand: 25.11.2026. Begründungen stehen in den [Entscheidungen](entscheidungen/R
 
 - **1.0.0** — Airbnb-Einzelrechnungen per Doppelklick in einen lokalen Ordner (ADR-001)
 - **1.1.0** — Das Protokoll entscheidet, liegt im Datenordner (ADR-002)
+- **1.2.0** — Quellen Xentra (Abo- und Provisionsrechnungen aus „Abrechnung → Rechnungen“) und Skool
+  (Rechnungen aus dem Zahlungsverlauf, immer als helles PDF). Beide gegen echte Konten durchgespielt.
 
 ## In Arbeit
 
-- [ ] **1.2.0 — Quellen Xentra und Skool.** Xentra: Abonnement-Rechnungen aus „Abrechnung → Rechnungen“.
-      Skool: Rechnungen aus dem Zahlungsverlauf, als PDF gespeichert. Beide gegen echte Konten
-      durchgespielt; bei Skool wird das PDF noch auf helles Design gestellt.
 - [ ] **1.3.0 — Ziel Mail:** jede neue Rechnung per Mail an eine oder mehrere Belegadressen, vom
       eigenen Postfach (ADR-004)
 - [ ] **1.4.0 — Ziel sevDesk über die API:** Entwurf mit PDF, Datum, Rechnungsnummer (ADR-004)
