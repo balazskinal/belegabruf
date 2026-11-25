@@ -403,3 +403,80 @@ def test_ablauf_gibt_zeitraum_an_die_quelle(monkeypatch, tmp_path):
     konto = Konto("airbnb", "a", belege_ab="01.06.2026")
     erg = ablauf.abrufen(Einstellungen(belegordner=tmp_path / "B", konten=[konto]), konto, lambda t: None)
     assert gesehen["ab"] == date(2026, 6, 1) and erg.ab == "2026-06-01" and erg.uebersprungen == 4
+
+
+# ── Update nur durch Auspacken: Startdateien richten sich selbst ein ─────────
+
+
+def _startdatei_ausfuehren(tmp_path, name: str, uv_da: bool = True, sync_klappt: bool = True):
+    """Führt eine Mac-Startdatei in einer Kopie aus, mit einem falschen „uv“, das nur
+    mitschreibt (lädt nichts, startet nichts)."""
+    import shutil
+    import subprocess
+
+    wurzel = Path(__file__).resolve().parents[2]
+    (tmp_path / "Start Mac").mkdir()
+    (tmp_path / "programm").mkdir()
+    shutil.copy(wurzel / "Start Mac" / name, tmp_path / "Start Mac" / name)
+    werkzeuge = tmp_path / "bin"
+    werkzeuge.mkdir()
+    protokoll = tmp_path / "uv.log"
+    if uv_da:
+        falsches_uv = werkzeuge / "uv"
+        falsches_uv.write_text(
+            "#!/bin/bash\n"
+            f'echo "$*" >> "{protokoll}"\n'
+            f'if [ "$1" = sync ]; then mkdir -p .venv; {"exit 0" if sync_klappt else "exit 1"}; fi\n'
+            "exit 0\n", encoding="utf-8")
+        falsches_uv.chmod(0o755)
+    umgebung = {"PATH": f"{werkzeuge}:/usr/bin:/bin", "HOME": str(tmp_path / "home")}
+    lauf = subprocess.run(["/bin/bash", str(tmp_path / "Start Mac" / name)], input="\n", capture_output=True,
+                          text=True, env=umgebung, timeout=30)
+    aufrufe = protokoll.read_text(encoding="utf-8").splitlines() if protokoll.exists() else []
+    return lauf, aufrufe
+
+
+@pytest.mark.skipif(__import__("sys").platform == "win32", reason="Mac-Startdatei")
+@pytest.mark.parametrize("name, befehl", [("Belege holen.command", "belege oberflaeche"),
+                                          ("Belegabruf (Terminal).command", "belege start")])
+def test_startdatei_richtet_neue_version_selbst_ein(tmp_path, name, befehl):
+    lauf, aufrufe = _startdatei_ausfuehren(tmp_path, name)
+    assert "Richte die neue Version ein" in lauf.stdout
+    assert aufrufe == ["sync --no-dev --quiet", "run --no-dev --quiet playwright install --no-shell chromium",
+                       f"run --no-dev --quiet {befehl}"]
+    # zweiter Start: schon eingerichtet, nur noch starten
+    (tmp_path / "uv.log").unlink()
+    import subprocess
+
+    lauf = subprocess.run(["/bin/bash", str(tmp_path / "Start Mac" / name)], input="\n", capture_output=True,
+                          text=True, env={"PATH": f"{tmp_path / 'bin'}:/usr/bin:/bin", "HOME": str(tmp_path / "home")},
+                          timeout=30)
+    assert "Richte" not in lauf.stdout
+    assert (tmp_path / "uv.log").read_text(encoding="utf-8").splitlines() == [f"run --no-dev --quiet {befehl}"]
+
+
+@pytest.mark.skipif(__import__("sys").platform == "win32", reason="Mac-Startdatei")
+def test_startdatei_ohne_uv_verweist_auf_einrichten(tmp_path):
+    lauf, aufrufe = _startdatei_ausfuehren(tmp_path, "Belege holen.command", uv_da=False)
+    assert lauf.returncode == 1 and "Einrichten" in lauf.stdout and aufrufe == []
+
+
+@pytest.mark.skipif(__import__("sys").platform == "win32", reason="Mac-Startdatei")
+def test_startdatei_halbe_einrichtung_wird_weggeraeumt(tmp_path):
+    lauf, aufrufe = _startdatei_ausfuehren(tmp_path, "Belege holen.command", sync_klappt=False)
+    assert lauf.returncode == 1 and "Einrichten" in lauf.stdout
+    assert not (tmp_path / "programm" / ".venv").exists()  # nächster Start versucht es erneut
+    assert not any("belege" in a for a in aufrufe)
+
+
+def test_windows_startdateien_richten_sich_selbst_ein():
+    wurzel = Path(__file__).resolve().parents[2]
+    for name, befehl in (("Belege holen.cmd", "belege oberflaeche"), ("Belegabruf (Terminal).cmd", "belege start")):
+        roh = (wurzel / "Start Windows" / name).read_bytes()
+        assert roh.count(b"\n") == roh.count(b"\r\n"), f"{name}: Zeilenenden müssen CRLF sein"
+        text = roh.decode("utf-8")
+        reihenfolge = ["if exist .venv goto eingerichtet", "Richte die neue Version ein", "uv sync --no-dev --quiet",
+                       "playwright install --no-shell chromium", ":eingerichtet", befehl, ":selbstfehler",
+                       "rmdir /s /q .venv"]
+        stellen = [text.index(t) for t in reihenfolge]
+        assert stellen == sorted(stellen), name

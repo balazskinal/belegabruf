@@ -82,7 +82,8 @@ def start() -> int:
         if neuer:
             print(f"\nHinweis: Es gibt eine neuere Version ({neuer}). Herunterladen unter")
             print(f"  {aktualisierung.NEUESTE_SEITE}")
-            print("  (alten Ordner belegabruf-v… löschen, neues ZIP auspacken — Einstellungen, Anmeldungen\n   und Protokolle bleiben erhalten.)")
+            print("  (alten Ordner belegabruf-v… löschen, neues ZIP auspacken, \"Belege holen\" doppelklicken —\n"
+                  "   Einstellungen, Anmeldungen und Protokolle bleiben erhalten.)")
 
         for k in konten:
             if k.quelle != "airbnb":  # nur Airbnb zeigt bloß die letzten 12 Monate

@@ -431,7 +431,7 @@ async function laden(formularAuch) {
   zustand = await api("GET", "/api/zustand");
   $("version").textContent = zustand.version;
   if (zustand.neuere_version) {
-    $("neu").textContent = `Es gibt eine neuere Version (${zustand.neuere_version}). Herunterladen unter ${zustand.neueste_seite} — alten Ordner löschen, neues ZIP auspacken; Einstellungen und Anmeldungen bleiben.`;
+    $("neu").textContent = `Es gibt eine neuere Version (${zustand.neuere_version}). Herunterladen unter ${zustand.neueste_seite} — alten Ordner löschen, neues ZIP auspacken, „Belege holen“ doppelklicken (richtet sich selbst ein); Einstellungen und Anmeldungen bleiben.`;
     $("neu").classList.remove("versteckt");
   }
   $("willkommen").classList.toggle("versteckt", zustand.eingerichtet);

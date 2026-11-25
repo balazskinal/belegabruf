@@ -8,7 +8,16 @@ set PYTHONUTF8=1
 
 where uv >nul 2>nul
 if errorlevel 1 goto nichteingerichtet
-if not exist .venv goto nichteingerichtet
+
+rem Nach einem Update (neues ZIP ausgepackt) fehlt .venv: dann selbst einrichten.
+rem Einstellungen, Anmeldungen und Protokolle liegen im Benutzerordner und bleiben.
+if exist .venv goto eingerichtet
+echo Richte die neue Version ein ... (einmalig, dauert einen Moment)
+uv sync --no-dev --quiet
+if errorlevel 1 goto selbstfehler
+uv run --no-dev --quiet playwright install --no-shell chromium
+if errorlevel 1 goto selbstfehler
+:eingerichtet
 
 rem Dieses Fenster klein machen; es muss offen bleiben, solange Belegabruf laeuft.
 mode con: cols=62 lines=12
@@ -18,5 +27,11 @@ exit /b %errorlevel%
 
 :nichteingerichtet
 echo Belegabruf ist noch nicht eingerichtet. Bitte zuerst "Einrichten" doppelklicken.
+pause
+exit /b 1
+
+:selbstfehler
+if exist .venv rmdir /s /q .venv
+echo Das hat nicht geklappt. Bitte "Einrichten" doppelklicken.
 pause
 exit /b 1

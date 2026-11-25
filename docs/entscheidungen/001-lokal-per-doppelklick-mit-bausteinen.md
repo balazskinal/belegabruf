@@ -38,7 +38,9 @@ betreibt und nachbauen kann.
 9. **Eigenes öffentliches Repo**, MIT-Lizenz. Auslieferung über **GitHub Releases**: ein ZIP je Version,
    gebaut von einer GitHub Action. Keine Installationsdatei (ohne Signatur warnen beide Systeme zu laut).
 10. **Update:** alten Programmordner löschen, neues ZIP auspacken. **Kein Selbst-Update** — beim Start nur
-    ein Hinweis auf eine neuere Version.
+    ein Hinweis auf eine neuere Version. (Seit 2.0.0 richten sich „Belege holen“ und „Belegabruf
+    (Terminal)“ beim ersten Start einer ausgepackten Version selbst ein, wenn uv schon da ist; das ist
+    kein Selbst-Update, es lädt nur die Bausteine der Version, die man selbst ausgepackt hat.)
 11. **Neue Bausteine per Pull Request**, gemergt vom Betreuer des Repos nach vollständiger Prüfung: Ein
     Baustein arbeitet mit den angemeldeten Sitzungen der Nutzer.
 

@@ -273,7 +273,9 @@ Beim Start steht ein Hinweis, wenn es eine neuere Version gibt. Dann:
 
 1. Den **alten Ordner `belegabruf-v…` komplett löschen** (mit Start-Ordnern und `programm`).
 2. Die neue ZIP-Datei von [Neueste Version](https://github.com/balazskinal/belegabruf/releases/latest) laden und auspacken.
-3. „Einrichten“ doppelklicken (lädt eventuell neue Bausteine; deine Einstellungen bleiben erhalten).
+3. **„Belege holen“ doppelklicken.** Beim ersten Start richtet sich die neue Version selbst ein („Richte
+   die neue Version ein …“, einmalig, dauert einen Moment). „Einrichten“ brauchst du nur beim allerersten
+   Mal auf einem Rechner.
 
 Einstellungen, Anmeldungen, Protokolle und Belege bleiben dabei erhalten — sie liegen nicht im
 Programmordner.
@@ -286,7 +288,8 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
   Konto Anmelden und Prüfen, Belege holen mit Fortschritt und Zusammenfassung. Das bisherige Menü gibt es
   weiter über „Belegabruf (Terminal)“. Ein Kontoname ist nur noch nötig, wenn es beim selben Anbieter
   mehrere Konten gibt. Neu: Haken je Konto zum Holen, Zeitraum je Konto („Belege ab“), Unterordner nach
-  Jahr und Monat, Mailanbieter als Auswahl. Beim Update einmal „Einrichten“ doppelklicken. **Windows ist noch ungetestet.**
+  Jahr und Monat, Mailanbieter als Auswahl. Update ab jetzt: neues ZIP auspacken, „Belege holen“
+  doppelklicken — die neue Version richtet sich selbst ein. **Windows ist noch ungetestet.**
 - **1.3.0** — Neue Rechnungen auf Wunsch zusätzlich **per Mail** verschicken (über dein eigenes
   Postfach, siehe [Versand per Mail](#versand-per-mail)). Beim Update einmal „Einrichten“
   doppelklicken; die Frage nach dem Mailversand steht auf „nein“, bis du sie mit „j“ beantwortest.

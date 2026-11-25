@@ -47,4 +47,4 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" "dist/belegabruf-${GITHUB_REF_NAME}.zip" \
             --title "Belegabruf ${GITHUB_REF_NAME}" \
-            --notes "Herunterladen: belegabruf-${GITHUB_REF_NAME}.zip. Update: alten Programmordner löschen, dieses ZIP auspacken. Einstellungen und Anmeldungen bleiben erhalten."
+            --notes "Herunterladen: belegabruf-${GITHUB_REF_NAME}.zip. Update: alten Programmordner löschen, dieses ZIP auspacken, Belege holen doppelklicken (richtet sich beim ersten Start selbst ein). Einstellungen und Anmeldungen bleiben erhalten."
