@@ -757,3 +757,21 @@ def test_haken_heisst_belege_holen_mit_erklaerung(seite):
     assert haken.inner_text().strip() == "Belege holen"
     assert "übersprungen" in haken.get_attribute("title")
     assert "übersprungen" in haken.locator("input").get_attribute("aria-description")
+
+
+def test_einrichtung_laedt_keine_headless_shell():
+    """Headless läuft über channel="chromium" mit dem normalen Chromium — die eigene
+    Headless Shell wird nicht gebraucht und nicht geladen (spart Platz und Zeit)."""
+    import re
+
+    wurzel = Path(__file__).resolve().parents[2]
+    for datei in (wurzel / "Start Mac" / "Einrichten.command", wurzel / "Start Windows" / "Einrichten.cmd"):
+        text = datei.read_text(encoding="utf-8")
+        assert "playwright install --no-shell chromium" in text, datei
+    gefunden = 0
+    for datei in (wurzel / "programm" / "belegabruf").rglob("*.py"):
+        text = datei.read_text(encoding="utf-8")
+        for aufruf in re.finditer(r"\.(launch|launch_persistent_context)\((.*?)\)\n", text, re.S):
+            gefunden += 1
+            assert 'channel="chromium"' in aufruf.group(2), f"{datei.name}: Start ohne channel=chromium"
+    assert gefunden >= 3

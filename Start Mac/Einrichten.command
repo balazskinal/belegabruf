@@ -17,7 +17,7 @@ echo "Hole Python und die nötigen Bausteine …"
 uv sync --no-dev --quiet || { echo "Das hat nicht geklappt."; read -r -p "Enter zum Schließen"; exit 1; }
 
 echo "Hole den Browser (Chromium) …"
-uv run --no-dev playwright install chromium || { echo "Der Browser konnte nicht geladen werden."; read -r -p "Enter zum Schließen"; exit 1; }
+uv run --no-dev playwright install --no-shell chromium || { echo "Der Browser konnte nicht geladen werden."; read -r -p "Enter zum Schließen"; exit 1; }
 
 echo
 echo "Fertig eingerichtet. Gleich öffnet sich das Fenster „Belegabruf“ — dort trägst du Belegordner und Konten ein."

@@ -27,7 +27,7 @@ uv sync --no-dev --quiet
 if errorlevel 1 ( echo Das hat nicht geklappt. & pause & exit /b 1 )
 
 echo Hole den Browser ^(Chromium^) ...
-uv run --no-dev playwright install chromium
+uv run --no-dev playwright install --no-shell chromium
 if errorlevel 1 ( echo Der Browser konnte nicht geladen werden. & pause & exit /b 1 )
 
 echo.
