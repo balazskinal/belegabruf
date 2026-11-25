@@ -72,6 +72,7 @@
   .leise { color: var(--leise); font-size: 13px; }
   .versteckt { display: none; }
   .unsichtbar { visibility: hidden; }
+  a { color: var(--akzent); }
   .feld-fehler, .feld-fehler:focus-visible { border-color: var(--schlecht) !important; outline: 2px solid var(--schlecht); outline-offset: 0; }
   .feldsatz { color: var(--schlecht); font-size: 13px; margin: 3px 0 0; }
   .kontozeile + .feldsatz { margin: -2px 0 6px; }
@@ -170,6 +171,20 @@
           verfügbaren Rechnungen raus.</p>
         <label class="ankreuzen"><input type="checkbox" id="mail-an"> Rechnungen zusätzlich per Mail verschicken</label>
         <div id="mail-felder">
+          <label for="mailanbieter">Mailanbieter</label>
+          <select id="mailanbieter" aria-describedby="anbieter-hinweis">
+            <option value="gmx">GMX</option>
+            <option value="webde">WEB.DE</option>
+            <option value="gmail">Gmail</option>
+            <option value="outlook">Outlook.com</option>
+            <option value="m365">Microsoft 365</option>
+            <option value="ionos">IONOS</option>
+            <option value="strato">STRATO</option>
+            <option value="allinkl">all-inkl.com</option>
+            <option value="icloud">iCloud</option>
+            <option value="anderer">Anderer (selbst eintragen)</option>
+          </select>
+          <p class="leise versteckt" id="anbieter-hinweis"></p>
           <div class="reihe">
             <div><label for="server">Postausgangsserver (SMTP)</label><input type="text" id="server" placeholder="smtp.example.com" spellcheck="false"></div>
             <div><label for="verschluesselung">Verschlüsselung</label>
@@ -194,8 +209,8 @@
       <div id="passwort-bereich">
         <h2 class="oben22">Mail-Passwort</h2>
         <p class="leise">Das Passwort geht direkt in den Passwortspeicher deines Rechners (Mac: Schlüsselbund,
-          Windows: Anmeldeinformationsverwaltung). Es wird nie angezeigt. Bei Gmail bzw. Microsoft 365 meist ein
-          App-Passwort. Status: <strong id="passwort-status">–</strong></p>
+          Windows: Anmeldeinformationsverwaltung). Es wird nie angezeigt. Bei Gmail und iCloud ein
+          App-Passwort (siehe Hinweis beim Mailanbieter). Status: <strong id="passwort-status">–</strong></p>
         <form id="passwort-formular" autocomplete="off">
           <label for="passwort">Passwort für das Mailkonto</label>
           <input type="password" id="passwort" autocomplete="new-password">
@@ -389,6 +404,8 @@ function formularFuellen() {
   $("server").value = m.server; $("port").value = m.port; $("verschluesselung").value = m.verschluesselung;
   $("benutzer").value = m.benutzer; $("absender").value = m.absender; $("empfaenger").value = m.empfaenger.join(", ");
   absenderVonHand = Boolean(m.absender) && m.absender !== m.benutzer;
+  $("mailanbieter").value = anbieterErkennen();
+  anbieterHinweis();
   mailFelderZeigen();
 }
 
@@ -509,6 +526,99 @@ $("konto-dazu").addEventListener("click", () => {
   $("kontenliste").append(kontozeile({ quelle: zustand.quellen[0].name }));
   namenZeigen();
 });
+// ── Mailanbieter: füllt Server, Port und Verschlüsselung vor ──────────────────
+// Gespeichert werden weiter nur server/port/verschluesselung; der Anbieter wird beim Laden
+// erkannt. Werte geprüft am 25.11.2026 auf den offiziellen Hilfeseiten:
+//   GMX        https://hilfe.gmx.net/pop-imap/imap/imap-serverdaten.html
+//   WEB.DE     https://hilfe.web.de/pop-imap/imap/imap-serverdaten.html
+//   Gmail      https://knowledge.workspace.google.com/admin/gmail/send-email-from-a-printer-scanner-or-app
+//              (465 SSL oder 587 STARTTLS), App-Passwort: https://support.google.com/mail/answer/185833
+//   Outlook    https://support.microsoft.com/en-us/office/pop-imap-and-smtp-settings-for-outlook-com-d088b986-291d-42b8-9564-9c414e2aa040
+//   M365       https://learn.microsoft.com/en-us/exchange/mail-flow-best-practices/how-to-set-up-a-multifunction-device-or-application-to-send-email-using-microsoft-365-or-office-365
+//              (587 STARTTLS, nicht 465), SMTP AUTH: https://learn.microsoft.com/en-us/exchange/clients-and-mobile-in-exchange-online/authenticated-client-smtp-submission
+//              Zeitplan: https://techcommunity.microsoft.com/blog/exchange/updated-exchange-online-smtp-auth-basic-authentication-deprecation-timeline/4489835
+//   IONOS      https://www.ionos.de/hilfe/e-mail/allgemeine-themen/serverinformationen-fuer-imap-pop3-und-smtp/
+//   STRATO     https://www.strato.de/faq/mail/e-mailserver-adressen-ports-ssl-tls/ (587 nur für Server-Relay)
+//   all-inkl   https://all-inkl.com/wichtig/anleitungen/programme/e-mail/thunderbird/smtp-authentifizierung-aktivieren_449.html
+//              (Server je Kunde: <KAS-Login>.kasserver.com, 465 SSL)
+//   iCloud     https://support.apple.com/en-us/102525, App-Passwort: https://support.apple.com/en-us/102654
+const MAILANBIETER = {
+  gmx: { server: "mail.gmx.net", port: "587", verschluesselung: "starttls",
+         hinweis: "Bei GMX muss der Zugriff per POP3/IMAP in den GMX-Einstellungen erst eingeschaltet sein. Mit Zwei-Faktor-Anmeldung braucht es ein App-Passwort.",
+         link: "https://hilfe.gmx.net/sicherheit/2fa/anwendungsspezifisches-passwort.html" },
+  webde: { server: "smtp.web.de", port: "587", verschluesselung: "starttls",
+           hinweis: "Bei WEB.DE muss der Zugriff per POP3/IMAP in den WEB.DE-Einstellungen erst eingeschaltet sein. Mit Zwei-Faktor-Anmeldung braucht es ein App-Passwort.",
+           link: "https://hilfe.web.de/sicherheit/2fa/anwendungsspezifisches-passwort.html" },
+  gmail: { server: "smtp.gmail.com", port: "465", verschluesselung: "ssl",
+           hinweis: "Gmail braucht ein App-Passwort (dafür muss die Bestätigung in zwei Schritten an sein). Bei manchen Arbeits- oder Schulkonten bietet Google keins an.",
+           link: "https://support.google.com/mail/answer/185833" },
+  outlook: { server: "smtp-mail.outlook.com", port: "587", verschluesselung: "starttls",
+             hinweis: "Achtung: Microsoft verlangt für Outlook.com die moderne Anmeldung (OAuth2). Belegabruf meldet sich mit Passwort an — das klappt bei Outlook.com voraussichtlich nicht. Mit „Mail-Anmeldung prüfen“ testen; sonst ein anderes Postfach nehmen.",
+             link: "https://support.microsoft.com/en-us/office/pop-imap-and-smtp-settings-for-outlook-com-d088b986-291d-42b8-9564-9c414e2aa040" },
+  m365: { server: "smtp.office365.com", port: "587", verschluesselung: "starttls",
+          hinweis: "Achtung: Bei Microsoft 365 muss der Admin „SMTP AUTH“ für dieses Postfach erlauben (in neueren Organisationen ist es aus). Microsoft schaltet die Anmeldung mit Passwort dafür Ende Dezember 2026 standardmäßig ab; der Admin kann sie wieder einschalten, das endgültige Aus kündigt Microsoft für 2027 an. Mit „Mail-Anmeldung prüfen“ testen.",
+          link: "https://learn.microsoft.com/en-us/exchange/clients-and-mobile-in-exchange-online/authenticated-client-smtp-submission" },
+  ionos: { server: "smtp.ionos.de", port: "465", verschluesselung: "ssl" },
+  strato: { server: "smtp.strato.de", port: "465", verschluesselung: "ssl" },
+  allinkl: { server: null, port: "465", verschluesselung: "ssl",
+             hinweis: "Bei all-inkl.com ist der Server für jeden Kunden anders: Er steht im KAS, z. B. w0123456.kasserver.com." },
+  icloud: { server: "smtp.mail.me.com", port: "587", verschluesselung: "starttls",
+            hinweis: "iCloud braucht ein App-spezifisches Passwort (dafür muss die Zwei-Faktor-Authentifizierung an sein).",
+            link: "https://support.apple.com/en-us/102654" },
+};
+const KASSERVER = /^w\d+\.kasserver\.com$/i;
+
+function anbieterErkennen() {
+  const server = $("server").value.trim().toLowerCase();
+  const port = String($("port").value).trim();
+  const art = $("verschluesselung").value;
+  for (const [name, a] of Object.entries(MAILANBIETER)) {
+    if (a.port !== port || a.verschluesselung !== art) continue;
+    if (a.server === null ? KASSERVER.test(server) : a.server === server) return name;
+  }
+  return "anderer";
+}
+
+function anbieterHinweis() {
+  const a = MAILANBIETER[$("mailanbieter").value];
+  const kasten = $("anbieter-hinweis");
+  kasten.replaceChildren();
+  if (a && a.hinweis) {
+    kasten.append(a.hinweis);
+    if (a.link) {
+      const verweis = element("a", "Hilfeseite des Anbieters");
+      verweis.href = a.link; verweis.target = "_blank"; verweis.rel = "noopener noreferrer";
+      kasten.append(" ", verweis);
+    }
+  }
+  kasten.classList.toggle("versteckt", !(a && a.hinweis));
+  $("server").placeholder = $("mailanbieter").value === "allinkl" ? "w0123456.kasserver.com (steht im KAS)" : "smtp.example.com";
+}
+
+$("mailanbieter").addEventListener("change", () => {
+  const a = MAILANBIETER[$("mailanbieter").value];
+  if (a) {
+    $("server").value = a.server === null ? (KASSERVER.test($("server").value.trim()) ? $("server").value : "") : a.server;
+    $("port").value = a.port;
+    $("verschluesselung").value = a.verschluesselung;
+    for (const id of ["server", "port", "verschluesselung"]) markierungWeg($(id));
+  }
+  anbieterHinweis();
+});
+
+// Von Hand geändert: Passt es nicht mehr zum gewählten Anbieter, springt die Auswahl auf „Anderer“.
+// (Bei all-inkl.com gehört das Eintippen des Servers dazu.)
+function vonHandGeaendert(feld) {
+  const gewaehlt = $("mailanbieter").value;
+  const a = MAILANBIETER[gewaehlt];
+  if (!a) return;
+  if (feld === "server" && a.server === null) return;
+  if (anbieterErkennen() !== gewaehlt) { $("mailanbieter").value = "anderer"; anbieterHinweis(); }
+}
+$("server").addEventListener("input", () => vonHandGeaendert("server"));
+$("port").addEventListener("input", () => vonHandGeaendert("port"));
+$("verschluesselung").addEventListener("change", () => vonHandGeaendert("verschluesselung"));
+
 // Port springt mit der Verschlüsselung — aber nur, wenn er gerade auf dem Standard der
 // anderen Variante steht oder leer ist. Ein eigener Port bleibt stehen.
 const STANDARD_PORT = { ssl: "465", starttls: "587" };

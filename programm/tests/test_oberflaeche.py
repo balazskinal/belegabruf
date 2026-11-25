@@ -1109,3 +1109,82 @@ def test_zeitraum_je_konto_in_der_seite(seite, tmp_path):
     p.click("#reiter-einstellungen")
     assert p.locator("#kontenliste select[aria-label='Belege ab']").input_value() == "letzte-3-monate"
     assert "Belege ab 01." in p.inner_text("#konten")
+
+
+# ── Mailanbieter-Auswahl ─────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("anbieter, host, port, art", [
+    ("gmx", "mail.gmx.net", "587", "starttls"), ("webde", "smtp.web.de", "587", "starttls"),
+    ("gmail", "smtp.gmail.com", "465", "ssl"), ("outlook", "smtp-mail.outlook.com", "587", "starttls"),
+    ("m365", "smtp.office365.com", "587", "starttls"), ("ionos", "smtp.ionos.de", "465", "ssl"),
+    ("strato", "smtp.strato.de", "465", "ssl"), ("icloud", "smtp.mail.me.com", "587", "starttls"),
+])
+def test_mailanbieter_fuellt_vor(seite, anbieter, host, port, art):
+    p = seite
+    p.check("#mail-an")
+    p.select_option("#mailanbieter", anbieter)
+    assert (p.input_value("#server"), p.input_value("#port"), p.input_value("#verschluesselung")) == (host, port, art)
+    assert p.is_enabled("#server") and p.is_enabled("#port")  # bleiben änderbar
+
+
+def test_mailanbieter_hinweise_und_all_inkl(seite):
+    p = seite
+    p.check("#mail-an")
+    p.select_option("#mailanbieter", "gmail")
+    assert "App-Passwort" in p.inner_text("#anbieter-hinweis")
+    assert p.get_attribute("#anbieter-hinweis a", "href").startswith("https://support.google.com/")
+    assert p.get_attribute("#anbieter-hinweis a", "rel") == "noopener noreferrer"
+    p.select_option("#mailanbieter", "m365")
+    assert "SMTP AUTH" in p.inner_text("#anbieter-hinweis")
+    p.select_option("#mailanbieter", "outlook")
+    assert "OAuth2" in p.inner_text("#anbieter-hinweis")
+    p.select_option("#mailanbieter", "ionos")
+    assert p.is_hidden("#anbieter-hinweis")
+    p.select_option("#mailanbieter", "allinkl")
+    assert p.input_value("#server") == "" and p.input_value("#port") == "465"
+    assert "KAS" in p.inner_text("#anbieter-hinweis") and "kasserver" in p.get_attribute("#server", "placeholder")
+    p.locator("#server").press_sequentially("w0123456.kasserver.com")
+    assert p.input_value("#mailanbieter") == "allinkl"  # Server eintippen gehört dazu
+
+
+def test_mailanbieter_handaenderung_springt_auf_anderer(seite):
+    p = seite
+    p.check("#mail-an")
+    p.select_option("#mailanbieter", "gmx")
+    p.fill("#port", "465")
+    assert p.input_value("#mailanbieter") == "anderer" and p.is_hidden("#anbieter-hinweis")
+    p.select_option("#mailanbieter", "strato")
+    p.fill("#server", "smtp.example.com")
+    assert p.input_value("#mailanbieter") == "anderer"
+    p.select_option("#mailanbieter", "icloud")
+    p.select_option("#verschluesselung", "ssl")
+    assert p.input_value("#mailanbieter") == "anderer"
+
+
+@pytest.mark.parametrize("host, port, art, erwartet", [
+    ("smtp.strato.de", 465, "ssl", "strato"), ("SMTP.web.de", 587, "starttls", "webde"),
+    ("w0999999.kasserver.com", 465, "ssl", "allinkl"), ("smtp.strato.de", 587, "starttls", "anderer"),
+    ("smtp.example.com", 465, "ssl", "anderer"),
+])
+def test_mailanbieter_wird_beim_laden_erkannt(host, tmp_path, port, art, erwartet, umgebung):
+    s = Bedienserver()
+    s.im_hintergrund()
+    try:
+        daten = _eingaben(tmp_path, mail_an=True, mail={
+            "server": host, "port": port, "verschluesselung": art, "benutzer": "ich@example.com",
+            "absender": "ich@example.com", "empfaenger": ["belege@example.com"]})
+        assert _anfrage(s, "POST", "/api/einstellungen", _mit(s), daten)[0].status == 200
+        assert "anbieter" not in pfade.einstellungsdatei().read_text(encoding="utf-8").split("[mail]")[1]
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as pw:
+            b = pw.chromium.launch(channel="chromium")
+            p = b.new_page()
+            p.goto(s.adresse)
+            p.wait_for_selector("#version:not(:empty)")
+            assert p.input_value("#mailanbieter") == erwartet
+            b.close()
+    finally:
+        s.shutdown()
+        s.server_close()
