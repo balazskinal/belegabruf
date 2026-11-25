@@ -295,12 +295,15 @@ def test_ablauf_einrichten_pruefen_anmelden_holen(seite, server, tmp_path):
     # Ein einzelnes Konto braucht keinen Namen: Anzeige nur „Airbnb“.
     assert p.is_hidden("#kontenliste input.kontoname")
     assert p.inner_text("#konten").count("Airbnb") == 1
-    assert "unbekannt" in p.inner_text("#konten")
+    assert "noch nie angemeldet" in p.inner_text("#konten")
+    assert p.locator("#konten button").count() == 0  # im Reiter „Belege holen“ nur der Status
+    assert "noch nicht angemeldet" in p.inner_text("#anmelde-hinweise")
 
-    # Prüfen: abgelaufen
+    # Prüfen: weiter nicht angemeldet, mit Zeitpunkt der Prüfung
     Attrappe.angemeldet = False
-    p.click("#konten button:has-text('Prüfen')")
-    p.wait_for_function("() => document.querySelector('#konten').innerText.includes('abgelaufen')")
+    p.click("#alle-pruefen")
+    p.wait_for_function("() => document.querySelector('#konten').innerText.includes('geprüft heute')")
+    assert "noch nie angemeldet" in p.inner_text("#konten")
 
     # Holen, solange nicht angemeldet: Hinweis, nichts geholt
     p.click("#holen")
@@ -308,11 +311,25 @@ def test_ablauf_einrichten_pruefen_anmelden_holen(seite, server, tmp_path):
     assert "nicht angemeldet" in p.inner_text("#protokoll")
     assert "nicht angemeldet" in p.inner_text("#zusammenfassung")
 
-    # Anmelden
-    p.click("#konten button:has-text('Anmelden')")
-    p.wait_for_function("() => document.querySelector('#konten').innerText.includes('angemeldet')"
-                        " && !document.querySelector('#konten').innerText.includes('abgelaufen')")
+    # Anmelden: Sprung aus dem Hinweis in die Einstellungen, Konto hervorgehoben
+    p.click("#anmelde-hinweise button")
+    assert p.get_attribute("#reiter-einstellungen", "aria-selected") == "true"
+    assert p.locator("#kontenliste .kontozeile.hervorgehoben").count() == 1
+    assert p.evaluate("document.activeElement.textContent") == "Anmelden"
+    p.click("#kontenliste button:has-text('Anmelden')")
+    p.wait_for_function("() => document.querySelector('#kontenliste .marke.angemeldet')")
     assert Attrappe.anmeldungen == 1
+    p.click("#reiter-holen")
+    assert "angemeldet" in p.inner_text("#konten") and p.inner_text("#anmelde-hinweise") == ""
+
+    # Später abgelaufen: nach dem Prüfen sofort „abgelaufen“ und Hinweis
+    Attrappe.angemeldet = False
+    p.click("#alle-pruefen")
+    p.wait_for_function("() => document.querySelector('#konten').innerText.includes('abgelaufen')")
+    assert "Anmeldung bei Airbnb abgelaufen" in p.inner_text("#anmelde-hinweise")
+    Attrappe.angemeldet = True
+    p.click("#alle-pruefen")
+    p.wait_for_function("() => document.querySelector('#konten .marke.angemeldet')")
 
     # Holen mit Fortschritt und Zusammenfassung wie im CLI
     p.click("#holen")
@@ -436,7 +453,7 @@ def test_knoepfe_in_der_seite_gesperrt(seite, server, tmp_path, monkeypatch):
     p.click("#reiter-holen")
     p.click("#holen")
     p.wait_for_function("() => document.querySelector('#holen').disabled")
-    for knopf in ("#alle-pruefen", "#speichern", "#konten button:has-text('Anmelden')", "#konten button:has-text('Prüfen')"):
+    for knopf in ("#alle-pruefen", "#speichern", "#kontenliste button:has-text('Anmelden')"):
         assert p.is_disabled(knopf), knopf
     # Reiter wechseln geht während des Vorgangs; in den Einstellungen ist nur Speichern gesperrt
     p.click("#reiter-einstellungen")
@@ -445,7 +462,7 @@ def test_knoepfe_in_der_seite_gesperrt(seite, server, tmp_path, monkeypatch):
     p.click("#reiter-holen")
     LangsameAttrappe.tor.set()
     p.wait_for_function("() => !document.querySelector('#holen').disabled")
-    assert p.is_enabled("#konten button:has-text('Anmelden')")
+    assert p.is_enabled("#kontenliste button:has-text('Anmelden')")
 
 
 def _starten_mit(monkeypatch, fenster):
@@ -1480,7 +1497,7 @@ def test_infoboxen_an_allen_vier_stellen(server, tmp_path):
         haken = p.locator("#konten input.holen-haken").first
         assert haken.get_attribute("aria-describedby") == "info-holen"
         assert "übersprungen" in p.locator("#info-holen").text_content()
-        p.hover("#kopf-holen")
+        p.hover("#kopf-holen .info-huelle")
         assert p.is_visible("#info-holen")
         p.click("#reiter-einstellungen")
         wahl = p.locator("#kontenliste select[aria-label='Belege ab']")
@@ -1644,3 +1661,58 @@ def test_mailtext_nennt_belegadressen(seite):
     text = " ".join(seite.locator("#mail-erklaerung").text_content().split())
     assert "sevDesk, Lexware Office" in text and "Steuerbüro" in text
     assert seite.locator("#mail-erklaerung a").count() == 0  # Produktnamen ohne Links
+
+
+
+# ── Anmelden im Reiter „Einstellungen“, Status im Reiter „Belege holen“ ──────
+
+
+def test_zeitpunkt_der_pruefung():
+    from datetime import datetime
+
+    jetzt = datetime(2026, 11, 25, 22, 0)
+    assert aktionen._zeitpunkt_text(datetime(2026, 11, 25, 21, 30), jetzt) == "geprüft heute 21:30"
+    assert aktionen._zeitpunkt_text(datetime(2026, 11, 24, 8, 5), jetzt) == "geprüft gestern 08:05"
+    assert aktionen._zeitpunkt_text(datetime(2026, 11, 2, 9, 0), jetzt) == "geprüft am 02.11. 09:00"
+
+
+def test_anmeldestand_nie_abgelaufen_unbekannt(tmp_path):
+    from belegabruf import zustand as merkzettel
+
+    st = aktionen.Steuerung()
+    k = Konto(quelle="airbnb", name="standard", titel="")
+    assert st.anmeldestand(k) == "nie"  # kein Profil, nie angemeldet
+    st.anmeldestand_merken(k, "abgemeldet")
+    assert st.anmeldestand(k) == "nie"
+    st.anmeldestand_merken(k, "angemeldet")
+    assert st.anmeldestand(k) == "angemeldet" and merkzettel.je_angemeldet("airbnb", "standard")
+    st.anmeldestand_merken(k, "abgemeldet")
+    assert st.anmeldestand(k) == "abgelaufen"
+    assert aktionen.Steuerung().anmeldestand(k) == "unbekannt"  # nach Neustart: schon mal angemeldet, ungeprüft
+
+
+def test_mittendrin_abgelaufen_zeigt_abgelaufen(server, tmp_path, monkeypatch):
+    class Mittendrin(Attrappe):
+        def belege_holen(self, umgebung_):
+            return Ergebnis(self.name, self.konto.name, status="abgelaufen")
+
+    monkeypatch.setattr(ablauf, "quelle_fuer", lambda konto: Mittendrin(konto, Path("/x")))
+    Attrappe.angemeldet = True
+    _speichern(server, tmp_path)
+    _anfrage(server, "POST", "/api/holen", _mit(server), {})
+    server.steuerung.faden.join(10)
+    konto = json.loads(_anfrage(server, "GET", "/api/zustand", _mit(server))[1])["konten"][0]
+    assert konto["zustand"] == "abgelaufen" and konto["geprueft"].startswith("geprüft heute")
+
+
+def test_neues_konto_anmelden_erst_nach_dem_speichern(seite, tmp_path):
+    p = seite
+    zeile = p.locator("#kontenliste .kontozeile").first
+    assert "nach dem Speichern" in zeile.inner_text()
+    assert zeile.locator("button:has-text('Anmelden')").is_hidden()
+    p.fill("#belegordner", str(tmp_path / "Belege"))
+    p.click("#speichern")
+    p.wait_for_selector("#gespeichert:not(.versteckt)")
+    zeile = p.locator("#kontenliste .kontozeile").first
+    assert zeile.locator("button:has-text('Anmelden')").is_visible()
+    assert "noch nie angemeldet" in zeile.inner_text()

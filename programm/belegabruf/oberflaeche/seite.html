@@ -43,6 +43,10 @@
   .angemeldet { background: var(--gut-grund); color: var(--gut); }
   .abgelaufen { background: var(--schlecht-grund); color: var(--schlecht); }
   .unbekannt { background: var(--grund); color: var(--leise); border: 1px solid var(--linie); }
+  .nie, .laeuft { background: var(--warn-grund); color: var(--warn); }
+  .geprueft { display: block; font-size: 12px; color: var(--leise); margin-top: 2px; }
+  .anmeldung { display: flex; gap: 8px; align-items: center; justify-content: flex-end; white-space: nowrap; }
+  .kontozeile.hervorgehoben { outline: 2px solid var(--warn); outline-offset: 3px; border-radius: 7px; }
   .aus { color: var(--leise); }
   #protokoll { background: var(--grund); border: 1px solid var(--linie); border-radius: 7px; padding: 10px;
                max-height: 240px; overflow: auto; font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace;
@@ -58,7 +62,7 @@
     font: inherit; width: 100%; padding: 7px 9px; border: 1px solid var(--linie); border-radius: 7px;
     background: var(--flaeche); color: var(--text); }
   .reihe { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 12px; }
-  .kontozeile { display: grid; grid-template-columns: 130px 1fr auto auto; gap: 8px; align-items: center; margin: 6px 0; }
+  .kontozeile { display: grid; grid-template-columns: 130px 1fr auto auto auto; gap: 8px; align-items: center; margin: 6px 0; }
   .zeitraum { display: flex; gap: 6px; }
   .zeitraum select { width: auto; }
   input.ab-datum { width: 112px; }
@@ -127,11 +131,12 @@
   <section id="bereich-konten">
     <h2>Konten</h2>
     <table>
-      <thead><tr><th id="kopf-holen">Holen</th><th>Anbieter</th><th>Konto</th><th>Anmeldung</th><th></th></tr></thead>
+      <thead><tr><th id="kopf-holen">Holen</th><th>Anbieter</th><th>Konto</th><th>Anmeldung</th></tr></thead>
       <tbody id="konten"></tbody>
     </table>
     <p id="keine-konten" class="leise versteckt">Noch kein Konto eingetragen — im Reiter
       <button type="button" class="knopf-verweis" id="zu-einstellungen">Einstellungen</button> hinzufügen.</p>
+    <div id="anmelde-hinweise"></div>
     <div class="knoepfe oben14">
       <button id="holen" class="haupt" type="button" aria-describedby="kein-haken">Belege holen</button>
       <button id="fehlende" type="button">Fehlende Dateien neu holen</button>
@@ -366,7 +371,17 @@ for (const r of REITER) {
 }
 $("zu-einstellungen").addEventListener("click", () => reiterWaehlen("einstellungen", true));
 
-const ZUSTAND_TEXT = { angemeldet: "angemeldet", abgelaufen: "abgelaufen", unbekannt: "unbekannt" };
+const ZUSTAND_TEXT = { angemeldet: "angemeldet", abgelaufen: "abgelaufen", nie: "noch nie angemeldet",
+                       unbekannt: "unbekannt", laeuft: "Anmeldung läuft …" };
+let laufendeAnmeldung = null;  // "quelle/name", solange dort ein Anmeldefenster offen ist
+
+function schluesselVon(k) { return k.quelle + "/" + k.name; }
+function standVon(k) { return laufendeAnmeldung === schluesselVon(k) ? "laeuft" : k.zustand; }
+
+function marke(k) {
+  const stand = standVon(k);
+  return element("span", ZUSTAND_TEXT[stand] || stand, "marke " + stand);
+}
 
 function kontenZeigen() {
   const koerper = $("konten");
@@ -384,19 +399,15 @@ function kontenZeigen() {
     const kontoZelle = element("td", k.titel || "–");
     if (k.ab_text) kontoZelle.append(element("div", k.ab_text, "leise"));
     zeile.append(hakenZelle, element("td", k.anzeige), kontoZelle);
+    // Anmeldestatus nur anzeigen; angemeldet wird im Reiter „Einstellungen“.
     const zelle = element("td");
-    zelle.append(element("span", ZUSTAND_TEXT[k.zustand] || k.zustand, "marke " + k.zustand));
+    zelle.append(marke(k));
+    if (k.geprueft) zelle.append(element("span", k.geprueft, "geprueft"));
     zeile.append(zelle);
-    const knoepfe = element("td");
-    const k1 = element("button", "Prüfen"); k1.type = "button";
-    k1.addEventListener("click", () => starten("/api/pruefen", { quelle: k.quelle, name: k.name }));
-    const k2 = element("button", "Anmelden"); k2.type = "button";
-    k2.addEventListener("click", () => starten("/api/anmelden", { quelle: k.quelle, name: k.name }));
-    k1.dataset.auftrag = k2.dataset.auftrag = "1";
-    knoepfe.append(k1, " ", k2);
-    zeile.append(knoepfe);
     koerper.append(zeile);
   }
+  anmeldeHinweise();
+  anmeldungenInEinstellungen();
   $("keine-konten").classList.toggle("versteckt", zustand.konten.length > 0);
   $("konten").closest("table").classList.toggle("versteckt", !zustand.konten.length);
   const fehlen = zustand.konten.reduce((s, k) => s + (k.fehlende || 0), 0);
@@ -404,6 +415,44 @@ function kontenZeigen() {
   $("fehlende").disabled = !fehlen;
   holenErlaubt();
   $("ordner-hinweis").textContent = "Belegordner: " + zustand.belegordner;
+}
+
+// Abgelaufen oder noch nie angemeldet: Hinweis mit Sprung in die Einstellungen.
+function anmeldeHinweise() {
+  const kasten = $("anmelde-hinweise");
+  kasten.replaceChildren();
+  for (const k of zustand.konten) {
+    if (!["abgelaufen", "nie"].includes(k.zustand) || laufendeAnmeldung === schluesselVon(k)) continue;
+    const text = k.zustand === "nie" ? `Bei ${k.bezeichnung} noch nicht angemeldet – `
+                                     : `Anmeldung bei ${k.bezeichnung} abgelaufen – `;
+    const hinweis = element("p", text, "meldung warn");
+    const sprung = element("button", "in den Einstellungen anmelden", "knopf-verweis");
+    sprung.type = "button";
+    sprung.addEventListener("click", () => zumKontoAnmelden(k));
+    hinweis.append(sprung);
+    kasten.append(hinweis);
+  }
+}
+
+function zumKontoAnmelden(k) {
+  reiterWaehlen("einstellungen", false);
+  const zeile = [...$("kontenliste").children].find((z) => z.schluessel === schluesselVon(k));
+  document.querySelectorAll(".kontozeile.hervorgehoben").forEach((z) => z.classList.remove("hervorgehoben"));
+  if (!zeile) return;
+  zeile.classList.add("hervorgehoben");
+  zeile.scrollIntoView({ block: "center" });
+  if (zeile.anmeldeKnopf) zeile.anmeldeKnopf.focus();
+  setTimeout(() => zeile.classList.remove("hervorgehoben"), 6000);
+}
+
+// Status und „Anmelden“ in den Zeilen der Einstellungen aktuell halten (ohne das Formular neu zu füllen).
+function anmeldungenInEinstellungen() {
+  for (const zeile of [...$("kontenliste").children]) {
+    if (!zeile.statusZelle) continue;
+    const k = zustand.konten.find((a) => schluesselVon(a) === zeile.schluessel);
+    zeile.statusZelle.replaceChildren(k ? marke(k) : element("span", "nach dem Speichern", "leise"));
+    if (zeile.anmeldeKnopf) zeile.anmeldeKnopf.classList.toggle("versteckt", !k);
+  }
 }
 
 function kontozeile(k) {
@@ -441,7 +490,20 @@ function kontozeile(k) {
   });
   const zeitraum = element("div", undefined, "zeitraum");
   zeitraum.append(infobox(ab, INFO.belege_ab, false), datum);
-  zeile.append(wahl, name, zeitraum, weg);
+  // Anmelden je Konto (erst, wenn es gespeichert ist): Status und eigener Anmeldefenster-Knopf.
+  const anmeldung = element("div", undefined, "anmeldung");
+  zeile.schluessel = k.name ? k.quelle + "/" + k.name : null;
+  zeile.statusZelle = element("span");
+  const anmelden = element("button", "Anmelden"); anmelden.type = "button"; anmelden.dataset.auftrag = "1";
+  anmelden.setAttribute("aria-label", "Anmelden bei " + (k.bezeichnung || "diesem Konto"));
+  anmelden.addEventListener("click", () => {
+    laufendeAnmeldung = zeile.schluessel;
+    starten("/api/anmelden", { quelle: k.quelle, name: k.name });
+    kontenZeigen();
+  });
+  zeile.anmeldeKnopf = anmelden;
+  anmeldung.append(zeile.statusZelle, anmelden);
+  zeile.append(wahl, name, zeitraum, anmeldung, weg);
   // kennung: woran Anmeldung und Protokoll hängen — bleibt beim Umbenennen gleich.
   zeile.lesen = () => ({ quelle: wahl.value, name: name.value,
                          belege_ab: ab.value === "datum" ? datum.value.trim() : ab.value,
@@ -472,6 +534,7 @@ function formularFuellen() {
   liste.replaceChildren(...zustand.konten.map(kontozeile));
   if (!zustand.konten.length) liste.append(kontozeile({ quelle: zustand.quellen[0].name }));
   namenZeigen();
+  anmeldungenInEinstellungen();
   const m = zustand.mail;
   $("mail-an").checked = zustand.mail_an;
   $("server").value = m.server; $("port").value = m.port; $("verschluesselung").value = m.verschluesselung;
@@ -568,7 +631,10 @@ async function starten(pfad, daten) {
     gesehen = 0;
     knoepfeSperren(true);
     beobachten();
-  } catch (e) { zeigeFehler(e.message); }
+  } catch (e) {
+    if (laufendeAnmeldung) { laufendeAnmeldung = null; kontenZeigen(); }
+    zeigeFehler(e.message);
+  }
 }
 
 function beobachten() {
@@ -582,8 +648,11 @@ function beobachten() {
         $("protokoll").scrollTop = $("protokoll").scrollHeight;
       }
       gesehen = s.anzahl;
+      // Anmeldestatus sofort nachziehen (z. B. bei „Alle Anmeldungen prüfen“), nicht erst am Ende.
+      if (s.laeuft && s.meldungen.length && s.art !== "anmelden") await laden(false);
       if (!s.laeuft) {
         clearInterval(abfrage); abfrage = null;
+        laufendeAnmeldung = null;
         if (s.zusammenfassung) {
           const liste = $("zusammenfassung");
           liste.replaceChildren(...s.zusammenfassung.map((z) => element("li", z.text, z.art)));
@@ -599,6 +668,7 @@ $("fehlende").addEventListener("click", () => starten("/api/holen", { fehlende: 
 $("alle-pruefen").addEventListener("click", () => starten("/api/pruefen", {}));
 $("konto-dazu").addEventListener("click", () => {
   $("kontenliste").append(kontozeile({ quelle: zustand.quellen[0].name }));
+  anmeldungenInEinstellungen();
   namenZeigen();
 });
 // ── Mailanbieter: füllt Server, Port und Verschlüsselung vor ──────────────────

@@ -136,6 +136,17 @@ vorbelegt, Port springt mit der Verschlüsselung) ändern keine Entscheidung.
     früheren Warnsatz. Die Zusammenfassung nennt „N Beleg(e) abgelegt, nicht verschickt (erster Lauf)“.
     Einzelheiten in ADR-004 (Nachtrag).
 
+### Nachtrag (Balazs, 25.11.2026): Anmelden in den Einstellungen
+
+12. **„Anmelden“ steht im Reiter „Einstellungen“**, je Konto in der Kontenliste mit dem Anmeldestatus
+    (erst nach dem Speichern, denn erst dann gibt es Kennung und Profil). Wer ein Konto anlegt, meldet
+    sich gleich dort an. Der Reiter **„Belege holen“** zeigt je Konto den Status nur an — angemeldet /
+    abgelaufen / noch nie angemeldet / unbekannt, mit „geprüft heute 21:30“ — und aktualisiert ihn bei
+    „Alle Anmeldungen prüfen“ sofort. „Noch nie“ heißt: Das Programm hat das Konto noch nie angemeldet
+    gesehen (Merkzettel im Datenordner bzw. ein erfolgreicher Lauf) und es gibt kein Profil. Ist ein
+    Konto abgelaufen oder noch nie angemeldet, steht dort ein Hinweis mit Sprung in die Einstellungen,
+    der das Konto hervorhebt. Während einer Anmeldung sind Holen und Prüfen gesperrt wie jeder Vorgang.
+
 ## Folgen
 
 Windows-Test ist Pflicht, bevor 2.0.0 veröffentlicht wird.

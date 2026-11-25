@@ -106,10 +106,10 @@ Administratorrechte nötig.
 
    dann **„Einstellungen speichern“**. Fehlt etwas, steht das direkt am Knopf, und die Felder sind rot
    markiert.
-6. Im Reiter **„Belege holen“** je Konto einmal **„Anmelden“**: Es öffnet sich ein eigenes Fenster, dort
-   meldest du dich ganz normal an. Danach steht beim Konto „angemeldet“. Fertig. Mit dem **Haken** je
-   Konto wählst du, welche Konten „Belege holen“ holt; ein Klick merkt sich die Auswahl. „Alle
-   Anmeldungen prüfen“ prüft trotzdem alle Konten.
+6. Gleich dort, in den **Einstellungen**, je Konto einmal **„Anmelden“**: Es öffnet sich ein eigenes
+   Fenster, dort meldest du dich ganz normal an. Danach steht beim Konto „angemeldet“. Fertig. Im Reiter
+   **„Belege holen“** wählst du mit dem **Haken** je Konto, welche Konten geholt werden; ein Klick merkt
+   sich die Auswahl. „Alle Anmeldungen prüfen“ prüft trotzdem alle Konten.
 
 Das schwarze Terminalfenster bleibt dabei klein offen — **nicht schließen, solange Belegabruf läuft.**
 Beenden über den Knopf **„Beenden“** im Fenster „Belegabruf“ (oder das Fenster schließen).
@@ -151,19 +151,21 @@ aber nur, was neu ist.
 Doppelklick auf **„Belegabruf“**: auf dem Mac `Start Mac/Belegabruf.command`, unter Windows
 `Start Windows/Belegabruf.cmd`. Es öffnet sich das Fenster **„Belegabruf“**:
 
-- **Konten** — je Konto der Zustand der Anmeldung (angemeldet, abgelaufen, unbekannt), dazu
-  **„Prüfen“** und **„Anmelden“**.
+- **Konten** — je Konto der Haken „Holen“ und der Zustand der Anmeldung (angemeldet, abgelaufen, noch
+  nie angemeldet, unbekannt) mit dem Zeitpunkt der letzten Prüfung. **„Alle Anmeldungen prüfen“**
+  aktualisiert ihn. Angemeldet wird im Reiter „Einstellungen“.
 - **„Belege holen“** — holt alles Neue. Der Fortschritt läuft mit, am Ende steht die Zusammenfassung:
   wie viele neu, wie viele schon da, ob die Anzahl passt, was verschickt wurde.
 - **„Fehlende Dateien neu holen“** — siehe unten.
-- **Einstellungen** — Belegordner, Konten (hinzufügen, an/aus), Versand per Mail.
+- **Einstellungen** — Belegordner, Konten (hinzufügen, Zeitraum, **Anmelden**), Versand per Mail.
 - **„Beenden“** — oben rechts.
 
 Während des Abrufs musst du nichts tun und kannst den Rechner normal weiterbenutzen. Das kleine
 Terminalfenster daneben bitte offen lassen, solange Belegabruf läuft.
 
 **Läuft die Anmeldung ab** (Airbnb verlangt manchmal schnell eine neue Anmeldung), steht beim Konto
-„abgelaufen“ und in der Zusammenfassung „nicht angemeldet“. Dann einmal **„Anmelden“** und noch einmal
+„abgelaufen“ und in der Zusammenfassung „nicht angemeldet“; darunter steht ein Hinweis „in den
+Einstellungen anmelden“, der direkt zum Konto springt. Dort einmal **„Anmelden“**, dann noch einmal
 **„Belege holen“** — der Rest wird nachgeholt.
 
 **Eine Datei noch einmal holen:** Einfach löschen reicht nicht — das Protokoll weiß, dass sie schon

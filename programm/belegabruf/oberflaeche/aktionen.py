@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import re
 import threading
-from datetime import date
+from datetime import date, datetime, timedelta
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from belegabruf import __version__, ablauf, aktualisierung, einstellungen, pfade, quellen
+from belegabruf import zustand as merkzettel
 from belegabruf.einstellungen import EinstellungsFehler, Einstellungen, Konto, MailEinstellung
 from belegabruf.quellen.basis import Ergebnis
 from belegabruf.ziele import mail
@@ -57,7 +58,8 @@ class Steuerung:
         self._sperre = threading.Lock()
         self.auftrag: Auftrag | None = None
         self.faden: threading.Thread | None = None
-        self.kontozustand: dict[str, str] = {}  # "quelle/name" → angemeldet | abgelaufen | unbekannt
+        self.kontozustand: dict[str, str] = {}  # "quelle/name" → angemeldet | abgelaufen | nie | unbekannt
+        self.geprueft: dict[str, datetime] = {}  # "quelle/name" → Zeitpunkt der letzten Prüfung
         self.neuere: str | None = None
         self.beendet = threading.Event()
         threading.Thread(target=self._version_pruefen, daemon=True).start()
@@ -69,6 +71,25 @@ class Steuerung:
             self.neuere = None
 
     # Aufträge ---------------------------------------------------------------
+
+    def anmeldestand_merken(self, k: Konto, status: str) -> None:
+        """Ergebnis einer Prüfung bzw. Anmeldung: „angemeldet“, „abgemeldet“ oder ein Fehlertext."""
+        schluessel = f"{k.quelle}/{k.name}"
+        if status == "angemeldet":
+            merkzettel.angemeldet_merken(k.quelle, k.name)
+            self.kontozustand[schluessel] = "angemeldet"
+        elif status == "abgemeldet":
+            self.kontozustand[schluessel] = "abgelaufen" if merkzettel.je_angemeldet(k.quelle, k.name) else "nie"
+        else:
+            self.kontozustand[schluessel] = "unbekannt"
+        self.geprueft[schluessel] = datetime.now()
+
+    def anmeldestand(self, k: Konto) -> str:
+        schluessel = f"{k.quelle}/{k.name}"
+        if schluessel in self.kontozustand:
+            return self.kontozustand[schluessel]
+        bekannt = merkzettel.je_angemeldet(k.quelle, k.name) or pfade.profilordner(k.quelle, k.name).exists()
+        return "unbekannt" if bekannt else "nie"
 
     def beschaeftigt(self) -> bool:
         return self.auftrag is not None and self.auftrag.laeuft
@@ -113,6 +134,7 @@ class Steuerung:
         konten = []
         for k in einst.konten:
             schluessel = f"{k.quelle}/{k.name}"
+            geprueft = self.geprueft.get(schluessel)
             try:
                 fehlen = ablauf.fehlende_dateien(einst, k) if eingerichtet else 0
             except Exception:  # noqa: BLE001
@@ -121,7 +143,8 @@ class Steuerung:
             konten.append({"quelle": k.quelle, "anzeige": quellen.anzeigename(k.quelle), "name": k.name,
                            "titel": k.anzeigetitel, "bezeichnung": k.anzeige, "aktiv": k.aktiv,
                            "belege_ab": k.belege_ab,
-                           "ab_text": f"Belege ab {k.ab():%d.%m.%Y}" if k.ab() else "", "zustand": self.kontozustand.get(schluessel, "unbekannt"),
+                           "ab_text": f"Belege ab {k.ab():%d.%m.%Y}" if k.ab() else "", "zustand": self.anmeldestand(k),
+                           "geprueft": _zeitpunkt_text(geprueft) if geprueft else "",
                            "fehlende": fehlen})
         m = einst.mail
         return {
@@ -215,7 +238,7 @@ class Steuerung:
             for k in konten:
                 a.melden(f"Prüfe {k.anzeige} …")
                 status = ablauf.sitzung_pruefen(k)
-                self.kontozustand[f"{k.quelle}/{k.name}"] = _zustand_aus(status)
+                self.anmeldestand_merken(k, status)
                 a.melden(f"{k.anzeige}: {_zustand_text(status)}")
             a.code = 0
 
@@ -229,7 +252,7 @@ class Steuerung:
         def arbeit(a: Auftrag):
             a.melden(f"Anmeldung bei {k.anzeige}: Es öffnet sich ein eigenes Fenster.")
             ok = ablauf.anmelden(k, a.melden)
-            self.kontozustand[f"{k.quelle}/{k.name}"] = "angemeldet" if ok else "abgelaufen"
+            self.anmeldestand_merken(k, "angemeldet" if ok else "abgemeldet")
             a.melden("✓ angemeldet" if ok else "✗ Anmeldung nicht erkannt.")
             a.code = 0 if ok else 2
 
@@ -251,16 +274,20 @@ class Steuerung:
                 anzeige = k.anzeige
                 a.melden(f"{anzeige}: prüfe die Anmeldung …")
                 status = ablauf.sitzung_pruefen(k)
-                self.kontozustand[f"{k.quelle}/{k.name}"] = _zustand_aus(status)
+                self.anmeldestand_merken(k, status)
                 if status != "angemeldet":
-                    a.melden(f"{anzeige}: nicht angemeldet — bitte bei diesem Konto „Anmelden“ wählen.")
+                    a.melden(f"{anzeige}: nicht angemeldet — bitte im Reiter „Einstellungen“ bei diesem Konto "
+                             "„Anmelden“ wählen.")
                     ergebnisse.append(Ergebnis(k.quelle, k.name, status="anmeldung_noetig", anzeige=k.anzeige))
                     continue
                 if nachholen:
                     a.melden(f"{anzeige}: fehlende Dateien werden neu geholt (dazu alles, was neu ist).")
                 a.melden(f"{anzeige}: hole die Belege — das dauert ein paar Minuten …")
-                ergebnisse.append(ablauf.abrufen(einst, k, lambda t, n=anzeige: a.melden(f"{n}: {t.strip()}"),
-                                                 nachholen=nachholen))
+                ergebnis = ablauf.abrufen(einst, k, lambda t, n=anzeige: a.melden(f"{n}: {t.strip()}"),
+                                          nachholen=nachholen)
+                if ergebnis.status == "abgelaufen":  # mittendrin abgelaufen
+                    self.anmeldestand_merken(k, "abgemeldet")
+                ergebnisse.append(ergebnis)
             a.zusammenfassung = zusammenfassung_als_liste(ablauf.zusammenfassung(ergebnisse, einst.belegordner))
             from belegabruf.cli import _exit_code
 
@@ -293,12 +320,16 @@ def _passwort_da(m: MailEinstellung) -> bool:
         return False
 
 
-def _zustand_aus(status: str) -> str:
-    if status == "angemeldet":
-        return "angemeldet"
-    if status == "abgemeldet":
-        return "abgelaufen"
-    return "unbekannt"
+def _zeitpunkt_text(zeit: datetime, jetzt: datetime | None = None) -> str:
+    """„geprüft heute 21:30“, „geprüft gestern 08:05“, sonst mit Datum."""
+    jetzt = jetzt or datetime.now()
+    if zeit.date() == jetzt.date():
+        tag = "heute"
+    elif zeit.date() == (jetzt - timedelta(days=1)).date():
+        tag = "gestern"
+    else:
+        tag = f"am {zeit:%d.%m.}"
+    return f"geprüft {tag} {zeit:%H:%M}"
 
 
 def _zustand_text(status: str) -> str:
