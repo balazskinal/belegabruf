@@ -214,6 +214,7 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
     ab = konto.ab()
     if ab is not None:
         melden(f"Zeitraum: Belege ab {ab:%d.%m.%Y} — ältere werden übersprungen.")
+    zukunft = ab is not None and ab > date.today()
     umgebung = Umgebung(
         bekannt=bekannt,
         abliefern=abliefern,
@@ -232,6 +233,9 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
         ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=f"{type(fehler).__name__}: {str(fehler).splitlines()[0][:200]}")
     ergebnis.anzeige = ergebnis.anzeige or konto.anzeige
     ergebnis.ab = ab.isoformat() if ab else ""
+    if zukunft:  # z. B. von Hand in die Datei geschrieben; die Oberfläche lässt das nicht zu
+        ergebnis.hinweise.append(f"„Belege ab {ab:%d.%m.%Y}“ liegt in der Zukunft — so wird nichts geholt. "
+                                 "Bitte den Zeitraum in den Einstellungen prüfen.")
     if ergebnis.status in {"ok", "unvollstaendig"}:
         zustand.lauf_merken(konto.quelle, konto.name)
     try:

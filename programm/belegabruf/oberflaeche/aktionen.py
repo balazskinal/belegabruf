@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 import threading
+from datetime import date
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -399,6 +400,9 @@ def einstellungen_aus_eingaben(daten: dict) -> Einstellungen:
         except EinstellungsFehler:
             sammler.feld(f"konto-{nr}-ab", "Belege ab: bitte ein Datum als TT.MM.JJJJ, z. B. 01.01.2026.")
             belege_ab = "alle"
+        ab = einstellungen.ab_datum(belege_ab)
+        if ab is not None and ab > date.today():
+            sammler.feld(f"konto-{nr}-ab", "Belege ab: Das Datum liegt in der Zukunft — dann würde nichts geholt.")
         zeilen.append((nr, Konto(quelle=quelle, name=kennung, aktiv=aktiv, belege_ab=belege_ab,
                                  optionen=dict(alte[(quelle, kennung)].optionen) if (quelle, kennung) in alte else {},
                                  titel=titel)))

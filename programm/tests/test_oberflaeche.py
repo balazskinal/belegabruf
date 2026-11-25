@@ -1337,3 +1337,30 @@ def test_starten_setzt_abbrechen_nach_dem_fenster(monkeypatch, capsys):
     monkeypatch.setattr(browser, "ABBRECHEN", __import__("threading").Event())
     _, server = _starten_mit(monkeypatch, lambda server: None)
     assert browser.ABBRECHEN.is_set() and server.steuerung.beendet.is_set()
+
+
+# ── Prüfbefund N3: „ab Datum“ in der Zukunft ─────────────────────────────────
+
+
+def test_datum_in_der_zukunft_abgewiesen(server, tmp_path):
+    from datetime import timedelta
+
+    morgen = (date.today() + timedelta(days=1)).strftime("%d.%m.%Y")
+    antwort, inhalt = _anfrage(server, "POST", "/api/einstellungen", _mit(server),
+                               _eingaben(tmp_path, konten=[{"quelle": "airbnb", "name": "", "belege_ab": morgen}]))
+    assert antwort.status == 400
+    assert "Zukunft" in json.loads(inhalt)["felder"]["konto-0-ab"]
+    heute = date.today().strftime("%d.%m.%Y")
+    konten = [{"quelle": "airbnb", "name": "", "belege_ab": heute}]
+    assert _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path, konten=konten))[0].status == 200
+
+
+def test_datum_in_der_zukunft_aus_der_datei_gibt_hinweis(monkeypatch, tmp_path):
+    class Leer(Attrappe):
+        def belege_holen(self, umgebung):
+            return Ergebnis(self.name, self.konto.name)
+
+    monkeypatch.setattr(ablauf, "quelle_fuer", lambda konto: Leer(konto, Path("/x")))
+    konto = Konto(quelle="airbnb", name="standard", titel="", belege_ab="01.01.2099")
+    erg = ablauf.abrufen(einstellungen.Einstellungen(belegordner=tmp_path / "B", konten=[konto]), konto, lambda t: None)
+    assert any("Zukunft" in h for h in erg.hinweise)
