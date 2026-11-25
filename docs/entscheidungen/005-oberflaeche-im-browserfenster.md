@@ -78,8 +78,38 @@ die Datenhaltung:
    `airbnb/kontrolle/`: Sie heißen schon `<JJJJ-MM>_…`, sind Kontrollberichte und keine Belege, und ein
    Unterordner je Monat mit genau einer Datei brächte nichts.
 
-Die übrigen Anmerkungen (Haken „Belege holen“, Einrichtung ohne Headless Shell, Rückmeldung am
-Speichern-Knopf, Absender vorbelegt, Port springt mit der Verschlüsselung) ändern keine Entscheidung.
+Die übrigen Anmerkungen (Einrichtung ohne Headless Shell, Rückmeldung am Speichern-Knopf, Absender
+vorbelegt, Port springt mit der Verschlüsselung) ändern keine Entscheidung.
+
+### Nachtrag (Balazs, 25.11.2026)
+
+4. **Haken je Konto im Reiter „Belege holen“** statt in den Einstellungen. „Belege holen“ holt nur
+   angehakte Konten; ein Klick speichert den Haken sofort (als `aktiv`), ohne „Einstellungen speichern“.
+   Ohne angehaktes Konto ist „Belege holen“ gesperrt, mit Hinweis. „Alle Anmeldungen prüfen“ prüft
+   alle Konten. Das Einstellungsformular ändert den Haken nicht (sonst überschriebe ein älterer
+   Formularstand einen eben gesetzten Haken).
+5. **Zeitraum je Konto („Belege ab“), schon in 2.0.0:** `belege_ab = "alle"` (Vorgabe, auch für alte
+   Dateien ohne den Schlüssel), `"letzter-monat"`, `"letzte-3-monate"`, `"letzte-12-monate"` oder ein
+   Datum `"TT.MM.JJJJ"`. Relativ heißt ab dem 1. des Monats vor N Monaten, gerechnet am Tag des Laufs.
+   Gefiltert wird beim Lesen der Rechnungsliste, also **vor** dem Download: Airbnb lädt
+   Monatsübersichten von Monaten vor dem Zeitraum gar nicht und lässt ältere Zeilen aus; Skool öffnet
+   ältere Rechnungen nicht; Xentra klickt ältere Zeilen nicht an. Übersprungenes kommt **nicht** ins
+   Protokoll — wird der Zeitraum erweitert, holt der nächste Lauf es nach. Belege ohne erkanntes Datum
+   werden geholt (lieber einmal zu viel als einer zu wenig). Die Zusammenfassung (auch CLI und `--json`)
+   nennt „übersprungen (älter als Zeitraum)“; bei Airbnb zusätzlich, wie viele Monate nicht angesehen
+   wurden (deren Rechnungen kennt das Programm dann nicht und kann sie nicht zählen).
+6. **Mailanbieter als Auswahl:** GMX, WEB.DE, Gmail, Outlook.com, Microsoft 365, IONOS, STRATO,
+   all-inkl.com, iCloud und „Anderer“. Die Auswahl füllt Server, Port und Verschlüsselung vor; die
+   Felder bleiben änderbar, eine Handänderung springt auf „Anderer“. Gespeichert werden weiter nur
+   `server`, `port`, `verschluesselung`; der Anbieter wird beim Laden erkannt. Die Werte stammen von den
+   offiziellen Hilfeseiten (Stand 25.11.2026, Quellen als Kommentar in `seite.html`). Ehrlich vermerkt:
+   **Outlook.com** verlangt OAuth2, die Anmeldung mit Passwort klappt dort voraussichtlich nicht;
+   bei **Microsoft 365** muss der Admin SMTP AUTH erlauben, und Microsoft schaltet die
+   Passwort-Anmeldung dafür Ende Dezember 2026 standardmäßig ab. OAuth2 baut das Programm nicht ein
+   (bräuchte eine registrierte App beim Anbieter).
+7. **Headless Shell ganz weg:** Alles startet Chromium mit `channel="chromium"`, auch die
+   Versions-Probe; die Einrichtung lädt mit `--no-shell`. Geprüft mit der ganzen Testsuite in einem
+   Browserordner ohne Shell. FFmpeg bleibt.
 
 ## Folgen
 

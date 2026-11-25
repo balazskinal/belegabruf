@@ -97,14 +97,18 @@ Administratorrechte nötig.
      sind,
    - deine **Konten**: den Anbieter (Airbnb, Skool, Xentra). Ein Name ist erst nötig, wenn du beim selben
      Anbieter mehrere Konten hast (z. B. einen Zugang als Co-Gastgeber) — dann bekommt jedes einen Namen
-     nur für dich und seine eigene Anmeldung. Ohne Haken bei **„Belege holen“** bleibt ein Konto
-     eingetragen und angemeldet, wird beim Holen aber übersprungen,
+     nur für dich und seine eigene Anmeldung. Je Konto wählst du **„Belege ab“**: alle (Vorgabe), letzter
+     Monat, letzte 3 oder 12 Monate (jeweils ab dem 1. des Monats) oder ab einem Datum. Ältere Belege
+     werden nicht geholt und nicht vermerkt — erweiterst du den Zeitraum später, kommen sie beim nächsten
+     Lauf,
    - auf Wunsch den **Versand per Mail** (siehe unten),
 
    dann **„Einstellungen speichern“**. Fehlt etwas, steht das direkt am Knopf, und die Felder sind rot
    markiert.
 6. Im Reiter **„Belege holen“** je Konto einmal **„Anmelden“**: Es öffnet sich ein eigenes Fenster, dort
-   meldest du dich ganz normal an. Danach steht beim Konto „angemeldet“. Fertig.
+   meldest du dich ganz normal an. Danach steht beim Konto „angemeldet“. Fertig. Mit dem **Haken** je
+   Konto wählst du, welche Konten „Belege holen“ holt; ein Klick merkt sich die Auswahl. „Alle
+   Anmeldungen prüfen“ prüft trotzdem alle Konten.
 
 Das schwarze Terminalfenster bleibt dabei klein offen — **nicht schließen, solange Belegabruf läuft.**
 Beenden über den Knopf **„Beenden“** im Fenster „Belegabruf“ (oder das Fenster schließen).
@@ -182,8 +186,13 @@ nach den Zugangsdaten deines Postfachs. Die Mails liegen danach je nach Anbieter
 „Gesendet“.
 
 **Einschalten:** Im Fenster „Belegabruf“ unter **Einstellungen** „Rechnungen zusätzlich per Mail
-verschicken“ ankreuzen und die Angaben deines Mailkontos eintragen — die findest du bei deinem
-Mailanbieter unter „SMTP“ oder „Postausgangsserver“:
+verschicken“ ankreuzen und unter **Mailanbieter** deinen Anbieter wählen (GMX, WEB.DE, Gmail,
+Outlook.com, Microsoft 365, IONOS, STRATO, all-inkl.com, iCloud) — dann sind Server, Port und
+Verschlüsselung schon eingetragen, und darunter steht, was bei diesem Anbieter zu beachten ist (z. B.
+App-Passwort). Sonst „Anderer“ wählen und die Angaben selbst eintragen; die findest du bei deinem
+Mailanbieter unter „SMTP“ oder „Postausgangsserver“. **Outlook.com** und **Microsoft 365** verlangen
+zunehmend eine Anmeldung, die das Programm nicht kann (OAuth2) — dort am besten mit „Mail-Anmeldung
+prüfen“ testen.
 
 | Feld | Beispiel |
 |---|---|
@@ -276,8 +285,8 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
   „Belegabruf“: Einstellungen als Formular (auch Mail-Passwort, direkt in den Passwortspeicher), je
   Konto Anmelden und Prüfen, Belege holen mit Fortschritt und Zusammenfassung. Das bisherige Menü gibt es
   weiter über „Belegabruf (Terminal)“. Ein Kontoname ist nur noch nötig, wenn es beim selben Anbieter
-  mehrere Konten gibt. Neu wählbar: Unterordner nach Jahr und Monat. Beim Update einmal „Einrichten“
-  doppelklicken. **Windows ist noch ungetestet.**
+  mehrere Konten gibt. Neu: Haken je Konto zum Holen, Zeitraum je Konto („Belege ab“), Unterordner nach
+  Jahr und Monat, Mailanbieter als Auswahl. Beim Update einmal „Einrichten“ doppelklicken. **Windows ist noch ungetestet.**
 - **1.3.0** — Neue Rechnungen auf Wunsch zusätzlich **per Mail** verschicken (über dein eigenes
   Postfach, siehe [Versand per Mail](#versand-per-mail)). Beim Update einmal „Einrichten“
   doppelklicken; die Frage nach dem Mailversand steht auf „nein“, bis du sie mit „j“ beantwortest.

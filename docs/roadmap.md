@@ -33,6 +33,8 @@ Stand: 25.11.2026. Begründungen stehen in den [Entscheidungen](entscheidungen/R
   Kontoname optional, Haken „Belege holen“, Einrichtung ohne Headless Shell, Rückmeldung am
   Speichern-Knopf, Absender vorbelegt, Port springt mit der Verschlüsselung, zwei Reiter, Ablage nach
   Jahr und Monat
+- [x] Nachtrag dazu: Haken je Konto im Reiter „Belege holen“, Zeitraum je Konto („Belege ab“) für alle
+  drei Quellen, Headless Shell ganz weg, Mailanbieter als Auswahl
 - [ ] Erneut prüfen lassen, Windows-Test, veröffentlichen
 
 ## Danach: 2.1.0 — Ziel sevDesk über die API (ADR-004)
@@ -42,8 +44,6 @@ Passwortspeicher. Gebaut und geprüft in PR #3, wartet bis nach 2.0.0.
 
 ## Später / Ideen
 
-- **Zeitraum für den Abruf** (Version nach 2.1.0): alle / letzter Monat / letzte 3 / letzte 12 Monate /
-  ab Datum. Filter beim Lesen der Rechnungsliste, übersprungene Belege nicht als geholt vermerken.
 - **Lexware Office** über die API, sobald jemand mit echtem Konto testen kann
 - **Weitere Quellen** — Vorschläge willkommen (Issue oder Pull Request): Welche Anbieter schicken keine
   Rechnung per Mail?
