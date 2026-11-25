@@ -69,6 +69,9 @@
   .leise { color: var(--leise); font-size: 13px; }
   .versteckt { display: none; }
   .unsichtbar { visibility: hidden; }
+  .feld-fehler, .feld-fehler:focus-visible { border-color: var(--schlecht) !important; outline: 2px solid var(--schlecht); outline-offset: 0; }
+  .feldsatz { color: var(--schlecht); font-size: 13px; margin: 3px 0 0; }
+  .kontozeile + .feldsatz { margin: -2px 0 6px; }
   .oben10 { margin-top: 10px; }
   .oben14 { margin-top: 14px; }
   .oben16 { margin-top: 16px; }
@@ -120,7 +123,7 @@
   <section>
     <details id="einstellungen">
       <summary>Einstellungen</summary>
-      <form id="formular" autocomplete="off">
+      <form id="formular" autocomplete="off" novalidate>
         <label for="belegordner">Belegordner (hier landen die PDFs)</label>
         <input type="text" id="belegordner" spellcheck="false">
 
@@ -153,9 +156,10 @@
         </div>
         <div id="fremd-hinweis" class="meldung warn versteckt oben16"></div>
         <div class="knoepfe oben16">
-          <button type="submit" class="haupt" id="speichern">Einstellungen speichern</button>
+          <button type="submit" class="haupt" id="speichern" aria-describedby="speichern-meldung">Einstellungen speichern</button>
         </div>
-        <div id="gespeichert" class="meldung gut versteckt">Gespeichert.</div>
+        <div id="speichern-meldung" class="meldung schlecht versteckt" role="alert"></div>
+        <div id="gespeichert" class="meldung gut versteckt" role="status">Gespeichert.</div>
       </form>
 
       <div id="passwort-bereich">
@@ -197,7 +201,11 @@ async function api(methode, pfad, daten) {
   const antwort = await fetch(pfad, optionen);
   let inhalt = {};
   try { inhalt = await antwort.json(); } catch (e) { inhalt = {}; }
-  if (!antwort.ok) throw new Error(inhalt.fehler || "Das hat nicht geklappt.");
+  if (!antwort.ok) {
+    const fehler = new Error(inhalt.fehler || "Das hat nicht geklappt.");
+    fehler.felder = inhalt.felder || null;
+    throw fehler;
+  }
   return inhalt;
 }
 
@@ -261,12 +269,16 @@ function kontozeile(k) {
   box.setAttribute("aria-description", erklaerung);
   an.append(box, " Belege holen");
   const weg = element("button", "Entfernen"); weg.type = "button";
-  weg.addEventListener("click", () => { zeile.remove(); namenZeigen(); });
+  weg.addEventListener("click", () => {
+    for (const f of [name, wahl]) if (f.satz) markierungWeg(f);
+    zeile.remove(); namenZeigen();
+  });
   zeile.append(wahl, name, an, weg);
   // kennung: woran Anmeldung und Protokoll hängen — bleibt beim Umbenennen gleich.
   zeile.lesen = () => ({ quelle: wahl.value, name: name.value, aktiv: box.checked,
                          kennung: wahl.value === k.quelle ? (k.name || null) : null });
   zeile.anbieter = () => wahl.value;
+  zeile.anbieterfeld = wahl;
   zeile.namensfeld = name;
   return zeile;
 }
@@ -379,11 +391,67 @@ $("konto-dazu").addEventListener("click", () => {
   $("kontenliste").append(kontozeile({ quelle: zustand.quellen[0].name }));
   namenZeigen();
 });
-$("mail-an").addEventListener("change", mailFelderZeigen);
+$("mail-an").addEventListener("change", () => {
+  for (const id of ["server", "port", "verschluesselung", "benutzer", "absender", "empfaenger"]) markierungWeg($(id));
+  mailFelderZeigen();
+});
+
+// ── Rückmeldung am Speichern-Knopf: markierte Felder ────────────────────────
+// Geprüft wird auf dem Server; er nennt je Feld einen Satz. Die Markierung verschwindet,
+// sobald das Feld geändert wird.
+function feldFuer(name) {
+  const treffer = /^konto-(\d+)-(name|quelle)$/.exec(name);
+  if (treffer) {
+    const zeile = [...$("kontenliste").children].filter((z) => z.lesen)[Number(treffer[1])];
+    if (!zeile) return null;
+    return { element: treffer[2] === "name" ? zeile.namensfeld : zeile.anbieterfeld, nach: zeile };
+  }
+  const element = $(name);
+  return element ? { element, nach: element } : null;
+}
+
+function markierungWeg(element) {
+  element.classList.remove("feld-fehler");
+  element.removeAttribute("aria-invalid");
+  if (element.satz) { element.satz.remove(); element.satz = null; }
+  element.removeAttribute("aria-describedby");
+  if (!document.querySelector("#formular .feld-fehler")) speichernMeldung("");
+}
+
+function markierungenWeg() {
+  document.querySelectorAll("#formular .feld-fehler").forEach(markierungWeg);
+}
+
+function markieren(name, satz) {
+  const ziel = feldFuer(name);
+  if (!ziel) return false;
+  const e = ziel.element;
+  e.classList.add("feld-fehler");
+  e.setAttribute("aria-invalid", "true");
+  const absatz = element("p", satz, "feldsatz");
+  absatz.id = "satz-" + name;
+  ziel.nach.after(absatz);
+  e.satz = absatz;
+  e.setAttribute("aria-describedby", absatz.id);
+  if (!e.weg) {
+    e.weg = () => markierungWeg(e);
+    e.addEventListener("input", e.weg);
+    e.addEventListener("change", e.weg);
+  }
+  return true;
+}
+
+function speichernMeldung(text) {
+  const m = $("speichern-meldung");
+  m.textContent = text || "";
+  m.classList.toggle("versteckt", !text);
+}
 
 $("formular").addEventListener("submit", async (ereignis) => {
   ereignis.preventDefault();
   zeigeFehler("");
+  markierungenWeg();
+  speichernMeldung("");
   $("gespeichert").classList.add("versteckt");
   const daten = {
     belegordner: $("belegordner").value,
@@ -400,7 +468,13 @@ $("formular").addEventListener("submit", async (ereignis) => {
       : "Gespeichert.";
     $("gespeichert").classList.remove("versteckt");
     await laden(true);
-  } catch (e) { zeigeFehler(e.message); }
+  } catch (e) {
+    const felder = Object.entries(e.felder || {});
+    const markiert = felder.filter(([name, satz]) => markieren(name, satz)).length;
+    speichernMeldung(markiert ? "Bitte die markierten Felder ausfüllen." : e.message);
+    const erstes = document.querySelector("#formular .feld-fehler");
+    if (erstes) erstes.focus();
+  }
 });
 
 $("passwort-formular").addEventListener("submit", async (ereignis) => {

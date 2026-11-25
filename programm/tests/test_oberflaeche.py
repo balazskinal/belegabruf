@@ -185,12 +185,13 @@ def _speichern(s, tmp_path, mail_an=False):
     ({"mail_an": True, "mail": {"server": "smtp.example.com", "verschluesselung": "keine"}}, "Verschlüsselung"),
     ({"mail_an": True, "mail": {"server": "smtp.example.com", "port": 465, "benutzer": "a", "absender": "a@example.com",
                                 "empfaenger": ["keine-adresse"]}}, "keine Mailadresse"),
-    ({"mail_an": True, "mail": {"server": "smtp.example.com"}}, "fehlt"),
+    ({"mail_an": True, "mail": {"server": "smtp.example.com"}}, "ausfüllen"),
 ])
 def test_eingaben_werden_geprueft(server, tmp_path, aenderung, meldung):
     antwort, inhalt = _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path, **aenderung))
     assert antwort.status == 400
-    assert meldung in json.loads(inhalt)["fehler"]
+    antwort = json.loads(inhalt)
+    assert meldung in antwort["fehler"] or any(meldung in s for s in antwort.get("felder", {}).values())
     assert not pfade.einstellungsdatei().exists()
 
 
@@ -775,3 +776,69 @@ def test_einrichtung_laedt_keine_headless_shell():
             gefunden += 1
             assert 'channel="chromium"' in aufruf.group(2), f"{datei.name}: Start ohne channel=chromium"
     assert gefunden >= 3
+
+
+# ── Rückmeldung beim Speichern: Feldbezug ────────────────────────────────────
+
+
+def test_fehlerantwort_nennt_alle_fehlenden_mailfelder(server, tmp_path):
+    daten = _eingaben(tmp_path, mail_an=True, mail={"server": "", "port": "", "benutzer": "", "absender": "",
+                                                    "empfaenger": []})
+    antwort, inhalt = _anfrage(server, "POST", "/api/einstellungen", _mit(server), daten)
+    assert antwort.status == 400
+    felder = json.loads(inhalt)["felder"]
+    assert set(felder) == {"server", "port", "benutzer", "absender", "empfaenger"}
+    assert not pfade.einstellungsdatei().exists()
+
+
+def test_fehlerantwort_nennt_kontozeile_und_belegordner(server, tmp_path):
+    daten = _eingaben(tmp_path, belegordner="", konten=[{"quelle": "airbnb", "name": ""},
+                                                        {"quelle": "airbnb", "name": "Co"},
+                                                        {"quelle": "skool", "name": ""}])
+    felder = json.loads(_anfrage(server, "POST", "/api/einstellungen", _mit(server), daten)[1])["felder"]
+    assert set(felder) == {"belegordner", "konto-0-name"}
+
+
+def test_mail_aus_braucht_keine_mailfelder(server, tmp_path):
+    daten = _eingaben(tmp_path, mail_an=False, mail={"server": "", "port": "", "benutzer": ""})
+    assert _anfrage(server, "POST", "/api/einstellungen", _mit(server), daten)[0].status == 200
+
+
+def test_speichern_markiert_fehlende_mailfelder_in_der_seite(seite, tmp_path):
+    p = seite
+    p.fill("#belegordner", str(tmp_path / "Belege"))
+    p.check("#mail-an")
+    p.fill("#port", "")
+    p.click("#speichern")
+    p.wait_for_selector("#speichern-meldung:not(.versteckt)")
+    assert p.inner_text("#speichern-meldung") == "Bitte die markierten Felder ausfüllen."
+    markiert = p.eval_on_selector_all("#formular .feld-fehler", "es => es.map(e => e.id)")
+    assert set(markiert) == {"server", "port", "benutzer", "absender", "empfaenger"}
+    assert p.get_attribute("#server", "aria-invalid") == "true"
+    assert "ausfüllen" in p.inner_text("#satz-server")
+    assert p.is_hidden("#fehler")  # nicht (nur) oben, sondern am Knopf
+    # Ausfüllen nimmt die Markierung weg
+    p.fill("#server", "smtp.example.com")
+    assert not p.eval_on_selector("#server", "e => e.classList.contains('feld-fehler')")
+    assert p.query_selector("#satz-server") is None
+    assert p.is_visible("#speichern-meldung")  # andere Felder sind noch rot
+    for feld, wert in (("#port", "465"), ("#benutzer", "ich@example.com"), ("#absender", "ich@example.com"),
+                       ("#empfaenger", "belege@example.com")):
+        p.fill(feld, wert)
+    assert p.is_hidden("#speichern-meldung")
+    p.click("#speichern")
+    p.wait_for_selector("#gespeichert:not(.versteckt)")
+    assert pfade.einstellungsdatei().exists()
+
+
+def test_speichern_markiert_fehlenden_kontonamen(seite, tmp_path):
+    p = seite
+    p.fill("#belegordner", str(tmp_path / "Belege"))
+    p.click("#konto-dazu")
+    p.locator("#kontenliste input[type=text]").nth(1).fill("Co")
+    p.click("#speichern")
+    p.wait_for_selector("#speichern-meldung:not(.versteckt)")
+    erstes = p.locator("#kontenliste input[type=text]").nth(0)
+    assert erstes.evaluate("e => e.classList.contains('feld-fehler')")
+    assert "braucht jedes einen Namen" in p.inner_text("#formular .feldsatz")
+    assert not pfade.einstellungsdatei().exists()

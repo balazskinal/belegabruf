@@ -176,7 +176,10 @@ class Handler(BaseHTTPRequestHandler):
         try:
             return self._json(HTTPStatus.OK, aktionen[pfad]())
         except Eingabefehler as fehler:
-            return self._json(HTTPStatus.BAD_REQUEST, {"fehler": str(fehler)})
+            antwort = {"fehler": str(fehler)}
+            if fehler.felder:
+                antwort["felder"] = fehler.felder
+            return self._json(HTTPStatus.BAD_REQUEST, antwort)
         except Exception as fehler:  # noqa: BLE001 - nie Einzelheiten (Pfade, Werte) nach außen
             return self._json(HTTPStatus.INTERNAL_SERVER_ERROR,
                               {"fehler": f"Das hat nicht geklappt ({type(fehler).__name__})."})
