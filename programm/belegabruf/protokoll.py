@@ -43,6 +43,7 @@ SPALTEN = [
     "rechnungsnummer",
     "datei",
     "ziele",
+    "sevdesk_id",  # Beleg-ID in sevDesk, wenn das Programm ihn hochgeladen hat
 ]
 
 
@@ -61,8 +62,24 @@ class Protokoll:
         self._zeilen: dict[str, dict] = {}
         if self.datei.exists():
             with self.datei.open(newline="", encoding="utf-8") as f:
-                for zeile in csv.DictReader(f, delimiter=";"):
-                    self._zeilen[zeile["schluessel"]] = zeile  # spätere Zeilen gewinnen
+                leser = csv.DictReader(f, delimiter=";")
+                alle = list(leser)
+                spalten = leser.fieldnames or []
+            for zeile in alle:
+                self._zeilen[zeile["schluessel"]] = zeile  # spätere Zeilen gewinnen
+            if spalten != SPALTEN:
+                self._spalten_umstellen(alle)
+
+    def _spalten_umstellen(self, alle: list[dict]) -> None:
+        """Ältere Datei mit weniger Spalten (z. B. aus 1.1): neu schreiben, alle Zeilen
+        bleiben in derselben Reihenfolge. Erst Zwischendatei, dann ersetzen."""
+        zwischen = self.datei.with_suffix(".csv.teil")
+        with zwischen.open("w", newline="", encoding="utf-8") as f:
+            schreiber = csv.DictWriter(f, fieldnames=SPALTEN, delimiter=";", extrasaction="ignore")
+            schreiber.writeheader()
+            for zeile in alle:
+                schreiber.writerow({k: zeile.get(k) or "" for k in SPALTEN})
+        zwischen.replace(self.datei)
 
     def eintrag(self, schluessel: str) -> dict | None:
         return self._zeilen.get(schluessel)
@@ -107,6 +124,17 @@ class Protokoll:
         neu = dict(zeile)
         neu["zeitpunkt"] = datetime.now().isoformat(timespec="seconds")
         neu["ziele"] = ",".join(self.ziele_von(schluessel) + [ziel])
+        self._anhaengen([neu])
+
+    def hochgeladen(self, schluessel: str, beleg_id: str) -> None:
+        """Upload geklappt: "unklar" weg, "sevdesk" dazu, Beleg-ID merken — eine Zeile."""
+        zeile = self.eintrag(schluessel)
+        if zeile is None:
+            return
+        neu = dict(zeile)
+        neu["zeitpunkt"] = datetime.now().isoformat(timespec="seconds")
+        neu["ziele"] = ",".join([z for z in self.ziele_von(schluessel) if z != "sevdesk-unklar"] + ["sevdesk"])
+        neu["sevdesk_id"] = beleg_id
         self._anhaengen([neu])
 
     def ziel_entfernen(self, schluessel: str, ziel: str) -> None:

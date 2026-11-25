@@ -43,8 +43,9 @@ class Konto:
 
 #: Vorgabe für den Eintrag im Passwortspeicher des Betriebssystems: "Dienst/Konto".
 STANDARD_SCHLUESSEL = "belegabruf/sevdesk"
-#: Steuerregel des Entwurfs in sevDesk: 5 = Reverse Charge gem. §13b UStG (Airbnb sitzt in Irland).
-STANDARD_STEUERREGEL = "5"
+#: Steuerregel des Entwurfs in sevDesk. Keine Vorgabe: Sie hängt von der eigenen
+#: Buchhaltung ab und wird bei "Einrichten" gewählt (Nummer aus sevDesk).
+STANDARD_STEUERREGEL = ""
 
 
 @dataclass
@@ -119,6 +120,9 @@ def laden(datei: Path | None = None) -> Einstellungen:
         schluessel=str(roh_sevdesk.get("schluessel") or STANDARD_SCHLUESSEL).strip(),
         steuerregel=str(roh_sevdesk.get("steuerregel") or STANDARD_STEUERREGEL).strip(),
     )
+    if sevdesk.steuerregel and not sevdesk.steuerregel.isdigit():
+        raise EinstellungsFehler(
+            f"[sevdesk] steuerregel = \"{sevdesk.steuerregel}\" muss eine Nummer sein (z. B. \"14\").")
     dienst, konto = sevdesk.dienst_und_konto
     if not dienst or not konto:
         raise EinstellungsFehler(
@@ -174,7 +178,7 @@ def als_text(einst: Einstellungen) -> str:
         "# Nur wichtig, wenn bei ziele \"sevdesk\" steht.",
         "# schluessel: wo der API-Schlüssel im Passwortspeicher liegt, als \"Dienst/Konto\"",
         "#   (nicht der Schlüssel selbst!). Eingeben oder austauschen über \"Einrichten\".",
-        "# steuerregel: wird im Entwurf eingetragen; 5 = Reverse Charge gem. §13b UStG.",
+        "# steuerregel: Nummer der Steuerregel in sevDesk, wird im Entwurf eingetragen (Pflicht).",
         "[sevdesk]",
         f"schluessel = {_toml_text(einst.sevdesk.schluessel)}",
         f"steuerregel = {_toml_text(einst.sevdesk.steuerregel)}",

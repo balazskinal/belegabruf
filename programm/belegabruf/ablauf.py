@@ -89,7 +89,12 @@ def hochladen(einst: Einstellungen, protokoll: Protokoll, erg: Ergebnis, melden:
                                  "Beim nächsten Start noch einmal versuchen.")
             erg.nicht_hochgeladen = len(offen)
             return
-    ziel = sevdesk.SevDesk(verbindung, einst.sevdesk.steuerregel)
+    try:
+        ziel = sevdesk.SevDesk(verbindung, einst.sevdesk.steuerregel)
+    except sevdesk.SteuerregelFehlt as fehler:
+        erg.upload_fehler = str(fehler)
+        erg.nicht_hochgeladen = len(offen)
+        return
     ohne_datei = 0
     melden(f"{len(offen)} Rechnung(en) werden nach sevDesk hochgeladen …")
     for schluessel in offen:
@@ -104,7 +109,7 @@ def hochladen(einst: Einstellungen, protokoll: Protokoll, erg: Ergebnis, melden:
         except ValueError:
             datum = None
         try:
-            ziel.hochladen(
+            beleg_id = ziel.hochladen(
                 quelle=zeile.get("quelle") or protokoll.quelle, dateiname=datei.name,
                 inhalt=datei.read_bytes(), rechnungsdatum=datum, rechnungsnummer=nummer,
                 gutschrift="_Gutschrift" in datei.name,
@@ -121,8 +126,7 @@ def hochladen(einst: Einstellungen, protokoll: Protokoll, erg: Ergebnis, melden:
                 protokoll.ziel_entfernen(schluessel, "sevdesk-unklar")
             erg.upload_fehler = f"Rechnung {nummer}: {fehler}"
             break
-        protokoll.ziel_entfernen(schluessel, "sevdesk-unklar")
-        protokoll.ziel_ergaenzen(schluessel, "sevdesk")
+        protokoll.hochgeladen(schluessel, beleg_id)
         erg.hochgeladen += 1
     erg.nicht_hochgeladen = len(protokoll.upload_offen())
     if ohne_datei:

@@ -171,6 +171,21 @@ def _sevdesk_abfragen(alt: Einstellungen | None) -> tuple[bool, SevDeskEinstellu
     einst = SevDeskEinstellung(schluessel=f"{dienst.strip()}/{konto.strip()}", steuerregel=einst.steuerregel)
     dienst, konto = einst.dienst_und_konto
 
+    print(
+        "\n  Jeder Entwurf braucht in sevDesk eine Steuerregel. Welche passt, hängt von deiner\n"
+        "  Buchhaltung ab — frag im Zweifel deine Steuerberatung. Die Nummer steht z. B. in der\n"
+        "  Vorlage deines Lieferanten Airbnb in sevDesk. Ohne Steuerregel wird nichts hochgeladen."
+    )
+    while True:
+        regel = _frage("  Nummer der Steuerregel", einst.steuerregel)
+        if regel.isdigit():
+            break
+        if not regel:
+            print("  Ohne Steuerregel wird nichts hochgeladen. Du kannst sie später über „Einrichten“ eintragen.")
+            break
+        print("  Bitte nur die Nummer eingeben, z. B. 14.")
+    einst = SevDeskEinstellung(schluessel=einst.schluessel, steuerregel=regel)
+
     if sevdesk.schluessel_vorhanden(dienst, konto):
         print("  Unter diesem Eintrag liegt schon ein Schlüssel.")
         if _ja("  Austauschen?", False):

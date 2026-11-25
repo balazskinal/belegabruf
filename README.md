@@ -116,12 +116,15 @@ Auf Wunsch lädt das Programm jede **neu geholte** Rechnung als **Entwurf** nach
 findest sie dort bei den Belegen als offenen Entwurf, mit dem PDF im Anhang.
 
 **Was im Entwurf steht:** nur, was das Programm ohnehin weiß — Belegdatum, Rechnungsnummer (als
-Belegnummer), Lieferant „Airbnb“ und die Steuerregel (Vorgabe: Reverse Charge nach §13b UStG).
-**Betrag und Konto bleiben leer — die ergänzt du in sevDesk.** Gebucht wird nichts. Gutschriften
+Belegnummer), Lieferant „Airbnb“ und die Steuerregel. **Betrag und Konto bleiben leer — die
+ergänzt du in sevDesk**; sevDesk liest dabei nichts aus dem PDF aus. Gebucht wird nichts. Gutschriften
 kommen genauso an, mit „(Gutschrift)“ hinter der Belegnummer.
 
 **Einschalten:** „Einrichten“ doppelklicken und bei „Nach sevDesk hochladen?“ mit **j** antworten.
-Dann fragt es nach dem **API-Schlüssel** (in sevDesk unter *Einstellungen → Benutzer → API-Token*).
+Dann fragt es nach der **Steuerregel**: sevDesk verlangt für jeden Entwurf eine, und welche passt,
+hängt von deiner Buchhaltung ab. Deshalb gibt es keinen Vorschlag. Die Nummer findest du z. B. in der
+Vorlage deines Lieferanten Airbnb in sevDesk; im Zweifel frag deine Steuerberatung. Danach fragt es
+nach dem **API-Schlüssel** (in sevDesk unter *Einstellungen → Benutzer → API-Token*).
 Beim Einfügen sieht man nichts — das ist Absicht. Der Schlüssel kommt in den **Passwortspeicher
 deines Rechners** (Mac: Schlüsselbund, Windows: Anmeldeinformationsverwaltung) und **nie in eine
 Datei**. In den Einstellungen steht nur, unter welchem Eintrag er liegt (Vorschlag:
@@ -132,7 +135,7 @@ Eintrag lesen darf — dort **„Immer erlauben“** wählen (nach einem Update 
 **Alter Bestand:** Beim Einschalten gilt alles, was bis dahin geholt ist, als **schon in sevDesk**
 und wird nicht hochgeladen. Hochgeladen wird nur, was danach neu dazukommt.
 
-**Nie doppelt:** Das Protokoll merkt sich, was hochgeladen ist. Klappt ein Upload nicht (kein
+**Nie doppelt:** Das Protokoll merkt sich, was hochgeladen ist (mit der Beleg-ID aus sevDesk). Klappt ein Upload nicht (kein
 Internet, falscher Schlüssel, sevDesk lehnt ab), bleibt der Beleg im Belegordner, die Zusammenfassung
 zeigt die Meldung von sevDesk, und der **nächste Lauf versucht es erneut**. Kommt von sevDesk gar
 keine Antwort, ist unklar, ob der Entwurf angelegt wurde. Dann schickt das Programm ihn **nicht** noch
@@ -266,8 +269,7 @@ Die GitHub Action baut das ZIP und hängt es an das Release.
 ## Offen
 
 - **Windows:** noch von niemandem getestet (Abnahmepunkt 5). Wer es ausprobiert, bitte Rückmeldung.
-- **sevDesk:** Ob sevDesk einen Entwurf ganz ohne Betrag und Konto über die API annimmt, ist nicht
-  dokumentiert; das zeigt die erste echte neue Rechnung. Lehnt sevDesk ab, steht seine Meldung in der
-  Zusammenfassung und nichts geht verloren. Eine automatische Belegerkennung wie beim Mail-Eingang gibt
-  es über die API nicht.
+- **sevDesk:** Ein Entwurf ohne Betrag und Konto wird über die API angenommen (einmal mit einer
+  echten Rechnung geprüft; dokumentiert ist es nicht). Eine automatische Belegerkennung wie beim
+  Mail-Eingang gibt es über die API nicht.
 - Weitere Bausteine und Ziele (z. B. Lexware Office) folgen in späteren Versionen.

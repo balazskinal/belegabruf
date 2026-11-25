@@ -9,7 +9,8 @@ Es liest, ändert oder löscht dort nichts. Erlaubt sind genau diese Aufrufe
     GET  /SevClient                        nur bei "Einrichten": ist der Schlüssel gültig?
 
 Eingetragen wird nur, was das Programm ohnehin weiß: Belegdatum, Rechnungsnummer
-(als Belegnummer), Lieferant als Text "Airbnb", Steuerregel aus den Einstellungen,
+(als Belegnummer), Lieferant als Text "Airbnb", Steuerregel aus den Einstellungen
+(Pflicht bei sevDesk, je Nutzer verschieden, daher ohne Vorgabe),
 Status Entwurf (50), Ausgabe. **Betrag und Konto bleiben leer** — die ergänzt man in
 sevDesk. Gebucht wird nichts.
 
@@ -42,6 +43,10 @@ LIEFERANT = {"airbnb": "Airbnb"}
 
 class NichtErlaubt(Exception):
     """Ein Aufruf, der nicht zum Hochladen gehört."""
+
+
+class SteuerregelFehlt(Exception):
+    """Ohne Steuerregel legt sevDesk keinen Entwurf an — und es gibt keine allgemeine Vorgabe."""
 
 
 class SchluesselFehlt(Exception):
@@ -205,21 +210,23 @@ class Abgelehnt(Exception):
 
 def entwurf(quelle: str, rechnungsdatum: date | None, rechnungsnummer: str, steuerregel: str,
             gutschrift: bool, temp_datei: str) -> dict:
-    """Der Rumpf für saveVoucher: nur, was das Programm weiß; ohne Positionen."""
+    """Der Rumpf für saveVoucher: nur, was das Programm weiß; ohne Positionen.
+
+    So von sevDesk angenommen (echte Probe am 25.11.2026): Entwurf mit Status 50,
+    Lieferant als Text, Belegnummer, Datum, Dokument; Betrag 0, keine Positionen."""
     beleg = {
         "objectName": "Voucher",
         "mapAll": True,
         "status": STATUS_ENTWURF,
         "creditDebit": "C",  # Ausgabe
         "voucherType": "VOU",  # normaler Beleg
-        "supplier": None,
         "supplierName": LIEFERANT.get(quelle, quelle.capitalize()),
         "description": f"{rechnungsnummer} (Gutschrift)" if gutschrift else rechnungsnummer,
         "taxRule": {"id": str(steuerregel), "objectName": "TaxRule"},
     }
     if rechnungsdatum is not None:
         beleg["voucherDate"] = rechnungsdatum.strftime("%d.%m.%Y")
-    return {"voucher": beleg, "voucherPosSave": [], "voucherPosDelete": None, "filename": temp_datei}
+    return {"voucher": beleg, "filename": temp_datei}
 
 
 class SevDesk:
@@ -228,13 +235,19 @@ class SevDesk:
     name = "sevdesk"
 
     def __init__(self, verbindung: Verbindung, steuerregel: str):
+        if not str(steuerregel).strip():
+            raise SteuerregelFehlt(
+                "In den Einstellungen ist keine Steuerregel für sevDesk eingetragen. "
+                "Doppelklick auf „Einrichten“ und die Nummer eingeben.")
         self.verbindung = verbindung
         self.steuerregel = steuerregel
 
     def hochladen(self, *, quelle: str, dateiname: str, inhalt: bytes, rechnungsdatum: date | None,
-                  rechnungsnummer: str, gutschrift: bool, vor_entwurf=lambda: None) -> None:
+                  rechnungsnummer: str, gutschrift: bool, vor_entwurf=lambda: None) -> str:
         """Legt einen Entwurf an. Wirft ``Abgelehnt`` (sicher nicht angelegt) oder
         ``Uebertragungsfehler`` (``vielleicht_angekommen`` sagt, ob es unklar ist).
+
+        Gibt die Beleg-ID in sevDesk zurück (leer, falls sevDesk keine nennt).
 
         ``vor_entwurf`` wird direkt vor dem Anlegen aufgerufen. Dort merkt sich das
         Programm „unklar“ — bricht der Rechner mittendrin ab, wird der Beleg so nicht
@@ -261,6 +274,9 @@ class SevDesk:
         if antwort.status >= 500:
             # Serverfehler: sevDesk kann den Entwurf trotzdem angelegt haben.
             raise Uebertragungsfehler(self.verbindung.fehlertext(antwort), vielleicht_angekommen=True)
+        objekte = antwort.daten.get("objects") or {}
+        beleg = objekte.get("voucher") if isinstance(objekte, dict) else None
+        return str(beleg.get("id") or "") if isinstance(beleg, dict) else ""
 
 
 def schluessel_pruefen(verbindung: Verbindung) -> str | None:

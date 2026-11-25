@@ -71,7 +71,7 @@ class Attrappe:
             if self.verhalten == "500":
                 raise urllib.error.HTTPError(anfrage.full_url, 500, "Server Error", {}, io.BytesIO(b"{}"))
             self.entwuerfe.append(json.loads(anfrage.data))
-            return _Antwort(201, {"objects": {"voucher": {"id": "1"}}})
+            return _Antwort(201, {"objects": {"voucher": {"id": str(900 + len(self.entwuerfe))}}})
         if pfad == "/SevClient":
             return _Antwort(200, {"objects": [{"id": "1"}]})
         raise AssertionError(f"Unerwarteter Aufruf {pfad}")
@@ -92,7 +92,7 @@ def _einst(tmp_path: Path, an: bool = True) -> Einstellungen:
         belegordner=tmp_path / "Belege",
         konten=[Konto("airbnb", "privat")],
         ziele=["ordner", "sevdesk"] if an else ["ordner"],
-        sevdesk=SevDeskEinstellung(),
+        sevdesk=SevDeskEinstellung(steuerregel="14"),
     )
 
 
@@ -200,13 +200,17 @@ def test_entwurf_enthaelt_nur_bekanntes(tmp_path, attrappe):
     rechnung, gutschrift = attrappe.entwuerfe
     v = rechnung["voucher"]
     assert v["status"] == 50 and v["creditDebit"] == "C" and v["voucherType"] == "VOU"
-    assert v["supplierName"] == "Airbnb" and v["supplier"] is None
+    assert v["supplierName"] == "Airbnb" and "supplier" not in v
     assert v["voucherDate"] == "03.11.2026" and v["description"] == "AIUC-9"
-    assert v["taxRule"] == {"id": "5", "objectName": "TaxRule"}
-    assert rechnung["voucherPosSave"] == [] and rechnung["filename"].startswith("temp")
+    assert v["taxRule"] == {"id": "14", "objectName": "TaxRule"}
+    assert set(rechnung) == {"voucher", "filename"}  # wie in der echten Probe: keine Positionen
+    assert rechnung["filename"].startswith("temp")
     assert not any(k in v for k in ("sumGross", "sumNet", "sumTax"))  # kein Betrag
     assert gutschrift["voucher"]["description"] == "AIUC-9 (Gutschrift)"
     assert all(k["Authorization"] == PLATZHALTER for k in attrappe.kopfzeilen)
+    p = _protokoll(einst)
+    assert p.eintrag("rechnung:a1")["sevdesk_id"] == "901"
+    assert p.ziele_von("rechnung:a1") == ["ordner", "sevdesk"]
 
 
 def test_zweiter_lauf_laedt_nichts_doppelt(tmp_path, attrappe):
@@ -353,7 +357,7 @@ def test_einstellungen_mit_sevdesk_hin_und_zurueck(tmp_path):
     geladen = einstellungen.laden(datei)
     assert geladen.sevdesk_an
     assert geladen.sevdesk.dienst_und_konto == ("sevdesk-api", "jemand")
-    assert geladen.sevdesk.steuerregel == "5"
+    assert geladen.sevdesk.steuerregel == ""  # keine Vorgabe
 
 
 def test_ordner_ist_immer_dabei(tmp_path):
@@ -425,8 +429,10 @@ def test_einrichten_mit_neuem_schluessel(tmp_path, monkeypatch, capsys):
     a = Attrappe()
     monkeypatch.setattr(sevdesk.urllib.request, "urlopen", a)
     _einrichten.speicher = None
-    # Anbieter, Kontoname, noch ein Konto?, Belegordner, sevDesk?, Eintrag
-    einst, speicher = _einrichten(monkeypatch, tmp_path, ["", "", "n", "", "j", ""], verdeckt=PLATZHALTER)
+    # Anbieter, Kontoname, noch ein Konto?, Belegordner, sevDesk?, Eintrag, Steuerregel (erst falsch)
+    einst, speicher = _einrichten(monkeypatch, tmp_path, ["", "", "n", "", "j", "", "x", "14"],
+                                  verdeckt=PLATZHALTER)
+    assert einst.sevdesk.steuerregel == "14"
     assert einst.sevdesk_an and einst.sevdesk.schluessel == "belegabruf/sevdesk"
     assert speicher.daten[("belegabruf", "sevdesk")] == PLATZHALTER
     assert a.aufrufe == [("GET", "/SevClient")]
@@ -443,8 +449,45 @@ def test_einrichten_mit_vorhandenem_eintrag(tmp_path, monkeypatch, capsys):
     speicher = _Speicher()
     speicher.daten[("sevdesk-api", "jemand")] = PLATZHALTER
     _einrichten.speicher = speicher
-    # …, sevDesk?, Eintrag, Austauschen?
-    einst, _ = _einrichten(monkeypatch, tmp_path, ["", "", "n", "", "j", "sevdesk-api/jemand", "n"])
+    # …, sevDesk?, Eintrag, Steuerregel, Austauschen?
+    einst, _ = _einrichten(monkeypatch, tmp_path, ["", "", "n", "", "j", "sevdesk-api/jemand", "14", "n"])
     assert einst.sevdesk.schluessel == "sevdesk-api/jemand"
     assert speicher.daten == {("sevdesk-api", "jemand"): PLATZHALTER}  # nichts überschrieben
     assert "Der Schlüssel funktioniert" in capsys.readouterr().out
+
+
+def test_ohne_steuerregel_wird_nichts_hochgeladen(tmp_path, attrappe):
+    einst = _einst(tmp_path)
+    einst.sevdesk = SevDeskEinstellung(steuerregel="")
+    Falsch.rechnungen = [("a1", "2026-11-03", "AIUC-1")]
+    erg = _lauf(einst)
+    assert "keine Steuerregel" in erg.upload_fehler and erg.nicht_hochgeladen == 1
+    assert attrappe.aufrufe == []
+
+
+def test_steuerregel_muss_nummer_sein(tmp_path):
+    datei = tmp_path / "e.toml"
+    datei.write_text('[sevdesk]\nsteuerregel = "Reverse Charge"\n', encoding="utf-8")
+    with pytest.raises(einstellungen.EinstellungsFehler):
+        einstellungen.laden(datei)
+
+
+def test_protokoll_aus_1_1_bekommt_neue_spalte(tmp_path):
+    from belegabruf import protokoll as protokoll_modul
+
+    datei = protokoll_modul.protokolldatei("airbnb", "privat")
+    datei.parent.mkdir(parents=True)
+    alte_spalten = [s for s in protokoll_modul.SPALTEN if s != "sevdesk_id"]
+    datei.write_text(
+        ";".join(alte_spalten) + "\n"
+        "2026-11-01T10:00:00;airbnb;privat;rechnung;rechnung:a1;2026-10-01;HMX;AIUC-1;airbnb/2026/x.pdf;ordner\n"
+        "2026-11-01T10:00:01;airbnb;privat;kontrolle;monat:2026-10;;;;airbnb/kontrolle/m.pdf;ordner\n",
+        encoding="utf-8")
+    p = Protokoll("airbnb", "privat", tmp_path / "Belege")
+    assert datei.read_text(encoding="utf-8").splitlines()[0].endswith(";ziele;sevdesk_id")
+    assert p.eintrag("rechnung:a1")["rechnungsnummer"] == "AIUC-1"
+    p.hochgeladen("rechnung:a1", "77")
+    neu = Protokoll("airbnb", "privat", tmp_path / "Belege")
+    assert neu.eintrag("rechnung:a1")["sevdesk_id"] == "77"
+    assert neu.eintrag("monat:2026-10")["datei"] == "airbnb/kontrolle/m.pdf"
+    assert neu.anzahl("rechnung") == 1
