@@ -20,8 +20,8 @@ ZIELE: dict[str, type[Ziel]] = {
 LIEFERZIELE = {"mail"}
 
 
-def erstellen(name: str, belegordner: Path) -> Ziel:
+def erstellen(name: str, belegordner: Path, ablage: str = "jahr") -> Ziel:
     if name not in ZIELE:
         bekannt = ", ".join(sorted(ZIELE))
         raise KeyError(f"Unbekanntes Ziel '{name}'. Bekannt sind: {bekannt}")
-    return ZIELE[name](belegordner)
+    return ZIELE[name](belegordner, ablage=ablage)

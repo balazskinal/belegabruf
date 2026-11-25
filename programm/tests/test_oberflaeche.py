@@ -942,3 +942,85 @@ def test_mit_konten_oeffnet_belege_holen(server, tmp_path):
         assert p.get_attribute("#reiter-holen", "aria-selected") == "true"
         assert p.is_visible("#holen") and p.is_hidden("#formular")
         b.close()
+
+
+# ── Ablage nach Jahr oder nach Jahr und Monat ────────────────────────────────
+
+
+def test_ablage_standard_jahr_und_pruefung(tmp_path):
+    assert einstellungen.laden(_toml(tmp_path, '[[konto]]\nquelle = "airbnb"\n')).ablage == "jahr"
+    assert einstellungen.laden(_toml(tmp_path, 'ablage = "monat"\n')).ablage == "monat"
+    with pytest.raises(einstellungen.EinstellungsFehler, match="ablage"):
+        einstellungen.laden(_toml(tmp_path, 'ablage = "woche"\n'))
+    einst = einstellungen.laden(_toml(tmp_path, 'ablage = "monat"\n'))
+    assert einstellungen.aus_text(einstellungen.als_text(einst)).ablage == "monat"
+
+
+def test_ordner_nach_monat_kontrolle_bleibt(tmp_path):
+    from belegabruf.ziele.ordner import Ordner
+
+    beleg = Beleg(quelle="airbnb", konto="standard", art="rechnung", schluessel="rechnung:x",
+                  dateiname="2026-03-15_X.pdf", inhalt=b"%PDF", jahr=2026, rechnungsdatum=date(2026, 3, 15))
+    assert Ordner(tmp_path).abliefern(beleg) == tmp_path / "airbnb" / "2026" / "2026-03-15_X.pdf"
+    assert Ordner(tmp_path, ablage="monat").abliefern(beleg) == tmp_path / "airbnb" / "2026" / "03" / "2026-03-15_X.pdf"
+    kontrolle = Beleg(quelle="airbnb", konto="standard", art="kontrolle", schluessel="kontrolle:2026-03",
+                      dateiname="2026-03_standard.pdf", inhalt=b"%PDF", jahr=2026)
+    assert Ordner(tmp_path, ablage="monat").abliefern(kontrolle) == tmp_path / "airbnb" / "kontrolle" / "2026-03_standard.pdf"
+
+
+def test_umstellen_auf_monat_holt_nichts_doppelt_und_verschiebt_nichts(tmp_path, monkeypatch):
+    """Duplikatschutz über das Protokoll (Schlüssel), nicht über den Pfad."""
+    runde = {"belege": [("a1", "2026-10-30")]}
+
+    class Zwei(Attrappe):
+        def belege_holen(self, umgebung):
+            erg = Ergebnis(self.name, self.konto.name)
+            for kennung, datum in runde["belege"]:
+                schluessel = f"rechnung:{kennung}"
+                if umgebung.bekannt(schluessel):
+                    erg.schon_da += 1
+                    continue
+                umgebung.abliefern(Beleg(quelle="airbnb", konto=self.konto.name, art="rechnung",
+                                         schluessel=schluessel, dateiname=f"{datum}_{kennung}.pdf",
+                                         inhalt=b"%PDF " + kennung.encode(), jahr=2026,
+                                         rechnungsdatum=date.fromisoformat(datum)))
+                erg.neu += 1
+            return erg
+
+    monkeypatch.setattr(ablauf, "quelle_fuer", lambda konto: Zwei(konto, Path("/x")))
+    belege = tmp_path / "Belege"
+    konto = einstellungen.Konto(quelle="airbnb", name="standard", titel="")
+    jahr = einstellungen.Einstellungen(belegordner=belege, konten=[konto])
+    assert ablauf.abrufen(jahr, konto, lambda t: None).neu == 1
+    alt = belege / "airbnb" / "2026" / "2026-10-30_a1.pdf"
+    assert alt.exists()
+
+    monat = einstellungen.Einstellungen(belegordner=belege, konten=[konto], ablage="monat")
+    runde["belege"] = [("a1", "2026-10-30"), ("a2", "2026-11-04")]
+    erg = ablauf.abrufen(monat, konto, lambda t: None)
+    assert (erg.neu, erg.schon_da) == (1, 1)
+    assert alt.exists() and not (belege / "airbnb" / "2026" / "10").exists()  # nichts verschoben, nichts doppelt
+    assert (belege / "airbnb" / "2026" / "11" / "2026-11-04_a2.pdf").exists()
+    assert ablauf.fehlende_dateien(monat, konto) == 0  # der alte Beleg gilt weiter als vorhanden
+
+
+def test_ablage_in_der_seite(seite, tmp_path):
+    p = seite
+    assert p.input_value("#ablage") == "jahr"
+    assert "bereits abgelegte bleiben, wo sie sind" in p.inner_text("#ablage-hinweis")
+    p.fill("#belegordner", str(tmp_path / "Belege"))
+    p.select_option("#ablage", "monat")
+    p.click("#speichern")
+    p.wait_for_selector("#gespeichert:not(.versteckt)")
+    assert einstellungen.laden().ablage == "monat"
+    p.reload()
+    p.wait_for_selector("#version:not(:empty)")
+    assert p.input_value("#ablage") == "monat"
+
+
+def test_ablage_bleibt_beim_speichern_ohne_angabe(server, tmp_path):
+    assert _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path, ablage="monat"))[0].status == 200
+    assert _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path))[0].status == 200
+    assert einstellungen.laden().ablage == "monat"
+    antwort, inhalt = _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path, ablage="../x"))
+    assert antwort.status == 400 and "ablage" in json.loads(inhalt)["felder"]

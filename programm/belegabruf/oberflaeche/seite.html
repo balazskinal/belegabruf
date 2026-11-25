@@ -141,6 +141,13 @@
       <form id="formular" autocomplete="off" novalidate>
         <label for="belegordner">Belegordner (hier landen die PDFs)</label>
         <input type="text" id="belegordner" spellcheck="false">
+        <label for="ablage">Unterordner</label>
+        <select id="ablage" aria-describedby="ablage-hinweis">
+          <option value="jahr">nach Jahr (wie bisher)</option>
+          <option value="monat">nach Jahr und Monat</option>
+        </select>
+        <p class="leise" id="ablage-hinweis">Gilt für neue Belege, bereits abgelegte bleiben, wo sie sind.
+          Maßgeblich ist das Rechnungsdatum, z. B. <code>airbnb/2026/11/…pdf</code>.</p>
 
         <h2 class="oben18">Konten</h2>
         <p class="leise">Mehrere Konten beim selben Anbieter sind möglich (z. B. ein Zugang als Co-Gastgeber).
@@ -340,6 +347,7 @@ function namenZeigen() {
 
 function formularFuellen() {
   $("belegordner").value = zustand.belegordner;
+  $("ablage").value = zustand.ablage || "jahr";
   const liste = $("kontenliste");
   liste.replaceChildren(...zustand.konten.map(kontozeile));
   if (!zustand.konten.length) liste.append(kontozeile({ quelle: zustand.quellen[0].name }));
@@ -527,6 +535,7 @@ $("formular").addEventListener("submit", async (ereignis) => {
   $("gespeichert").classList.add("versteckt");
   const daten = {
     belegordner: $("belegordner").value,
+    ablage: $("ablage").value,
     konten: [...$("kontenliste").children].filter((z) => z.lesen).map((z) => z.lesen()),
     mail_an: $("mail-an").checked,
     mail: { server: $("server").value, port: $("port").value, verschluesselung: $("verschluesselung").value,

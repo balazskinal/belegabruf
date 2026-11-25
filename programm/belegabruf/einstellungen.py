@@ -107,6 +107,7 @@ class Einstellungen:
     ziele: list[str] = field(default_factory=lambda: ["ordner"])
     sichtbar: bool = False  # Abruf im sichtbaren Fenster (nur zur Fehlersuche)
     mail: MailEinstellung = field(default_factory=MailEinstellung)
+    ablage: str = "jahr"  # Unterordner: "jahr" (<quelle>/<JJJJ>/) oder "monat" (<quelle>/<JJJJ>/<MM>/)
 
     @property
     def mail_an(self) -> bool:
@@ -198,13 +199,21 @@ def aus_text(text: str, herkunft: str = "Einstellungen") -> Einstellungen:
     if "ordner" not in ziele:  # Der Belegordner ist immer dabei.
         ziele.insert(0, "ordner")
     mail = _mail_lesen(roh.get("mail") or {}, pruefen="mail" in ziele)
+    ablage = str(roh.get("ablage") or "jahr").strip().lower()
+    if ablage not in ABLAGEN:
+        raise EinstellungsFehler(f"ablage = \"{ablage}\": erlaubt sind nur \"jahr\" und \"monat\".")
     return Einstellungen(
         belegordner=belegordner,
         konten=konten,
         ziele=ziele,
         sichtbar=_wahrheitswert(roh.get("sichtbar"), False),
         mail=mail,
+        ablage=ablage,
     )
+
+
+#: Unterordner im Belegordner: nach Jahr (wie bisher) oder nach Jahr und Monat.
+ABLAGEN = ("jahr", "monat")
 
 
 def _mail_lesen(roh: object, pruefen: bool) -> MailEinstellung:
@@ -262,6 +271,11 @@ def als_text(einst: Einstellungen) -> str:
         "# Wohin die Belege gespeichert werden.",
         f"belegordner = {_toml_text(str(einst.belegordner))}",
         "",
+        "# Unterordner für neue Rechnungen: \"jahr\" (<anbieter>/<JJJJ>/, wie bisher) oder",
+        "# \"monat\" (<anbieter>/<JJJJ>/<MM>/), jeweils nach Rechnungsdatum. Bereits abgelegte",
+        "# Belege bleiben, wo sie sind.",
+        f"ablage = {_toml_text(einst.ablage)}",
+        "",
         "# Wohin die Belege geliefert werden: \"ordner\" (der Belegordner oben, immer dabei)",
         "# und auf Wunsch \"mail\" (Versand per Mail, siehe Abschnitt [mail] unten).",
         "ziele = [" + ", ".join(_toml_text(z) for z in einst.ziele) + "]",
@@ -309,7 +323,7 @@ def als_text(einst: Einstellungen) -> str:
     return "\n".join(zeilen) + "\n"
 
 
-BEKANNT_OBEN = {"belegordner", "ziele", "sichtbar", "konto", "mail"}
+BEKANNT_OBEN = {"belegordner", "ziele", "sichtbar", "konto", "mail", "ablage"}
 BEKANNT_MAIL = {"server", "port", "verschluesselung", "benutzer", "absender", "empfaenger", "passwort_eintrag"}
 #: Kommentarzeilen, die frühere Versionen selbst geschrieben haben (keine „eigenen“).
 FRUEHERE_KOMMENTARE = {

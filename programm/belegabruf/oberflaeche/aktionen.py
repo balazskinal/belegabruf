@@ -127,6 +127,7 @@ class Steuerung:
             "neueste_seite": aktualisierung.NEUESTE_SEITE if self.neuere else "",
             "eingerichtet": eingerichtet,
             "belegordner": str(einst.belegordner),
+            "ablage": einst.ablage,
             "quellen": [{"name": n, "anzeige": quellen.anzeigename(n)} for n in quellen.QUELLEN],
             "konten": konten,
             "mail_an": einst.mail_an,
@@ -433,6 +434,11 @@ def einstellungen_aus_eingaben(daten: dict) -> Einstellungen:
         ):
             if not wert:
                 sammler.feld(name, satz)
+    ablage = daten.get("ablage")
+    if ablage is None or ablage == "":
+        ablage = alt.ablage if alt else "jahr"
+    if ablage not in einstellungen.ABLAGEN:
+        sammler.feld("ablage", "Unterordner: bitte „nach Jahr“ oder „nach Jahr und Monat“ wählen.")
     sammler.pruefen()
 
     alte_mail = alt.mail if alt else MailEinstellung()
@@ -446,6 +452,7 @@ def einstellungen_aus_eingaben(daten: dict) -> Einstellungen:
         ziele=["ordner", "mail"] if mail_an else ["ordner"],
         sichtbar=alt.sichtbar if alt else False,
         mail=m,
+        ablage=ablage,
     )
     try:
         return einstellungen.pruefen(neu)

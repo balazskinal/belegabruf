@@ -183,7 +183,7 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
     markiert = protokoll.ziele_abgleichen(lieferziel_namen(einst))
     try:
         # Lokale Ziele (Ordner) beim Abruf; Lieferziele (Mail) schicken danach, was fehlt.
-        ziele = [ziel_verzeichnis.erstellen(name, einst.belegordner)
+        ziele = [ziel_verzeichnis.erstellen(name, einst.belegordner, ablage=einst.ablage)
                  for name in einst.ziele if name not in ziel_verzeichnis.LIEFERZIELE]
         quelle = quelle_fuer(konto)
     except KeyError as fehler:

@@ -125,6 +125,7 @@ def einrichten() -> Einstellungen:
         ziele=["ordner", "mail"] if mail_an else ["ordner"],
         sichtbar=alt.sichtbar if alt else False,
         mail=mail_einst,
+        ablage=alt.ablage if alt else "jahr",
     )
     ordner.mkdir(parents=True, exist_ok=True)
     datei = einstellungen.speichern(neu)
