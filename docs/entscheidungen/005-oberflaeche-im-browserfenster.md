@@ -37,7 +37,7 @@ bringt das Programm ohnehin ein eigenes Chromium mit (Playwright, eigenes Profil
    solange Belegabruf läuft“. Es wird nicht versteckt.
 2. **Terminal-Menü bleibt.** Die Startdatei „Belege holen“ öffnet künftig die Oberfläche; das bisherige
    Menü gibt es weiter über eine eigene Startdatei „Belegabruf (Terminal)“ in `Start Mac/` und
-   `Start Windows/`.
+   `Start Windows/` (seit Nachtrag 8–10: ein Starter „Belegabruf“, das Menü unter `Fehlersuche/`).
 3. **Sprache:** nur Deutsch.
 4. **Versionen:** Die Oberfläche wird **2.0.0**; der sevDesk-API-Weg (PR #3) kommt später als **2.1.0**.
 
@@ -110,6 +110,23 @@ vorbelegt, Port springt mit der Verschlüsselung) ändern keine Entscheidung.
 7. **Headless Shell ganz weg:** Alles startet Chromium mit `channel="chromium"`, auch die
    Versions-Probe; die Einrichtung lädt mit `--no-shell`. Geprüft mit der ganzen Testsuite in einem
    Browserordner ohne Shell. FFmpeg bleibt.
+
+### Nachtrag (Balazs, 25.11.2026): ein Starter je System
+
+8. **„Belegabruf“ ersetzt „Einrichten“ und „Belege holen“** (`Start Mac/Belegabruf.command`,
+   `Start Windows/Belegabruf.cmd`). Beim Doppelklick, jeder Schritt nur, wenn nötig: uv fehlt → uv holen;
+   `.venv` fehlt oder `uv.lock`/`pyproject.toml` ist neuer als der letzte Sync → `uv sync --no-dev`;
+   Chromium für diese Playwright-Version fehlt → `playwright install --no-shell chromium`; dann die
+   Bedienseite. Die Prüfung (`python -m belegabruf.startpruefung`) liest nur die `browsers.json` von
+   Playwright und schaut nach dem fertig geladenen Browserordner — sie startet Playwright nicht. Klappt
+   `uv sync` nicht, wird die halbe `.venv` weggeräumt; der nächste Doppelklick versucht es erneut.
+   Erster Start und Update sind damit gleich: **ZIP auspacken, „Belegabruf“ doppelklicken.**
+9. Was „Einrichten“ abgefragt hat (Belegordner, Konten, Mail, Passwort), geht im Reiter „Einstellungen“;
+   der erste Start ohne Konten öffnet ihn. Neu dafür in der Seite: **„Passwort löschen“** (nur Einträge
+   mit Dienst `belegabruf`, wie im Terminal). Nur im Terminal bleibt das Ändern des Eintrags im
+   Passwortspeicher (`passwort_eintrag`) über `belege einrichten`.
+10. **„Belegabruf (Terminal)“ bleibt**, liegt aber im Unterordner `Fehlersuche/`, damit oben nur ein
+    Starter liegt. Er richtet nichts ein, sondern verweist auf „Belegabruf“, falls noch nichts da ist.
 
 ## Folgen
 

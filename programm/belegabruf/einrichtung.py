@@ -249,7 +249,7 @@ def _mail_abfragen(alt: Einstellungen | None) -> tuple[bool, MailEinstellung]:
         if _ja("  Austauschen?", False):
             _passwort_eingeben(dienst, konto)
     elif not _passwort_eingeben(dienst, konto):
-        print("  Ohne Passwort wird nichts verschickt. Du kannst es später über „Einrichten“ eingeben.")
+        print("  Ohne Passwort wird nichts verschickt. Du kannst es später im Reiter „Einstellungen“ eingeben.")
         return True, einst
 
     print("  Prüfe die Anmeldung am Mailserver (es wird keine Mail verschickt) …")
@@ -258,7 +258,7 @@ def _mail_abfragen(alt: Einstellungen | None) -> tuple[bool, MailEinstellung]:
     except Exception as fehler:  # noqa: BLE001
         meldung = f"Der Passwortspeicher ließ sich nicht lesen ({type(fehler).__name__})."
     if meldung:
-        print(f"  ✗ {meldung}\n  Bitte noch einmal „Einrichten“ und die Angaben prüfen.")
+        print(f"  ✗ {meldung}\n  Bitte die Angaben im Reiter „Einstellungen“ prüfen.")
     else:
         print("  ✓ Anmeldung klappt.")
     return True, einst

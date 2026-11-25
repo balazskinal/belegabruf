@@ -165,6 +165,7 @@ class Handler(BaseHTTPRequestHandler):
         aktionen = {
             "/api/einstellungen": lambda: st.einstellungen_speichern(daten),
             "/api/mail-passwort": lambda: st.mail_passwort_setzen(daten),
+            "/api/mail-passwort-loeschen": st.mail_passwort_loeschen,
             "/api/konto-holen": lambda: st.konto_holen_setzen(daten),
             "/api/mail-pruefen": st.mail_pruefen,
             "/api/pruefen": lambda: _auftrag(st.pruefen(daten)),

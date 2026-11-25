@@ -491,7 +491,7 @@ def test_fenster_zu_waehrend_abruf_wartet_und_beendet_sauber(monkeypatch, tmp_pa
     assert code == 0 and not _laeuft_noch(server)  # kein verwaister Server
     ausgabe = capsys.readouterr().out
     assert "Warte, bis der laufende Vorgang fertig ist" in ausgabe and "beendet" in ausgabe
-    assert "Belege holen" in ausgabe  # sagt, wie man es wieder öffnet
+    assert "Doppelklick auf \"Belegabruf\"" in ausgabe  # sagt, wie man es wieder öffnet
 
 
 def test_abgestuerztes_fenster_beendet_sauber(monkeypatch, capsys):
@@ -500,7 +500,7 @@ def test_abgestuerztes_fenster_beendet_sauber(monkeypatch, capsys):
 
     code, server = _starten_mit(monkeypatch, fenster)
     assert code == 1 and not _laeuft_noch(server)
-    assert "Belege holen" in capsys.readouterr().out
+    assert "Doppelklick auf \"Belegabruf\"" in capsys.readouterr().out
 
 
 def test_eigene_inhalte_warnung_und_sicherung(server, tmp_path):
@@ -839,7 +839,7 @@ def test_einrichtung_laedt_keine_headless_shell():
     import re
 
     wurzel = Path(__file__).resolve().parents[2]
-    for datei in (wurzel / "Start Mac" / "Einrichten.command", wurzel / "Start Windows" / "Einrichten.cmd"):
+    for datei in (wurzel / "Start Mac" / "Belegabruf.command", wurzel / "Start Windows" / "Belegabruf.cmd"):
         text = datei.read_text(encoding="utf-8")
         assert "playwright install --no-shell chromium" in text, datei
     gefunden = 0
@@ -1384,3 +1384,45 @@ def test_kollision_mit_namenlosem_konto_in_der_datei(tmp_path):
     b = Konto(quelle="airbnb", name="Standard", titel="Standard")
     text = einstellungen.kollision_text("Airbnb", a, b, "standard")
     assert text.startswith("Bei Airbnb gibt es schon ein Konto ohne Namen") and "einem der beiden einen Namen" in text
+
+
+# ── Ein Starter: was nur „Einrichten“ konnte, geht jetzt in der Seite ──────────
+
+
+def test_mail_passwort_loeschen(server, tmp_path, umgebung, monkeypatch):
+    import keyring
+    from keyring.errors import PasswordDeleteError
+
+    def loeschen(d, k):
+        if (d, k) not in umgebung:
+            raise PasswordDeleteError()
+        del umgebung[(d, k)]
+
+    monkeypatch.setattr(keyring, "delete_password", loeschen)
+    _speichern(server, tmp_path, mail_an=True)
+    _anfrage(server, "POST", "/api/mail-passwort", _mit(server), {"passwort": GEHEIM})
+    antwort, inhalt = _anfrage(server, "POST", "/api/mail-passwort-loeschen", _mit(server), {})
+    assert antwort.status == 200 and json.loads(inhalt)["passwort"] == "fehlt"
+    assert ("belegabruf", "mail") not in umgebung
+    assert _anfrage(server, "POST", "/api/mail-passwort-loeschen", {}, {})[0].status == 403
+    # fremder Eintrag im Passwortspeicher: nie anfassen
+    text = pfade.einstellungsdatei().read_text(encoding="utf-8").replace(
+        'passwort_eintrag = "belegabruf/mail"', 'passwort_eintrag = "mein-mailprogramm/ich"')
+    pfade.einstellungsdatei().write_text(text, encoding="utf-8")
+    umgebung[("mein-mailprogramm", "ich")] = "x"
+    antwort, inhalt = _anfrage(server, "POST", "/api/mail-passwort-loeschen", _mit(server), {})
+    assert antwort.status == 400 and umgebung[("mein-mailprogramm", "ich")] == "x"
+
+
+def test_alte_datei_aus_einrichten_gilt_nicht_als_eigene_kommentare(tmp_path):
+    datei = tmp_path / "e.toml"
+    einst = einstellungen.Einstellungen(belegordner=tmp_path / "B", konten=[Konto(quelle="airbnb", name="a")])
+    alt = einstellungen.als_text(einst).replace(
+        "# Du kannst diese Datei mit jedem Texteditor ändern oder im Fenster „Belegabruf“\n"
+        "# im Reiter „Einstellungen“. Zeilen mit # am Anfang sind nur Erklärungen.",
+        "# Du kannst diese Datei mit jedem Texteditor ändern oder einfach noch einmal\n"
+        '# "Einrichten" doppelklicken. Zeilen mit # am Anfang sind nur Erklärungen.').replace(
+        "Ändern: belege einrichten.", 'Ändern über "Einrichten".')
+    assert '"Einrichten" doppelklicken' in alt and 'Ändern über "Einrichten"' in alt
+    datei.write_text(alt, encoding="utf-8")
+    assert einstellungen.fremde_inhalte(datei) == []

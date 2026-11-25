@@ -86,7 +86,7 @@ def profil_oeffnen(profil: Path, sichtbar: bool) -> Iterator[BrowserContext]:
             text = str(fehler)
             if "Executable doesn't exist" in text or "playwright install" in text:
                 raise BrowserFehlt(
-                    'Der Browser fehlt noch. Bitte einmal "Einrichten" doppelklicken.'
+                    'Der Browser fehlt noch. Bitte "Belegabruf" doppelklicken (lädt ihn nach).'
                 ) from fehler
             if "ProcessSingleton" in text or "SingletonLock" in text or "already in use" in text:
                 raise ProfilBelegt(

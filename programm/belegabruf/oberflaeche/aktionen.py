@@ -183,6 +183,17 @@ class Steuerung:
         mail.passwort_speichern(*einst.mail.dienst_und_konto, wert)
         return {"passwort": "hinterlegt"}
 
+    def mail_passwort_loeschen(self) -> dict:
+        """Wie in der Terminal-Einrichtung: nur Einträge, die Belegabruf selbst angelegt hat
+        (Dienst „belegabruf“), nie einen fremden Eintrag im Passwortspeicher."""
+        einst = _geladen()
+        dienst, konto = einst.mail.dienst_und_konto
+        if dienst != "belegabruf":
+            raise Eingabefehler(f"Der Eintrag „{dienst}/…“ gehört nicht Belegabruf; bitte im Passwortspeicher "
+                                "selbst löschen.")
+        mail.passwort_loeschen(dienst, konto)
+        return {"passwort": "fehlt"}
+
     def mail_pruefen(self) -> dict:
         einst = _geladen()
         if not einst.mail.server:

@@ -316,8 +316,8 @@ def als_text(einst: Einstellungen) -> str:
     zeilen = [
         "# Einstellungen für Belegabruf",
         "#",
-        "# Du kannst diese Datei mit jedem Texteditor ändern oder einfach noch einmal",
-        "# \"Einrichten\" doppelklicken. Zeilen mit # am Anfang sind nur Erklärungen.",
+        "# Du kannst diese Datei mit jedem Texteditor ändern oder im Fenster „Belegabruf“",
+        "# im Reiter „Einstellungen“. Zeilen mit # am Anfang sind nur Erklärungen.",
         "# Hier stehen keine Passwörter — angemeldet wird immer im Browserfenster.",
         "# Das Mail-Passwort liegt im Passwortspeicher des Betriebssystems, nie hier.",
         "",
@@ -368,7 +368,7 @@ def als_text(einst: Einstellungen) -> str:
         "# Nur wichtig, wenn bei ziele \"mail\" steht: Jede neue Rechnung geht als eigene Mail",
         "# mit PDF-Anhang an jeden Empfänger. verschluesselung: \"ssl\" (meist Port 465) oder",
         "# \"starttls\" (meist Port 587). passwort_eintrag: wo das Passwort im Passwortspeicher",
-        "# liegt, als \"Dienst/Konto\" (nicht das Passwort selbst!). Ändern über \"Einrichten\".",
+        "# liegt, als \"Dienst/Konto\" (nicht das Passwort selbst!). Ändern: belege einrichten.",
         "[mail]",
         f"server = {_toml_text(m.server)}",
         f"port = {int(m.port)}",
@@ -385,6 +385,10 @@ BEKANNT_OBEN = {"belegordner", "ziele", "sichtbar", "konto", "mail", "ablage"}
 BEKANNT_MAIL = {"server", "port", "verschluesselung", "benutzer", "absender", "empfaenger", "passwort_eintrag"}
 #: Kommentarzeilen, die frühere Versionen selbst geschrieben haben (keine „eigenen“).
 FRUEHERE_KOMMENTARE = {
+    # bis 2.0.0 (Startdatei „Einrichten“)
+    '# Du kannst diese Datei mit jedem Texteditor ändern oder einfach noch einmal',
+    '# "Einrichten" doppelklicken. Zeilen mit # am Anfang sind nur Erklärungen.',
+    '# liegt, als "Dienst/Konto" (nicht das Passwort selbst!). Ändern über "Einrichten".',
     '# Wohin die Belege geliefert werden. Version 1 kennt nur "ordner"',
     '# (der Belegordner oben). Später kommt "sevdesk" dazu.',
 }

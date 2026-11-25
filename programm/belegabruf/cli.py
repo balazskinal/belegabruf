@@ -1,6 +1,6 @@
 """Kommandozeile.
 
-    belege oberflaeche          Bedienseite im Browserfenster (Doppelklick auf „Belege holen“)
+    belege oberflaeche          Bedienseite im Browserfenster (Doppelklick auf „Belegabruf“)
     belege start                Menü im Terminal: prüfen, anmelden lassen, holen
     belege einrichten           Fragen beantworten, Einstellungsdatei schreiben
     belege pruefen [--json]     Sind die Konten angemeldet?
@@ -82,7 +82,7 @@ def start() -> int:
         if neuer:
             print(f"\nHinweis: Es gibt eine neuere Version ({neuer}). Herunterladen unter")
             print(f"  {aktualisierung.NEUESTE_SEITE}")
-            print("  (alten Ordner belegabruf-v… löschen, neues ZIP auspacken, \"Belege holen\" doppelklicken —\n"
+            print("  (alten Ordner belegabruf-v… löschen, neues ZIP auspacken, \"Belegabruf\" doppelklicken —\n"
                   "   Einstellungen, Anmeldungen und Protokolle bleiben erhalten.)")
 
         for k in konten:
@@ -251,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--version", action="version", version=f"belegabruf {__version__}")
     unter = parser.add_subparsers(dest="befehl")
     unter.add_parser("oberflaeche", help="Bedienseite im Browserfenster öffnen")
-    unter.add_parser("start", help="Menü im Terminal (wie 'Belegabruf (Terminal)')")
+    unter.add_parser("start", help="Menü im Terminal (wie 'Fehlersuche/Belegabruf (Terminal)')")
     unter.add_parser("einrichten", help="Einstellungen abfragen und speichern")
     for name, hilfe in (("holen", "unbeaufsichtigt holen"), ("pruefen", "Anmeldungen prüfen"),
                         ("anmelden", "Anmeldefenster öffnen")):
@@ -284,7 +284,7 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"\nAnmeldung für {anzeige}: Gleich öffnet sich ein Browserfenster.")
                     ok = ablauf.anmelden(k, print)
                     print(f"  {'✓' if ok else '✗'} {anzeige}: {'angemeldet' if ok else 'nicht angemeldet'}")
-            print('\nAb jetzt reicht ein Doppelklick auf "Belege holen".')
+            print('\nAb jetzt reicht ein Doppelklick auf "Belegabruf".')
             return 0
         return {"holen": befehl_holen, "pruefen": befehl_pruefen, "anmelden": befehl_anmelden}[
             args.befehl](args)
@@ -292,7 +292,7 @@ def main(argv: list[str] | None = None) -> int:
         if getattr(args, "json", False):
             print(json.dumps({"fehler": str(fehler)}, ensure_ascii=False))
         else:
-            print(f"\n{fehler}\nTipp: \"Einrichten\" doppelklicken.")
+            print(f"\n{fehler}\nTipp: \"Belegabruf\" doppelklicken und im Reiter „Einstellungen“ einrichten.")
         return 1
     except KeyboardInterrupt:
         print("\nAbgebrochen.")

@@ -217,6 +217,7 @@
           <div class="knoepfe oben10">
             <button type="submit" id="passwort-speichern">Passwort hinterlegen</button>
             <button type="button" id="mail-pruefen">Mail-Anmeldung prüfen</button>
+            <button type="button" id="passwort-loeschen">Passwort löschen</button>
           </div>
         </form>
         <div id="mail-ergebnis" class="meldung versteckt"></div>
@@ -431,7 +432,7 @@ async function laden(formularAuch) {
   zustand = await api("GET", "/api/zustand");
   $("version").textContent = zustand.version;
   if (zustand.neuere_version) {
-    $("neu").textContent = `Es gibt eine neuere Version (${zustand.neuere_version}). Herunterladen unter ${zustand.neueste_seite} — alten Ordner löschen, neues ZIP auspacken, „Belege holen“ doppelklicken (richtet sich selbst ein); Einstellungen und Anmeldungen bleiben.`;
+    $("neu").textContent = `Es gibt eine neuere Version (${zustand.neuere_version}). Herunterladen unter ${zustand.neueste_seite} — alten Ordner löschen, neues ZIP auspacken, „Belegabruf“ doppelklicken (richtet sich selbst ein); Einstellungen und Anmeldungen bleiben.`;
     $("neu").classList.remove("versteckt");
   }
   $("willkommen").classList.toggle("versteckt", zustand.eingerichtet);
@@ -730,6 +731,15 @@ $("passwort-formular").addEventListener("submit", async (ereignis) => {
     $("passwort-status").textContent = r.passwort;
   } catch (e) { zeigeFehler(e.message); }
   feld.value = "";
+});
+
+$("passwort-loeschen").addEventListener("click", async () => {
+  zeigeFehler("");
+  if (!confirm("Das Mail-Passwort aus dem Passwortspeicher deines Rechners löschen?")) return;
+  try {
+    const r = await api("POST", "/api/mail-passwort-loeschen", {});
+    $("passwort-status").textContent = r.passwort;
+  } catch (e) { zeigeFehler(e.message); }
 });
 
 $("mail-pruefen").addEventListener("click", async () => {

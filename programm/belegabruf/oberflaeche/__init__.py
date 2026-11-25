@@ -86,7 +86,7 @@ def starten() -> int:
     except Exception as fehler:  # noqa: BLE001
         text = str(fehler)
         if "Executable doesn't exist" in text or "playwright install" in text:
-            print('Der Browser fehlt noch. Bitte einmal "Einrichten" doppelklicken.')
+            print('Der Browser fehlt noch. Bitte "Belegabruf" noch einmal doppelklicken (lädt ihn nach).')
         else:
             print(f"Das Fenster „Belegabruf“ ist zu oder ließ sich nicht öffnen ({type(fehler).__name__}).")
         code = 1
@@ -100,5 +100,5 @@ def starten() -> int:
     server.shutdown()
     server.server_close()
     print("Belegabruf ist beendet. Dieses Fenster kann jetzt zu.")
-    print('Wieder öffnen: Doppelklick auf "Belege holen".')
+    print('Wieder öffnen: Doppelklick auf "Belegabruf".')
     return code
