@@ -27,6 +27,9 @@ def umgebung(tmp_path, monkeypatch):
     monkeypatch.setenv("BELEGABRUF_DATEN", str(tmp_path / "daten"))
     monkeypatch.setattr(pfade, "standard_belegordner", lambda: tmp_path / "Belege")
     monkeypatch.setattr(aktionen.aktualisierung, "neuere_version", lambda: None)
+    import threading
+
+    monkeypatch.setattr(browser, "ABBRECHEN", threading.Event())  # starten() setzt es beim Ende
     speicher = {}
     import keyring
 
@@ -1242,3 +1245,95 @@ def test_terminal_einziges_konto_enter_behaelt_kennung(monkeypatch):
     assert [(k.name, k.anzeigetitel) for k in konten] == [("Hauptkonto", "")]
     datei_text = einstellungen.als_text(einstellungen.Einstellungen(belegordner=Path("/tmp/B"), konten=konten))
     assert 'kennung = "Hauptkonto"' in datei_text
+
+
+# ── Prüfbefund N2: Beenden hängt an der Bedienseite, Hilfe im Standardbrowser ──
+
+
+def test_hilfefenster_haelt_programm_nicht_am_leben(monkeypatch):
+    from belegabruf import oberflaeche
+
+    geoeffnet = []
+    monkeypatch.setattr(oberflaeche.webbrowser, "open", geoeffnet.append)
+    takte = {"n": 0}
+
+    class Seite:
+        def __init__(self, url, haupt=False):
+            self.url, self.haupt, self.zu = url, haupt, False
+
+        def goto(self, adresse):
+            pass
+
+        def is_closed(self):
+            return self.zu
+
+        def close(self):
+            self.zu = True
+
+        def wait_for_timeout(self, ms):
+            takte["n"] += 1
+            if takte["n"] == 1:  # Hilfelink geklickt: neue Seite, Adresse kommt etwas später
+                kontext.pages.append(hilfe)
+            if takte["n"] == 2:
+                hilfe.url = "https://support.google.com/mail/answer/185833"
+            if takte["n"] == 3:
+                kontext.pages.append(Seite("https://example.com/zweite"))
+            if takte["n"] == 5:
+                self.zu = True  # Bedienseite geschlossen
+            assert takte["n"] < 50, "wartet trotz geschlossener Bedienseite weiter"
+
+    hilfe = Seite("about:blank")
+
+    class Kontext:
+        def __init__(self):
+            self.pages = [Seite("data:text/html,", haupt=True)]
+            self.geschlossen = False
+
+        def close(self):
+            self.geschlossen = True
+
+    kontext = Kontext()
+
+    class PW:
+        class chromium:  # noqa: N801
+            @staticmethod
+            def launch_persistent_context(**kw):
+                return kontext
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    import playwright.sync_api
+
+    monkeypatch.setattr(playwright.sync_api, "sync_playwright", lambda: PW())
+    s = Bedienserver()
+    try:
+        oberflaeche._fenster_offen_halten(s)
+    finally:
+        s.server_close()
+    assert takte["n"] == 5 and kontext.geschlossen
+    assert geoeffnet == ["https://support.google.com/mail/answer/185833", "https://example.com/zweite"]
+    assert hilfe.zu  # nicht im Fenster der Bedienseite geblieben
+
+
+def test_anmeldefenster_bricht_ab_wenn_bedienseite_zu(monkeypatch):
+    monkeypatch.setattr(browser, "ABBRECHEN", __import__("threading").Event())
+    browser.ABBRECHEN.set()
+
+    class Seite:
+        def is_closed(self):
+            return False
+
+    class Kontext:
+        pages = [Seite()]
+
+    assert browser.auf_mensch_warten(Kontext(), Seite(), lambda s: False, lambda t: None) == "abgebrochen"
+
+
+def test_starten_setzt_abbrechen_nach_dem_fenster(monkeypatch, capsys):
+    monkeypatch.setattr(browser, "ABBRECHEN", __import__("threading").Event())
+    _, server = _starten_mit(monkeypatch, lambda server: None)
+    assert browser.ABBRECHEN.is_set() and server.steuerung.beendet.is_set()

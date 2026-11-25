@@ -9,14 +9,35 @@ from __future__ import annotations
 
 import sys
 import time
+import webbrowser
 
 from belegabruf import browser, pfade
 from belegabruf.oberflaeche.server import Bedienserver
 
 
+def _hilfe_weiterreichen(kontext, haupt, wartet: dict) -> None:
+    """Weitere Seiten (Hilfelinks mit target=_blank) gehören nicht ins Fenster der
+    Bedienseite: https-Adressen öffnet der Standardbrowser, die Seite hier wird zu."""
+    for seite in list(kontext.pages):
+        if seite is haupt or seite.is_closed():
+            continue
+        adresse = seite.url
+        if adresse in ("", "about:blank") and wartet.get(id(seite), 0) < 5:
+            wartet[id(seite)] = wartet.get(id(seite), 0) + 1  # Adresse kommt gleich
+            continue
+        wartet.pop(id(seite), None)
+        try:
+            seite.close()
+        except Exception:  # noqa: BLE001
+            pass
+        if adresse.startswith("https://"):
+            webbrowser.open(adresse)
+
+
 def _fenster_offen_halten(server: Bedienserver) -> None:
-    """Öffnet die Bedienseite als eigenes App-Fenster und wartet, bis es geschlossen
-    oder auf der Seite „Beenden“ gedrückt wird."""
+    """Öffnet die Bedienseite als eigenes App-Fenster und wartet, bis **dieses** Fenster
+    geschlossen oder auf der Seite „Beenden“ gedrückt wird. Andere Seiten (Hilfe) halten
+    das Programm nicht am Leben."""
     from playwright.sync_api import sync_playwright
 
     profil = pfade.datenordner() / "profile" / "_bedienseite"
@@ -31,14 +52,13 @@ def _fenster_offen_halten(server: Bedienserver) -> None:
         try:
             seite = kontext.pages[0] if kontext.pages else kontext.new_page()
             seite.goto(server.adresse)
-            while not server.steuerung.beendet.is_set():
-                offen = [s for s in kontext.pages if not s.is_closed()]
-                if not offen:
-                    break
+            wartet: dict = {}
+            while not server.steuerung.beendet.is_set() and not seite.is_closed():
                 try:
-                    offen[0].wait_for_timeout(400)
+                    _hilfe_weiterreichen(kontext, seite, wartet)
+                    seite.wait_for_timeout(400)
                 except Exception:  # noqa: BLE001 - Fenster wurde gerade geschlossen
-                    if not [s for s in kontext.pages if not s.is_closed()]:
+                    if seite.is_closed():
                         break
         finally:
             try:
@@ -71,6 +91,8 @@ def starten() -> int:
             print(f"Das Fenster „Belegabruf“ ist zu oder ließ sich nicht öffnen ({type(fehler).__name__}).")
         code = 1
     st = server.steuerung
+    st.beendet.set()
+    browser.ABBRECHEN.set()  # ein offenes Anmeldefenster schließt sich
     if st.beschaeftigt():
         print("Warte, bis der laufende Vorgang fertig ist … (nicht schließen)")
         while st.beschaeftigt():

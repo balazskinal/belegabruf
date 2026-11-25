@@ -21,6 +21,9 @@ from playwright.sync_api import BrowserContext, Page, sync_playwright
 #: kein Terminal zum Tippen — dann nur Fenster schließen bzw. automatisch erkennen.
 ENTER_IM_TERMINAL = True
 
+#: Die Bedienseite wurde geschlossen: offene Anmeldefenster nicht weiter offen halten.
+ABBRECHEN = threading.Event()
+
 # Menschliches Tempo: Pause zwischen zwei Abrufen (Sekunden).
 PAUSE_MIN = 2.0
 PAUSE_MAX = 5.0
@@ -112,7 +115,7 @@ def auf_mensch_warten(
 ) -> str:
     """Wartet, bis die Anmeldung erkannt wurde, Enter gedrückt oder das Fenster geschlossen ist.
 
-    Gibt zurück: "erkannt", "enter", "geschlossen" oder "zeit".
+    Gibt zurück: "erkannt", "enter", "geschlossen", "abgebrochen" (Bedienseite zu) oder "zeit".
     """
     enter = threading.Event()
 
@@ -136,6 +139,8 @@ def auf_mensch_warten(
     while time.monotonic() < ende:
         if enter.is_set():
             return "enter"
+        if ABBRECHEN.is_set():
+            return "abgebrochen"  # das Fenster schließt der Aufrufer (profil_oeffnen)
         offen = [s for s in kontext.pages if not s.is_closed()]
         if not offen:
             return "geschlossen"
