@@ -61,6 +61,7 @@
   .kontozeile { display: grid; grid-template-columns: 140px 1fr auto auto; gap: 8px; align-items: center; margin: 6px 0; }
   .kontozeile input[type=checkbox] { width: 18px; height: 18px; }
   .ankreuzen { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 15px; margin-top: 12px; }
+  .holen-haken { margin: 0; white-space: nowrap; }
   .meldung { padding: 9px 12px; border-radius: 7px; margin: 10px 0 0; }
   .meldung.gut { background: var(--gut-grund); color: var(--gut); }
   .meldung.schlecht { background: var(--schlecht-grund); color: var(--schlecht); }
@@ -125,7 +126,8 @@
 
         <h2 class="oben18">Konten</h2>
         <p class="leise">Mehrere Konten beim selben Anbieter sind möglich (z. B. ein Zugang als Co-Gastgeber).
-          Ein Name ist erst nötig, wenn es beim selben Anbieter ein zweites Konto gibt — er ist nur für dich.</p>
+          Ein Name ist erst nötig, wenn es beim selben Anbieter ein zweites Konto gibt — er ist nur für dich.
+          Ohne Haken bei „Belege holen“ bleibt ein Konto eingetragen und angemeldet, wird beim Holen aber übersprungen.</p>
         <div id="kontenliste"></div>
         <button type="button" id="konto-dazu">Konto hinzufügen</button>
 
@@ -219,7 +221,7 @@ function kontenZeigen() {
   koerper.replaceChildren();
   for (const k of zustand.konten) {
     const zeile = element("tr", undefined, k.aktiv ? "" : "aus");
-    zeile.append(element("td", k.anzeige), element("td", (k.titel || "–") + (k.aktiv ? "" : " (aus)")));
+    zeile.append(element("td", k.anzeige), element("td", (k.titel || "–") + (k.aktiv ? "" : " (wird beim Holen übersprungen)")));
     const zelle = element("td");
     zelle.append(element("span", ZUSTAND_TEXT[k.zustand] || k.zustand, "marke " + k.zustand));
     zeile.append(zelle);
@@ -252,9 +254,12 @@ function kontozeile(k) {
   const name = element("input"); name.type = "text"; name.value = k.titel || ""; name.placeholder = "Name, z. B. privat";
   name.setAttribute("aria-label", "Kontoname");
   wahl.addEventListener("change", namenZeigen);
-  const an = element("label", undefined, "ankreuzen"); an.style.margin = "0";
+  const an = element("label", undefined, "ankreuzen holen-haken");
   const box = element("input"); box.type = "checkbox"; box.checked = k.aktiv !== false;
-  an.append(box, " an");
+  const erklaerung = "Ohne Haken bleibt das Konto eingetragen und angemeldet, wird beim Holen aber übersprungen.";
+  an.title = erklaerung;
+  box.setAttribute("aria-description", erklaerung);
+  an.append(box, " Belege holen");
   const weg = element("button", "Entfernen"); weg.type = "button";
   weg.addEventListener("click", () => { zeile.remove(); namenZeigen(); });
   zeile.append(wahl, name, an, weg);

@@ -750,3 +750,10 @@ def test_namensfeld_erscheint_erst_beim_zweiten_konto(seite, tmp_path):
     assert felder.nth(0).evaluate("e => e.required")
     p.locator("#kontenliste button:has-text('Entfernen')").nth(1).click()
     assert p.is_hidden("#kontenliste input[type=text]")
+
+
+def test_haken_heisst_belege_holen_mit_erklaerung(seite):
+    haken = seite.locator("#kontenliste label.holen-haken")
+    assert haken.inner_text().strip() == "Belege holen"
+    assert "übersprungen" in haken.get_attribute("title")
+    assert "übersprungen" in haken.locator("input").get_attribute("aria-description")
