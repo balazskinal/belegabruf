@@ -26,6 +26,10 @@ jobs:
           fi
 
       - uses: astral-sh/setup-uv@v6
+      - name: Browser für die Oberflächen-Tests
+        working-directory: programm
+        run: uv run --group dev playwright install --no-shell --with-deps chromium
+
       - name: Tests
         working-directory: programm
         run: uv run --group dev pytest -q
