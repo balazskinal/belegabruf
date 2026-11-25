@@ -370,8 +370,14 @@ def test_fehler_wird_angezeigt(seite, tmp_path):
     p = seite
     p.fill("#belegordner", "relativ")
     p.click("#speichern")
-    p.wait_for_selector("#fehler:not(.versteckt)")
-    assert "vollständigen Pfad" in p.inner_text("#fehler")
+    p.wait_for_selector("#speichern-meldung:not(.versteckt)")
+    assert "vollständigen Pfad" in p.inner_text("#satz-belegordner")
+    # Fehler ohne Feldbezug (hier: ein Vorgang läuft) stehen ebenfalls am Knopf
+    p.fill("#belegordner", str(tmp_path / "Belege"))
+    p.evaluate("""() => { window.fetch = async () => new Response(JSON.stringify({fehler: "Bitte warten."}),
+                                                                   {status: 400}); }""")
+    p.click("#speichern")
+    p.wait_for_function("() => document.querySelector('#speichern-meldung').innerText === 'Bitte warten.'")
 
 
 # ── Gleichzeitigkeit, Beenden, eigene Inhalte der Einstellungsdatei ──────────
