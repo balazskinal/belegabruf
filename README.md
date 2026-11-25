@@ -181,7 +181,13 @@ Passwortspeicher ändern.
 Auf Wunsch verschickt das Programm jede **neu geholte** Rechnung als **eigene Mail mit dem PDF im
 Anhang** — an eine oder mehrere Adressen, je Rechnung und Adresse eine Mail. Betreff zum Beispiel
 „Beleg Airbnb AIUC-… vom 27.10.2026“. So kommt die Rechnung überall an, wo es eine Belegadresse gibt
-(Buchhaltungsprogramm, Steuerberatung), und wird dort gelesen wie jede andere Belegmail.
+(Buchhaltungsprogramm, Steuerberatung), und wird dort gelesen wie jede andere Belegmail. sevDesk,
+Lexware Office und viele andere Buchhaltungsprogramme haben dafür eine eigene Empfangsadresse für
+Belege — die trägst du als Empfänger ein. Auch dein Steuerbüro kann Empfänger sein.
+
+**Neues Konto:** Beim ersten Lauf gehen alle verfügbaren Rechnungen dieses Kontos raus — oder nur die
+aus dem eingestellten Zeitraum „Belege ab“. Erweiterst du den Zeitraum später, werden die dann
+zusätzlich geholten älteren Rechnungen ebenfalls verschickt.
 
 **Das Programm bringt keinen Versanddienst mit.** Verschickt wird über **dein eigenes Postfach** —
 genauso, als würdest du die Mail selbst in deinem Mailprogramm schreiben. Deshalb fragt die Einrichtung

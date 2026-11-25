@@ -1491,3 +1491,54 @@ def test_infoboxen_an_allen_vier_stellen(server, tmp_path):
         # keine HTML-Einschleusung: nur Text
         assert p.evaluate("[...document.querySelectorAll('.infobox')].every(e => e.children.length === 0)")
         b.close()
+
+
+def test_mailtext_nennt_belegadressen_und_zeitraum(seite):
+    text = " ".join(seite.locator("#mail-erklaerung").text_content().split())
+    assert "sevDesk, Lexware Office" in text and "Steuerbüro" in text
+    assert "oder nur die aus dem eingestellten Zeitraum „Belege ab“" in text
+    assert seite.locator("#mail-erklaerung a").count() == 0  # Produktnamen ohne Links
+
+
+def test_neues_konto_mit_zeitraum_verschickt_nur_den_zeitraum(tmp_path, monkeypatch, umgebung):
+    """Die Aussage auf der Seite stimmt: Mail schon an, neues Konto mit „Belege ab“ —
+    beim ersten Lauf gehen nur die Rechnungen aus dem Zeitraum raus."""
+    class Drei(Attrappe):
+        def belege_holen(self, umgebung_):
+            erg = Ergebnis(self.name, self.konto.name)
+            for kennung, datum in (("alt", "2026-01-10"), ("neu1", "2026-10-02"), ("neu2", "2026-11-04")):
+                if umgebung_.zu_alt(date.fromisoformat(datum)):
+                    erg.uebersprungen += 1
+                    continue
+                umgebung_.abliefern(Beleg(quelle="airbnb", konto=self.konto.name, art="rechnung",
+                                          schluessel=f"rechnung:{kennung}", dateiname=f"{datum}_{kennung}.pdf",
+                                          inhalt=b"%PDF", jahr=2026, rechnungsdatum=date.fromisoformat(datum),
+                                          rechnungsnummer=kennung))
+                erg.neu += 1
+            return erg
+
+    class Ziel:
+        name = "mail:belege@example.com"
+        anzeigename = "Mail an belege@example.com"
+
+        def __init__(self):
+            self.gesendet = []
+
+        def senden(self, sendung, vor_senden):
+            vor_senden()
+            self.gesendet.append(sendung.rechnungsnummer)
+
+        def schliessen(self):
+            pass
+
+    ziel = Ziel()
+    monkeypatch.setattr(ablauf, "quelle_fuer", lambda konto: Drei(konto, Path("/x")))
+    monkeypatch.setattr(ablauf, "lieferziele_erstellen", lambda einst: [ziel])
+    konto = Konto(quelle="airbnb", name="neu", belege_ab="01.10.2026")
+    einst = einstellungen.Einstellungen(belegordner=tmp_path / "B", konten=[konto], ziele=["ordner", "mail"],
+                                        mail=einstellungen.MailEinstellung(server="smtp.example.com",
+                                                                           benutzer="ich@example.com",
+                                                                           absender="ich@example.com",
+                                                                           empfaenger=["belege@example.com"]))
+    erg = ablauf.abrufen(einst, konto, lambda t: None)
+    assert erg.uebersprungen == 1 and sorted(ziel.gesendet) == ["neu1", "neu2"]
