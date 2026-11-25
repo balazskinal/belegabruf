@@ -66,11 +66,13 @@ def test_pdf_adresse_aus_antwort():
 
 class _Antwort:
     def __init__(self, inhalt: bytes, laenge: str | None = None):
-        self._inhalt = inhalt
+        import io
+
+        self._strom = io.BytesIO(inhalt)
         self.headers = {"Content-Length": laenge} if laenge else {}
 
     def read(self, n=-1):
-        return self._inhalt[:n] if n >= 0 else self._inhalt
+        return self._strom.read(n)
 
     def __enter__(self):
         return self
@@ -357,3 +359,124 @@ def test_zu_grosses_pdf_wird_nicht_gespeichert(tmp_path, falsches_xentra):
     assert abgeliefert == [] and erg.status == "unvollstaendig"
     assert all("größer als 20 MB" in a for a in erg.abweichungen) and len(erg.abweichungen) == 3
     assert not any("files.example.com" in a for a in erg.abweichungen)  # kein Host in der Zusammenfassung
+
+
+# ── Abgebrochene, langsame und kaputte Downloads (echter lokaler Server) ──────
+
+
+@contextmanager
+def _lokaler_server(antworten):
+    """Ein winziger HTTP-Server auf 127.0.0.1, der rohe Bytes schickt (auch kaputte)."""
+    import socket
+    import threading
+
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    s.listen(5)
+    stop = threading.Event()
+
+    def laufen():
+        s.settimeout(0.2)
+        while not stop.is_set():
+            try:
+                verbindung, _ = s.accept()
+            except OSError:
+                continue
+            with verbindung:
+                verbindung.recv(65536)
+                try:
+                    antworten(verbindung)
+                except OSError:
+                    pass
+
+    faden = threading.Thread(target=laufen, daemon=True)
+    faden.start()
+    try:
+        yield f"http://127.0.0.1:{s.getsockname()[1]}/rechnung.pdf?token=geheim"
+    finally:
+        stop.set()
+        faden.join(2)
+        s.close()
+
+
+@pytest.fixture
+def lokal(monkeypatch):
+    """Echter urllib-Zugang, aber http://127.0.0.1 ausnahmsweise erlaubt (nur im Test)."""
+    monkeypatch.setattr(xentra, "_adresse_erlaubt", lambda a: a.startswith("http://127.0.0.1:"))
+
+
+def test_lokal_vollstaendig(lokal):
+    pdf = _pdf("Rechnung")
+
+    def antworten(v):
+        v.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/pdf\r\nContent-Length: %d\r\n"
+                  b"Connection: close\r\n\r\n" % len(pdf) + pdf)
+
+    with _lokaler_server(antworten) as adresse:
+        assert xentra.pdf_herunterladen(adresse) == pdf
+
+
+def test_abgebrochener_download_mit_laenge(lokal):
+    pdf = _pdf("Rechnung")
+    assert xentra.pdf_pruefen(pdf[: int(len(pdf) * 0.9)]) is None  # PyMuPDF nähme das gekürzte PDF an
+
+    def antworten(v):
+        v.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % len(pdf)
+                  + pdf[: int(len(pdf) * 0.9)])  # dann Verbindung zu
+
+    with _lokaler_server(antworten) as adresse:
+        with pytest.raises(xentra.DownloadUnvollstaendig) as info:
+            xentra.pdf_herunterladen(adresse)
+    assert "abgebrochen" in str(info.value) and "geheim" not in str(info.value)
+
+
+def test_abgebrochener_download_chunked(lokal):
+    pdf = _pdf("Rechnung")
+
+    def antworten(v):
+        teil = pdf[: len(pdf) // 3]
+        v.sendall(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
+                  + b"%x\r\n" % len(pdf) + teil)  # Stück kündigt mehr an, als kommt
+
+    with _lokaler_server(antworten) as adresse:
+        with pytest.raises(xentra.DownloadUnvollstaendig):
+            xentra.pdf_herunterladen(adresse)
+
+
+def test_troepfelnder_server_gesamtfrist(lokal, monkeypatch):
+    import time
+
+    monkeypatch.setattr(xentra, "GESAMTFRIST_S", 1)
+    monkeypatch.setattr(xentra, "_STUECK", 1)
+
+    def antworten(v):
+        v.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 1000\r\nConnection: close\r\n\r\n")
+        for _ in range(20):
+            v.sendall(b"%")
+            time.sleep(0.2)
+
+    with _lokaler_server(antworten) as adresse:
+        start = time.monotonic()
+        with pytest.raises(xentra.DownloadUnvollstaendig, match="länger als 1 Sekunden"):
+            xentra.pdf_herunterladen(adresse)
+        assert time.monotonic() - start < 3
+
+
+def test_kaputte_adresse_nennt_keinen_token():
+    with pytest.raises(RuntimeError) as info:
+        xentra.pdf_herunterladen("https://files.example.com/a b.pdf?token=geheim123")
+    text = str(info.value)
+    assert "geheim123" not in text and "files.example.com" not in text
+    assert info.value.__cause__ is None and info.value.__suppress_context__
+
+
+def test_abgebrochener_download_wird_nicht_gespeichert(tmp_path, falsches_xentra, monkeypatch):
+    def unvollstaendig(adresse):
+        raise xentra.DownloadUnvollstaendig("Download abgebrochen (10 von 100 Bytes)")
+
+    monkeypatch.setattr(xentra, "pdf_herunterladen", unvollstaendig)
+    quelle = xentra.Xentra(Konto("xentra", "test"), tmp_path / "profil")
+    abgeliefert = []
+    erg = quelle.belege_holen(_umgebung(set(), abgeliefert, []))
+    assert abgeliefert == [] and erg.status == "unvollstaendig" and len(erg.abweichungen) == 3
+    assert all("abgebrochen" in a and "nicht gespeichert" in a for a in erg.abweichungen)
