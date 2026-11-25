@@ -21,8 +21,10 @@ Ablage: xentra/<Jahr>/<JJJJ-MM-TT>_xentra_<rechnungs-id>.pdf
 
 from __future__ import annotations
 
+import http.client
 import json
 import re
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -143,24 +145,63 @@ class _NurHttps(urllib.request.HTTPRedirectHandler):
 _oeffner = urllib.request.build_opener(_NurHttps)
 
 
+class DownloadUnvollstaendig(Exception):
+    pass
+
+
+#: Gesamtfrist je Download, zusätzlich zur Frist je Leseschritt: Ein Server, der
+#: tröpfchenweise sendet, soll den Lauf nicht beliebig aufhalten.
+GESAMTFRIST_S = 120
+_STUECK = 64 * 1024
+
+
+def _adresse_erlaubt(adresse: str) -> bool:
+    return adresse.lower().startswith("https://")
+
+
 def pdf_herunterladen(adresse: str) -> bytes:
-    """Lädt das PDF ohne Cookies, nur über https, höchstens 20 MB. Fehlermeldungen
-    nennen die Adresse nicht."""
-    if not adresse.lower().startswith("https://"):
+    """Lädt das PDF ohne Cookies, nur über https, höchstens 20 MB, in höchstens
+    GESAMTFRIST_S Sekunden. Ein abgebrochener Download wird erkannt (Länge gegen
+    Content-Length, unvollständige Übertragung) und nie als Rechnung weitergegeben —
+    PyMuPDF würde ein gekürztes PDF sonst stillschweigend reparieren.
+    Fehlermeldungen nennen die Adresse nie (sie enthält ein Zugangstoken)."""
+    if not _adresse_erlaubt(adresse):
         raise RuntimeError("PDF-Adresse ist nicht https")
-    anfrage = urllib.request.Request(adresse, headers={"User-Agent": "belegabruf", "Accept": "application/pdf"})
+    ende = time.monotonic() + GESAMTFRIST_S
     try:
+        anfrage = urllib.request.Request(adresse, headers={"User-Agent": "belegabruf", "Accept": "application/pdf"})
         with _oeffner.open(anfrage, timeout=60) as antwort:
+            angekuendigt = None
             laenge = antwort.headers.get("Content-Length")
-            if laenge and laenge.isdigit() and int(laenge) > pruefung.MAX_PDF_BYTES:
-                raise PdfZuGross()
-            inhalt = antwort.read(pruefung.MAX_PDF_BYTES + 1)
+            if laenge and str(laenge).strip().isdigit():
+                angekuendigt = int(laenge)
+                if angekuendigt > pruefung.MAX_PDF_BYTES:
+                    raise PdfZuGross()
+            teile: list[bytes] = []
+            gesamt = 0
+            while True:
+                if time.monotonic() > ende:
+                    raise DownloadUnvollstaendig(f"Download dauerte länger als {GESAMTFRIST_S} Sekunden")
+                stueck = antwort.read(_STUECK)
+                if not stueck:
+                    break
+                teile.append(stueck)
+                gesamt += len(stueck)
+                if gesamt > pruefung.MAX_PDF_BYTES:
+                    raise PdfZuGross()
+            inhalt = b"".join(teile)
+    except (PdfZuGross, DownloadUnvollstaendig):
+        raise
+    except http.client.IncompleteRead:
+        raise DownloadUnvollstaendig("Download abgebrochen") from None
     except urllib.error.HTTPError as fehler:
         raise RuntimeError(f"PDF-Adresse antwortet mit {fehler.code}") from None
     except urllib.error.URLError as fehler:
         raise RuntimeError(f"PDF-Adresse nicht erreichbar ({type(fehler.reason).__name__})") from None
-    if pruefung.zu_gross(inhalt):
-        raise PdfZuGross()
+    except Exception as fehler:  # noqa: BLE001 - z. B. InvalidURL: nie die Adresse weitergeben
+        raise RuntimeError(f"PDF nicht ladbar ({type(fehler).__name__})") from None
+    if angekuendigt is not None and len(inhalt) != angekuendigt:
+        raise DownloadUnvollstaendig(f"Download abgebrochen ({len(inhalt)} von {angekuendigt} Bytes)")
     return inhalt
 
 
@@ -372,6 +413,11 @@ class Xentra(Quelle):
                     continue
                 try:
                     inhalt = self._pdf_laden(kontext, adresse)
+                except DownloadUnvollstaendig as fehler:
+                    erg.status = "unvollstaendig"
+                    erg.abweichungen.append(f"{bezeichnung} ({kennung}): {fehler}, nicht gespeichert — "
+                                            "der nächste Lauf versucht es erneut.")
+                    continue
                 except PdfZuGross:
                     erg.status = "unvollstaendig"
                     erg.abweichungen.append(f"{bezeichnung} ({kennung}): PDF größer als "
