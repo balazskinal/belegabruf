@@ -24,12 +24,13 @@ def _fenster_offen_halten(server: Bedienserver) -> None:
     with sync_playwright() as pw:
         kontext = pw.chromium.launch_persistent_context(
             user_data_dir=str(profil), channel="chromium", headless=False, no_viewport=True,
-            args=[f"--app={server.adresse}", "--window-size=1040,880"],
+            # Der Schlüssel kommt nicht in die Kommandozeile (die sehen per „ps“ auch andere
+            # Benutzer); das App-Fenster startet leer und lädt die Seite danach.
+            args=["--app=data:text/html,<title>Belegabruf</title>", "--window-size=1040,880"],
         )
         try:
             seite = kontext.pages[0] if kontext.pages else kontext.new_page()
-            if not seite.url.startswith("http://127.0.0.1"):
-                seite.goto(server.adresse)
+            seite.goto(server.adresse)
             while not server.steuerung.beendet.is_set():
                 offen = [s for s in kontext.pages if not s.is_closed()]
                 if not offen:

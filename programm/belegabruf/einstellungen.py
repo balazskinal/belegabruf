@@ -89,6 +89,22 @@ class Einstellungen:
         ]
 
 
+def konten_unterscheidbar(konten: list[Konto]) -> None:
+    """Zwei Konten derselben Quelle dürfen nicht denselben Ordnernamen ergeben: Profil
+    (Anmeldung) und Protokoll hängen an ``pfade.kurzname``. Sonst teilten sich „Privat“
+    und „privat!“ die Anmeldung, und das zweite hielte die Rechnungen des ersten für
+    schon geholt."""
+    gesehen: dict[tuple[str, str], str] = {}
+    for k in konten:
+        schluessel = (k.quelle, pfade.kurzname(k.name))
+        if schluessel in gesehen:
+            raise EinstellungsFehler(
+                f"Die Konten „{gesehen[schluessel]}“ und „{k.name}“ bei {k.quelle} sind für das Programm "
+                f"dasselbe (beide ergeben den Ordnernamen „{schluessel[1]}“). Bitte einem der beiden einen "
+                "deutlich anderen Namen geben.")
+        gesehen[schluessel] = k.name
+
+
 def laden(datei: Path | None = None) -> Einstellungen:
     datei = datei or pfade.einstellungsdatei()
     if not datei.exists():
@@ -122,6 +138,7 @@ def aus_text(text: str, herkunft: str = "Einstellungen") -> Einstellungen:
                 optionen=optionen,
             )
         )
+    konten_unterscheidbar(konten)
     ziele = roh.get("ziele") or ["ordner"]
     if isinstance(ziele, str):
         ziele = [ziele]
@@ -281,7 +298,17 @@ def sichern(datei: Path | None = None) -> Path | None:
 
 
 def speichern(einst: Einstellungen, datei: Path | None = None) -> Path:
+    """Schreibt atomar: erst eine Zwischendatei, auf die Platte gebracht (fsync), dann
+    ersetzen. So liegt nie eine halbe Einstellungsdatei da, auch wenn der Rechner
+    mittendrin ausgeht."""
+    import os
+
     datei = datei or pfade.einstellungsdatei()
     datei.parent.mkdir(parents=True, exist_ok=True)
-    datei.write_text(als_text(einst), encoding="utf-8")
+    zwischen = datei.with_name(datei.name + ".teil")
+    with open(zwischen, "w", encoding="utf-8") as f:
+        f.write(als_text(einst))
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(zwischen, datei)
     return datei

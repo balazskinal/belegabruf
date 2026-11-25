@@ -36,3 +36,4 @@ echo Spaeter reicht ein Doppelklick auf "Belege holen".
 echo.
 mode con: cols=62 lines=12
 uv run --no-dev --quiet belege oberflaeche
+if errorlevel 1 pause

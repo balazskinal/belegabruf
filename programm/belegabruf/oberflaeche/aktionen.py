@@ -322,9 +322,10 @@ def einstellungen_aus_eingaben(daten: dict) -> Einstellungen:
         if quelle not in quellen.QUELLEN:
             raise Eingabefehler(f"Anbieter „{quelle}“ gibt es nicht.")
         name = _text(eintrag.get("name"), "Kontoname", 60, pflicht=True)
-        if (quelle, name.lower()) in gesehen:
-            raise Eingabefehler(f"Das Konto „{name}“ gibt es bei {quellen.anzeigename(quelle)} schon.")
-        gesehen.add((quelle, name.lower()))
+        if (quelle, pfade.kurzname(name)) in gesehen:
+            raise Eingabefehler(f"Das Konto „{name}“ gibt es bei {quellen.anzeigename(quelle)} schon (oder eines, "
+                                "das sich nur in Groß-/Kleinschreibung oder Sonderzeichen unterscheidet).")
+        gesehen.add((quelle, pfade.kurzname(name)))
         konten.append(Konto(quelle=quelle, name=name, aktiv=eintrag.get("aktiv") is not False,
                             optionen=dict(alte_optionen.get((quelle, name), {}))))
 
@@ -332,10 +333,13 @@ def einstellungen_aus_eingaben(daten: dict) -> Einstellungen:
     roh_mail = daten.get("mail") or {}
     if not isinstance(roh_mail, dict):
         raise Eingabefehler("Mail: ungültige Eingabe.")
-    try:
-        port = int(roh_mail.get("port") or 465)
-    except (TypeError, ValueError):
-        raise Eingabefehler("Port: bitte eine Zahl.") from None
+    port_roh = roh_mail.get("port")
+    if port_roh is None or port_roh == "":
+        port_roh = 465  # leer = Vorgabe
+    if isinstance(port_roh, bool) or not (isinstance(port_roh, int) or
+                                          (isinstance(port_roh, str) and port_roh.strip().isdigit())):
+        raise Eingabefehler("Port: bitte eine Zahl zwischen 1 und 65535.")
+    port = int(port_roh)
     if not 1 <= port <= 65535:
         raise Eingabefehler("Port: bitte eine Zahl zwischen 1 und 65535.")
     verschluesselung = _text(roh_mail.get("verschluesselung") or "ssl", "Verschlüsselung", 10).lower()

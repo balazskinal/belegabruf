@@ -48,8 +48,9 @@ def _konten_abfragen(quelle: str, vorhanden: list[Konto]) -> list[Konto]:
         name = _frage(f"  Name für das {len(konten) + 1}. {anzeige}-Konto", standard)
         if not name:
             break
-        if any(k.name == name for k in konten):
-            print("  Diesen Namen gibt es schon.")
+        if any(pfade.kurzname(k.name) == pfade.kurzname(name) for k in konten):
+            print("  Diesen Namen gibt es schon (oder einen, der sich nur in Groß-/Kleinschreibung oder\n"
+                  "  Sonderzeichen unterscheidet). Bitte einen deutlich anderen Namen.")
             continue
         konten.append(Konto(quelle=quelle, name=name))
         beispiel = " (z. B. ein Zugang als Co-Gastgeber)" if quelle == "airbnb" else ""

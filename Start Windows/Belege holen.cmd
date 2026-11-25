@@ -13,6 +13,7 @@ if not exist .venv goto nichteingerichtet
 rem Dieses Fenster klein machen; es muss offen bleiben, solange Belegabruf laeuft.
 mode con: cols=62 lines=12
 uv run --no-dev --quiet belege oberflaeche
+if errorlevel 1 pause
 exit /b %errorlevel%
 
 :nichteingerichtet

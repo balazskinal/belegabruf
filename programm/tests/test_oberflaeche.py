@@ -531,3 +531,123 @@ def test_warnung_steht_vor_dem_speichern_in_der_seite(server, tmp_path, monkeypa
         p.wait_for_selector("#gespeichert:not(.versteckt)")
         assert "einstellungen.toml.vorher" in p.inner_text("#gespeichert")
         b.close()
+
+
+# ── Prüfbefunde 2.0.0 ────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("namen", [("Privat", "privat!"), ("Co Host", "co-host"), ("Müller", "Mueller")])
+def test_aehnliche_kontonamen_abgelehnt_formular(server, tmp_path, namen):
+    konten = [{"quelle": "airbnb", "name": n} for n in namen]
+    antwort, inhalt = _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path, konten=konten))
+    assert antwort.status == 400 and "schon" in json.loads(inhalt)["fehler"]
+
+
+def test_gleicher_name_bei_verschiedenen_quellen_erlaubt(server, tmp_path):
+    konten = [{"quelle": "airbnb", "name": "privat"}, {"quelle": "skool", "name": "Privat"}]
+    assert _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path, konten=konten))[0].status == 200
+
+
+def test_aehnliche_kontonamen_in_der_datei(tmp_path):
+    datei = tmp_path / "e.toml"
+    datei.write_text('[[konto]]\nquelle = "airbnb"\nname = "Privat"\n\n[[konto]]\nquelle = "airbnb"\nname = "privat!"\n',
+                     encoding="utf-8")
+    with pytest.raises(einstellungen.EinstellungsFehler, match="Ordnernamen „privat“"):
+        einstellungen.laden(datei)
+
+
+def test_aehnliche_kontonamen_im_terminal_einrichten(monkeypatch, capsys):
+    import builtins
+
+    from belegabruf import einrichtung
+
+    eingaben = iter(["Privat", "j", "privat!", "Geschäft", "n"])
+    monkeypatch.setattr(builtins, "input", lambda text="": next(eingaben))
+    konten = einrichtung._konten_abfragen("airbnb", [])
+    assert [k.name for k in konten] == ["Privat", "Geschäft"]
+    assert "gibt es schon" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("port", [0, True, "abc", "4.5", -1, 70000, [465]])
+def test_ungueltige_ports_abgelehnt_statt_umgedeutet(server, tmp_path, port):
+    daten = _eingaben(tmp_path, mail_an=False, mail={"server": "smtp.example.com", "port": port})
+    antwort, inhalt = _anfrage(server, "POST", "/api/einstellungen", _mit(server), daten)
+    assert antwort.status == 400 and "Port" in json.loads(inhalt)["fehler"]
+
+
+def test_leerer_port_ist_vorgabe(server, tmp_path):
+    daten = _eingaben(tmp_path, mail={"server": "", "port": ""})
+    assert _anfrage(server, "POST", "/api/einstellungen", _mit(server), daten)[0].status == 200
+    assert einstellungen.laden().mail.port == 465
+
+
+def test_einstellungen_atomar_geschrieben(tmp_path, monkeypatch):
+    import os
+
+    datei = tmp_path / "e.toml"
+    einst = einstellungen.Einstellungen(belegordner=tmp_path / "B", konten=[])
+    einstellungen.speichern(einst, datei)
+    vorher = datei.read_text(encoding="utf-8")
+    assert not list(tmp_path.glob("*.teil"))
+
+    def kaputt(quelle, ziel):
+        raise OSError("Platte voll")
+
+    monkeypatch.setattr(os, "replace", kaputt)
+    einst.belegordner = tmp_path / "Anders"
+    with pytest.raises(OSError):
+        einstellungen.speichern(einst, datei)
+    assert datei.read_text(encoding="utf-8") == vorher  # die alte Datei ist unversehrt
+
+
+def test_schluessel_nicht_in_der_kommandozeile(monkeypatch):
+    from belegabruf import oberflaeche
+
+    gestartet = {}
+
+    class FalscheSeite:
+        url = "data:text/html,"
+
+        def __init__(self):
+            self.zu = False
+
+        def goto(self, adresse):
+            gestartet["goto"] = adresse
+
+        def is_closed(self):
+            return self.zu
+
+        def wait_for_timeout(self, ms):
+            self.zu = True
+
+    class FalscherKontext:
+        def __init__(self, **kw):
+            gestartet.update(kw)
+            self.pages = [FalscheSeite()]
+
+        def close(self):
+            pass
+
+    class FalscherChromium:
+        def launch_persistent_context(self, **kw):
+            return FalscherKontext(**kw)
+
+    class FalschesPW:
+        chromium = FalscherChromium()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    import playwright.sync_api
+
+    monkeypatch.setattr(playwright.sync_api, "sync_playwright", lambda: FalschesPW())
+    s = Bedienserver()
+    try:
+        oberflaeche._fenster_offen_halten(s)
+    finally:
+        s.server_close()
+    assert not any(s.schluessel in str(a) for a in gestartet["args"])
+    assert gestartet["goto"] == s.adresse
