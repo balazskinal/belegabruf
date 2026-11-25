@@ -64,6 +64,9 @@ class Ergebnis:
     # (Rechnungsnummern), schon_markiert (beim allerersten Einschalten).
     lieferungen: dict[str, dict] = field(default_factory=dict)
     anzeige: str = ""  # „Airbnb“ bzw. „Airbnb (Privat)“; leer = aus quelle und konto
+    # Zeitraum: Belege vor diesem Datum (ISO, leer = alle) wurden nicht geholt und nicht vermerkt.
+    ab: str = ""
+    uebersprungen: int = 0  # so viele Rechnungen lagen vor dem Zeitraum
 
     def als_dict(self) -> dict:
         return dict(self.__dict__)
@@ -78,6 +81,11 @@ class Umgebung:
     vorhandene_datei: Callable[[str], Path | None]  # lokale Kopie eines Belegs (Schlüssel)
     melden: Callable[[str], None]  # Fortschritt für den Menschen
     sichtbar: bool = False
+    ab: date | None = None  # Zeitraum: nur Belege ab diesem Rechnungsdatum (None = alle)
+
+    def zu_alt(self, datum: date | None) -> bool:
+        """Liegt der Beleg vor dem Zeitraum? Ohne erkanntes Datum: nein (lieber holen)."""
+        return self.ab is not None and datum is not None and datum < self.ab
 
 
 class Quelle(ABC):

@@ -289,7 +289,7 @@ def test_ablauf_einrichten_pruefen_anmelden_holen(seite, server, tmp_path):
     p.click("#reiter-holen")
     assert p.is_hidden("#willkommen")
     # Ein einzelnes Konto braucht keinen Namen: Anzeige nur „Airbnb“.
-    assert p.is_hidden("#kontenliste input[type=text]")
+    assert p.is_hidden("#kontenliste input.kontoname")
     assert p.inner_text("#konten").count("Airbnb") == 1
     assert "unbekannt" in p.inner_text("#konten")
 
@@ -759,13 +759,13 @@ def test_terminal_einrichten_ohne_namen_und_zweites_konto(monkeypatch):
 
 def test_namensfeld_erscheint_erst_beim_zweiten_konto(seite, tmp_path):
     p = seite
-    assert p.is_hidden("#kontenliste input[type=text]")
+    assert p.is_hidden("#kontenliste input.kontoname")
     p.click("#konto-dazu")
-    felder = p.locator("#kontenliste input[type=text]")
+    felder = p.locator("#kontenliste input.kontoname")
     assert felder.nth(0).is_visible() and felder.nth(1).is_visible()
     assert felder.nth(0).evaluate("e => e.required")
     p.locator("#kontenliste button:has-text('Entfernen')").nth(1).click()
-    assert p.is_hidden("#kontenliste input[type=text]")
+    assert p.is_hidden("#kontenliste input.kontoname")
 
 
 def test_haken_je_konto_im_reiter_belege_holen(server, tmp_path, monkeypatch):
@@ -904,10 +904,10 @@ def test_speichern_markiert_fehlenden_kontonamen(seite, tmp_path):
     p = seite
     p.fill("#belegordner", str(tmp_path / "Belege"))
     p.click("#konto-dazu")
-    p.locator("#kontenliste input[type=text]").nth(1).fill("Co")
+    p.locator("#kontenliste input.kontoname").nth(1).fill("Co")
     p.click("#speichern")
     p.wait_for_selector("#speichern-meldung:not(.versteckt)")
-    erstes = p.locator("#kontenliste input[type=text]").nth(0)
+    erstes = p.locator("#kontenliste input.kontoname").nth(0)
     assert erstes.evaluate("e => e.classList.contains('feld-fehler')")
     assert "braucht jedes einen Namen" in p.inner_text("#formular .feldsatz")
     assert not pfade.einstellungsdatei().exists()
@@ -1078,3 +1078,34 @@ def test_ablage_bleibt_beim_speichern_ohne_angabe(server, tmp_path):
     assert einstellungen.laden().ablage == "monat"
     antwort, inhalt = _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path, ablage="../x"))
     assert antwort.status == 400 and "ablage" in json.loads(inhalt)["felder"]
+
+
+# ── Zeitraum je Konto in der Seite ───────────────────────────────────────────
+
+
+def test_zeitraum_je_konto_in_der_seite(seite, tmp_path):
+    p = seite
+    p.fill("#belegordner", str(tmp_path / "Belege"))
+    wahl = p.locator("#kontenliste select[aria-label='Belege ab']")
+    datum = p.locator("#kontenliste input.ab-datum")
+    assert wahl.input_value() == "alle" and datum.is_hidden()
+    wahl.select_option("datum")
+    assert datum.is_visible()
+    datum.fill("31.02.2026")
+    p.click("#speichern")
+    p.wait_for_selector("#speichern-meldung:not(.versteckt)")
+    assert datum.evaluate("e => e.classList.contains('feld-fehler')")
+    assert "TT.MM.JJJJ" in p.inner_text("#formular .feldsatz")
+    datum.fill("01.03.2026")
+    p.click("#speichern")
+    p.wait_for_selector("#gespeichert:not(.versteckt)")
+    assert einstellungen.laden().konten[0].belege_ab == "01.03.2026"
+    p.locator("#kontenliste select[aria-label='Belege ab']").select_option("letzte-3-monate")
+    p.click("#speichern")
+    p.wait_for_selector("#gespeichert:not(.versteckt)")
+    assert einstellungen.laden().konten[0].belege_ab == "letzte-3-monate"
+    p.reload()
+    p.wait_for_selector("#version:not(:empty)")
+    p.click("#reiter-einstellungen")
+    assert p.locator("#kontenliste select[aria-label='Belege ab']").input_value() == "letzte-3-monate"
+    assert "Belege ab 01." in p.inner_text("#konten")

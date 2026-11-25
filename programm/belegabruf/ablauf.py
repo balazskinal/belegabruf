@@ -211,12 +211,16 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
                                 + protokoll.bisherige_lieferungen(beleg.schluessel))
         return [str(lokal)] if lokal else []
 
+    ab = konto.ab()
+    if ab is not None:
+        melden(f"Zeitraum: Belege ab {ab:%d.%m.%Y} — ältere werden übersprungen.")
     umgebung = Umgebung(
         bekannt=bekannt,
         abliefern=abliefern,
         vorhandene_datei=vorhandene_datei,
         melden=melden,
         sichtbar=einst.sichtbar,
+        ab=ab,
     )
     try:
         ergebnis = quelle.belege_holen(umgebung)
@@ -227,6 +231,7 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
     except Exception as fehler:  # noqa: BLE001 - nie abstürzen, immer melden
         ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=f"{type(fehler).__name__}: {str(fehler).splitlines()[0][:200]}")
     ergebnis.anzeige = ergebnis.anzeige or konto.anzeige
+    ergebnis.ab = ab.isoformat() if ab else ""
     if ergebnis.status in {"ok", "unvollstaendig"}:
         zustand.lauf_merken(konto.quelle, konto.name)
     try:
@@ -260,7 +265,10 @@ def zusammenfassung(ergebnisse: list[Ergebnis], belegordner: Path) -> str:
         name = erg.anzeige or f"{quellen.anzeigename(erg.quelle)} ({erg.konto})"
         zeilen.append(f"{name}: {STATUS_TEXT.get(erg.status, erg.status)}")
         if erg.status in {"ok", "abgelaufen", "unvollstaendig"} or erg.neu or erg.schon_da:
-            zeilen.append(f"  {erg.neu} neu, {erg.schon_da} schon vorhanden")
+            zeilen.append(f"  {erg.neu} neu, {erg.schon_da} schon vorhanden"
+                          + (f", {erg.uebersprungen} übersprungen (älter als Zeitraum)" if erg.uebersprungen else ""))
+            if erg.ab:
+                zeilen.append(f"  Zeitraum: Belege ab {date.fromisoformat(erg.ab):%d.%m.%Y}")
             if erg.kontrolle_neu:
                 zeilen.append(f"  {erg.kontrolle_neu} Monatsübersicht(en) neu (Ordner kontrolle)")
             if erg.erwartet is not None and erg.vorhanden is not None:

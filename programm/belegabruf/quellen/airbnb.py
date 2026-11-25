@@ -64,6 +64,18 @@ def _aufrufen(seite, url: str):
     return None
 
 
+def zeile_datum(zeile: "Zeile") -> date | None:
+    try:
+        return date.fromisoformat(zeile.datum)
+    except ValueError:
+        return None
+
+
+def monat_vor_zeitraum(jm: tuple[int, int], ab: date | None) -> bool:
+    """Endet der Monat vor dem Zeitraum? Dann braucht es seine Übersicht nicht."""
+    return ab is not None and jm < (ab.year, ab.month)
+
+
 def monat_aus_text(text: str) -> tuple[int, int] | None:
     """'Oktober 2026' → (2026, 10)."""
     teile = text.strip().lower().split()
@@ -260,6 +272,7 @@ class Airbnb(Quelle):
         vormonat = (heute.year, heute.month - 1) if heute.month > 1 else (heute.year - 1, 12)
         alle_zeilen: list[Zeile] = []
         text_zeilen = 0
+        monate_davor = 0
 
         with browser.profil_oeffnen(self.profil, sichtbar=umgebung.sichtbar) as kontext:
             seite = browser.neue_seite(kontext)
@@ -275,6 +288,10 @@ class Airbnb(Quelle):
                 jm = monat_aus_text(text)
                 if jm is None:
                     erg.hinweise.append(f"Monat '{text}' nicht erkannt, übersprungen.")
+                    continue
+                if monat_vor_zeitraum(jm, umgebung.ab):
+                    # Zeitraum: Übersicht nicht laden, nicht vermerken (kommt, wenn er erweitert wird).
+                    monate_davor += 1
                     continue
                 kuerzel = f"{jm[0]:04d}-{jm[1]:02d}"
                 schluessel = f"monat:{kuerzel}"
@@ -328,9 +345,12 @@ class Airbnb(Quelle):
                         f"{text}: {uebersicht.anzahl_zeilen} Rechnungszeilen, aber "
                         f"{len(uebersicht.zeilen)} Links in der Monatsübersicht."
                     )
-                melden(f"{text}: {len(uebersicht.zeilen)} Rechnung(en)")
-                text_zeilen += uebersicht.anzahl_zeilen
-                alle_zeilen += uebersicht.zeilen
+                zu_alt = [z for z in uebersicht.zeilen if umgebung.zu_alt(zeile_datum(z))]
+                erg.uebersprungen += len(zu_alt)
+                melden(f"{text}: {len(uebersicht.zeilen)} Rechnung(en)"
+                       + (f", davon {len(zu_alt)} vor dem Zeitraum" if zu_alt else ""))
+                text_zeilen += uebersicht.anzahl_zeilen - len(zu_alt)
+                alle_zeilen += [z for z in uebersicht.zeilen if z not in zu_alt]
 
             # Schritt 3: Einzelrechnungen
             offen = [z for z in alle_zeilen if not umgebung.bekannt(f"rechnung:{z.kennung}")]
@@ -355,6 +375,10 @@ class Airbnb(Quelle):
                     )
                 elif nr % 10 == 0:
                     melden(f"… {nr} von {len(offen)}")
+
+        if monate_davor:
+            erg.hinweise.append(f"{monate_davor} Monat(e) vor dem Zeitraum nicht angesehen (Belege ab "
+                                f"{umgebung.ab:%d.%m.%Y}).")
 
         # Schritt 4: Kontrolle (Zeilen ohne Link gibt es nicht einzeln, die zählen nicht mit)
         erg.erwartet = len(alle_zeilen)

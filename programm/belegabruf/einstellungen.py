@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tomllib
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from pathlib import Path
 
 from belegabruf import pfade
@@ -47,6 +48,11 @@ class Konto:
     aktiv: bool = True
     optionen: dict = field(default_factory=dict)
     titel: str | None = None  # None = wie name
+    belege_ab: str = "alle"  # Zeitraum, siehe ZEITRAEUME und ab_datum()
+
+    def ab(self, heute: date | None = None) -> date | None:
+        """Ab welchem Rechnungsdatum geholt wird (None = alle)."""
+        return ab_datum(self.belege_ab, heute)
 
     @property
     def anzeigetitel(self) -> str:
@@ -62,6 +68,37 @@ class Konto:
         from belegabruf import quellen
 
         return kontoanzeige(quellen.anzeigename(self.quelle), self.anzeigetitel)
+
+
+#: Zeitraum je Konto („Belege ab“). Relativ = ab dem 1. des Monats vor N Monaten,
+#: gerechnet am Tag des Laufs; dazu ein festes Datum als TT.MM.JJJJ.
+ZEITRAEUME = {"alle": None, "letzter-monat": 1, "letzte-3-monate": 3, "letzte-12-monate": 12}
+
+
+def zeitraum_normal(wert: object) -> str:
+    """Prüft und vereinheitlicht „Belege ab“: ein Schlüssel aus ZEITRAEUME oder TT.MM.JJJJ."""
+    text = str(wert if wert is not None else "alle").strip().lower() or "alle"
+    if text in ZEITRAEUME:
+        return text
+    try:
+        return datetime.strptime(text, "%d.%m.%Y").date().strftime("%d.%m.%Y")
+    except ValueError:
+        raise EinstellungsFehler(
+            f"belege_ab = \"{wert}\": erlaubt sind \"alle\", \"letzter-monat\", \"letzte-3-monate\", "
+            "\"letzte-12-monate\" oder ein Datum als TT.MM.JJJJ.") from None
+
+
+def ab_datum(wert: str, heute: date | None = None) -> date | None:
+    """„letzte-3-monate“ am 25.11.2026 → 01.08.2026; „01.03.2026“ → 01.03.2026; „alle“ → None."""
+    wert = zeitraum_normal(wert)
+    if wert in ZEITRAEUME:
+        monate = ZEITRAEUME[wert]
+        if monate is None:
+            return None
+        heute = heute or date.today()
+        index = heute.year * 12 + (heute.month - 1) - monate
+        return date(index // 12, index % 12 + 1, 1)
+    return datetime.strptime(wert, "%d.%m.%Y").date()
 
 
 def kontoanzeige(anbieter: str, titel: str) -> str:
@@ -181,7 +218,7 @@ def aus_text(text: str, herkunft: str = "Einstellungen") -> Einstellungen:
             raise EinstellungsFehler("Jedes [[konto]] braucht 'quelle'.")
         titel = str(eintrag.get("name") or "").strip()
         kennung = str(eintrag.get("kennung") or "").strip() or kennung_fuer(titel)
-        optionen = {k: v for k, v in eintrag.items() if k not in {"quelle", "name", "aktiv", "kennung"}}
+        optionen = {k: v for k, v in eintrag.items() if k not in {"quelle", "name", "aktiv", "kennung", "belege_ab"}}
         konten.append(
             Konto(
                 quelle=str(eintrag["quelle"]).strip().lower(),
@@ -189,6 +226,7 @@ def aus_text(text: str, herkunft: str = "Einstellungen") -> Einstellungen:
                 aktiv=_wahrheitswert(eintrag.get("aktiv"), True),
                 optionen=optionen,
                 titel=titel,
+                belege_ab=zeitraum_normal(eintrag.get("belege_ab")),
             )
         )
     konten_unterscheidbar(konten)
@@ -288,6 +326,9 @@ def als_text(einst: Einstellungen) -> str:
         "# seine eigene Anmeldung. Mit aktiv = \"nein\" wird ein Konto übersprungen.",
         "# name darf leer bleiben, solange es nur ein Konto bei der Quelle gibt.",
         "# kennung (falls vorhanden) bitte nicht ändern: Daran hängt die Anmeldung.",
+        "# belege_ab: \"alle\" (Vorgabe), \"letzter-monat\", \"letzte-3-monate\", \"letzte-12-monate\"",
+        "# (jeweils ab dem 1. des Monats) oder ein Datum als \"TT.MM.JJJJ\". Ältere Belege werden nicht",
+        "# geholt und nicht vermerkt — wird der Zeitraum erweitert, kommen sie beim nächsten Lauf.",
     ]
     for konto in einst.konten:
         titel = konto.anzeigetitel
@@ -302,6 +343,8 @@ def als_text(einst: Einstellungen) -> str:
         zeilen += [
             f"aktiv = {_toml_text('ja' if konto.aktiv else 'nein')}",
         ]
+        if konto.belege_ab != "alle":
+            zeilen.append(f"belege_ab = {_toml_text(konto.belege_ab)}")
         for schluessel, wert in konto.optionen.items():
             zeilen.append(f"{schluessel} = {_toml_text(str(wert))}")
     m = einst.mail

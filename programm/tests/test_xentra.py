@@ -483,3 +483,16 @@ def test_abgebrochener_download_wird_nicht_gespeichert(tmp_path, falsches_xentra
     erg = quelle.belege_holen(_umgebung(set(), abgeliefert, []))
     assert abgeliefert == [] and erg.status == "unvollstaendig" and len(erg.abweichungen) == 3
     assert all("abgebrochen" in a and "nicht gespeichert" in a for a in erg.abweichungen)
+
+
+def test_zeitraum_filtert_vor_dem_anklicken(tmp_path, falsches_xentra):
+    quelle = xentra.Xentra(Konto("xentra", "test"), tmp_path / "profil")
+    bekannt, abgeliefert, meldungen = set(), [], []
+    umgebung = _umgebung(bekannt, abgeliefert, meldungen)
+    umgebung.ab = date(2026, 9, 10)
+    erg = quelle.belege_holen(umgebung)
+    assert erg.neu == 2 and erg.uebersprungen == 1 and erg.erwartet == 2
+    assert falsches_xentra["downloads"] == ["INV-0003", "INV-0002"]  # INV-0001 nie angeklickt
+    assert "rechnung:INV-0001" not in bekannt
+    erg = quelle.belege_holen(_umgebung(bekannt, abgeliefert, meldungen))
+    assert erg.neu == 1 and erg.schon_da == 2 and falsches_xentra["downloads"][-1] == "INV-0001"

@@ -271,3 +271,135 @@ def test_keine_syntaxwarnung_in_modulen():
         with warnings.catch_warnings():
             warnings.simplefilter("error", SyntaxWarning)
             compile(datei.read_text(encoding="utf-8"), str(datei), "exec")
+
+
+# ── Zeitraum je Konto („Belege ab“) ──────────────────────────────────────────
+
+
+@pytest.mark.parametrize("wert, erwartet", [
+    ("alle", None),
+    ("letzter-monat", date(2026, 10, 1)),
+    ("letzte-3-monate", date(2026, 8, 1)),
+    ("letzte-12-monate", date(2025, 11, 1)),
+    ("15.03.2026", date(2026, 3, 15)),
+])
+def test_zeitraum_ab_datum(wert, erwartet):
+    assert einstellungen.ab_datum(wert, heute=date(2026, 11, 25)) == erwartet
+
+
+def test_zeitraum_ueber_den_jahreswechsel():
+    assert einstellungen.ab_datum("letzter-monat", heute=date(2027, 1, 5)) == date(2026, 12, 1)
+    assert einstellungen.ab_datum("letzte-3-monate", heute=date(2027, 1, 31)) == date(2026, 10, 1)
+
+
+@pytest.mark.parametrize("falsch", ["gestern", "31.02.2026", "2026-03-15", "3 monate"])
+def test_zeitraum_falsch(falsch):
+    with pytest.raises(einstellungen.EinstellungsFehler, match="belege_ab"):
+        einstellungen.zeitraum_normal(falsch)
+
+
+def test_zeitraum_in_der_datei(tmp_path):
+    datei = tmp_path / "e.toml"
+    datei.write_text('[[konto]]\nquelle = "airbnb"\nname = "a"\n', encoding="utf-8")
+    einst = einstellungen.laden(datei)
+    assert einst.konten[0].belege_ab == "alle" and einst.konten[0].ab() is None  # alte Datei = alle
+    assert "belege_ab =" not in einstellungen.als_text(einst)
+    einst.konten[0].belege_ab = "letzte-3-monate"
+    wieder = einstellungen.aus_text(einstellungen.als_text(einst))
+    assert wieder.konten[0].belege_ab == "letzte-3-monate" and wieder.konten[0].optionen == {}
+
+
+def _airbnb_ohne_browser(monkeypatch, monate: dict[str, bytes], geholt: list):
+    from contextlib import contextmanager
+
+    from belegabruf import browser
+
+    @contextmanager
+    def profil(profil, sichtbar):
+        yield object()
+
+    monkeypatch.setattr(browser, "profil_oeffnen", profil)
+    monkeypatch.setattr(browser, "neue_seite", lambda kontext: object())
+    monkeypatch.setattr(browser, "pause", lambda *a, **k: None)
+    geladen = []
+    monkeypatch.setattr(airbnb.Airbnb, "_monate", lambda self, seite: [("", m) for m in monate])
+    monkeypatch.setattr(airbnb.Airbnb, "_monats_pdf_laden",
+                        lambda self, seite, text: geladen.append(text) or monate[text])
+
+    def einzeln(self, seite, zeile, umgebung, erg):
+        geholt.append(zeile.kennung)
+        umgebung.abliefern(Beleg(quelle="airbnb", konto="a", art="rechnung", schluessel=f"rechnung:{zeile.kennung}",
+                                 dateiname=f"{zeile.kennung}.pdf", inhalt=b"%PDF", jahr=2026,
+                                 rechnungsdatum=date.fromisoformat(zeile.datum)))
+        erg.neu += 1
+
+    monkeypatch.setattr(airbnb.Airbnb, "_einzelrechnung", einzeln)
+    return geladen
+
+
+def test_airbnb_zeitraum_filtert_vor_dem_download(monkeypatch, tmp_path):
+    from belegabruf.quellen.basis import Umgebung
+
+    monate = {
+        "August 2026": _monats_pdf([("AIUC-111111111-DE-1111111", "2026-08-20", "HMAAAA1111", "aug1")]),
+        "September 2026": _monats_pdf([("AIUC-222222222-DE-2222222", "2026-09-03", "HMBBBB2222", "sep1"),
+                                       ("AIUC-333333333-DE-3333333", "2026-09-20", "HMCCCC3333", "sep2")]),
+        "Oktober 2026": _monats_pdf([("AIUC-444444444-DE-4444444", "2026-10-02", "HMDDDD4444", "okt1")]),
+    }
+    geholt: list[str] = []
+    geladen = _airbnb_ohne_browser(monkeypatch, monate, geholt)
+    bekannt: set[str] = set()
+
+    def umgebung(ab):
+        def abliefern(beleg):
+            bekannt.add(beleg.schluessel)
+            return []
+        return Umgebung(bekannt=lambda s: s in bekannt, abliefern=abliefern, vorhandene_datei=lambda s: None,
+                        melden=lambda t: None, ab=ab)
+
+    quelle = airbnb.Airbnb(Konto("airbnb", "a"), tmp_path / "profil")
+    erg = quelle.belege_holen(umgebung(date(2026, 9, 15)))
+    # August gar nicht geladen, im September nur ab dem 15.; nichts davon im Protokoll
+    assert geladen == ["September 2026", "Oktober 2026"]
+    assert geholt == ["sep2", "okt1"] and erg.uebersprungen == 1
+    assert erg.erwartet == 2 and erg.vorhanden == 2
+    assert "monat:2026-08" not in bekannt and "rechnung:sep1" not in bekannt and "rechnung:aug1" not in bekannt
+    assert any("1 Monat(e) vor dem Zeitraum" in h for h in erg.hinweise)
+
+    # Zeitraum erweitert: das Übersprungene wird nachgeholt
+    geholt.clear()
+    erg = quelle.belege_holen(umgebung(None))
+    assert sorted(geholt) == ["aug1", "sep1"] and erg.uebersprungen == 0 and erg.schon_da == 2
+
+
+def test_zusammenfassung_und_json_nennen_uebersprungene():
+    import json
+
+    erg = Ergebnis("skool", "standard", neu=2, uebersprungen=3, ab="2026-08-01", anzeige="Skool")
+    text = ablauf.zusammenfassung([erg], Path("/tmp/Belege"))
+    assert "2 neu, 0 schon vorhanden, 3 übersprungen (älter als Zeitraum)" in text
+    assert "Zeitraum: Belege ab 01.08.2026" in text
+    daten = json.loads(json.dumps(erg.als_dict()))
+    assert daten["uebersprungen"] == 3 and daten["ab"] == "2026-08-01"
+
+
+def test_ablauf_gibt_zeitraum_an_die_quelle(monkeypatch, tmp_path):
+    gesehen = {}
+
+    class Fake(Quelle):
+        name = "airbnb"
+
+        def sitzung_pruefen(self):
+            return True
+
+        def anmelden_lassen(self, melden):
+            return True
+
+        def belege_holen(self, umgebung):
+            gesehen["ab"] = umgebung.ab
+            return Ergebnis(self.name, self.konto.name, uebersprungen=4)
+
+    monkeypatch.setattr(ablauf, "quelle_fuer", lambda konto: Fake(konto, tmp_path))
+    konto = Konto("airbnb", "a", belege_ab="01.06.2026")
+    erg = ablauf.abrufen(Einstellungen(belegordner=tmp_path / "B", konten=[konto]), konto, lambda t: None)
+    assert gesehen["ab"] == date(2026, 6, 1) and erg.ab == "2026-06-01" and erg.uebersprungen == 4

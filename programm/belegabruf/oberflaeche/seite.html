@@ -58,7 +58,10 @@
     font: inherit; width: 100%; padding: 7px 9px; border: 1px solid var(--linie); border-radius: 7px;
     background: var(--flaeche); color: var(--text); }
   .reihe { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 12px; }
-  .kontozeile { display: grid; grid-template-columns: 140px 1fr auto; gap: 8px; align-items: center; margin: 6px 0; }
+  .kontozeile { display: grid; grid-template-columns: 130px 1fr auto auto; gap: 8px; align-items: center; margin: 6px 0; }
+  .zeitraum { display: flex; gap: 6px; }
+  .zeitraum select { width: auto; }
+  input.ab-datum { width: 112px; }
   input.holen-haken { width: 18px; height: 18px; }
   .kontozeile input[type=checkbox] { width: 18px; height: 18px; }
   .ankreuzen { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 15px; margin-top: 12px; }
@@ -154,7 +157,9 @@
         <h2 class="oben18">Konten</h2>
         <p class="leise">Mehrere Konten beim selben Anbieter sind möglich (z. B. ein Zugang als Co-Gastgeber).
           Ein Name ist erst nötig, wenn es beim selben Anbieter ein zweites Konto gibt — er ist nur für dich.
-          Welche Konten geholt werden, wählst du im Reiter „Belege holen“ mit dem Haken je Konto.</p>
+          Welche Konten geholt werden, wählst du im Reiter „Belege holen“ mit dem Haken je Konto.
+          „Belege ab“: ältere Belege werden nicht geholt und nicht vermerkt — erweiterst du den Zeitraum später,
+          kommen sie beim nächsten Lauf. „Letzter Monat“ heißt ab dem 1. des Vormonats.</p>
         <div id="kontenliste"></div>
         <button type="button" id="konto-dazu">Konto hinzufügen</button>
 
@@ -288,7 +293,9 @@ function kontenZeigen() {
     haken.dataset.auftrag = "1";
     haken.addEventListener("change", () => hakenSetzen(k, haken));
     hakenZelle.append(haken);
-    zeile.append(hakenZelle, element("td", k.anzeige), element("td", k.titel || "–"));
+    const kontoZelle = element("td", k.titel || "–");
+    if (k.ab_text) kontoZelle.append(element("div", k.ab_text, "leise"));
+    zeile.append(hakenZelle, element("td", k.anzeige), kontoZelle);
     const zelle = element("td");
     zelle.append(element("span", ZUSTAND_TEXT[k.zustand] || k.zustand, "marke " + k.zustand));
     zeile.append(zelle);
@@ -321,19 +328,39 @@ function kontozeile(k) {
     wahl.append(o);
   }
   const name = element("input"); name.type = "text"; name.value = k.titel || ""; name.placeholder = "Name, z. B. privat";
-  name.setAttribute("aria-label", "Kontoname");
+  name.setAttribute("aria-label", "Kontoname"); name.className = "kontoname";
   wahl.addEventListener("change", namenZeigen);
+  // „Belege ab“: Zeitraum je Konto
+  const ab = element("select");
+  ab.setAttribute("aria-label", "Belege ab");
+  for (const [wert, text] of [["alle", "Belege ab: alle"], ["letzter-monat", "ab letztem Monat"],
+                              ["letzte-3-monate", "letzte 3 Monate"], ["letzte-12-monate", "letzte 12 Monate"],
+                              ["datum", "ab Datum …"]]) {
+    const o = element("option", text); o.value = wert; ab.append(o);
+  }
+  const datum = element("input"); datum.type = "text"; datum.placeholder = "TT.MM.JJJJ"; datum.inputMode = "numeric";
+  datum.setAttribute("aria-label", "Belege ab Datum (TT.MM.JJJJ)"); datum.className = "ab-datum";
+  const istDatum = /^\d{2}\.\d{2}\.\d{4}$/.test(k.belege_ab || "");
+  ab.value = istDatum ? "datum" : (k.belege_ab || "alle");
+  datum.value = istDatum ? k.belege_ab : "";
+  const datumZeigen = () => datum.classList.toggle("versteckt", ab.value !== "datum");
+  ab.addEventListener("change", () => { datumZeigen(); if (ab.value === "datum") datum.focus(); });
+  datumZeigen();
   const weg = element("button", "Entfernen"); weg.type = "button";
   weg.addEventListener("click", () => {
-    for (const f of [name, wahl]) if (f.satz) markierungWeg(f);
+    for (const f of [name, wahl, ab, datum]) if (f.satz) markierungWeg(f);
     zeile.remove(); namenZeigen();
   });
-  zeile.append(wahl, name, weg);
+  const zeitraum = element("div", undefined, "zeitraum");
+  zeitraum.append(ab, datum);
+  zeile.append(wahl, name, zeitraum, weg);
   // kennung: woran Anmeldung und Protokoll hängen — bleibt beim Umbenennen gleich.
   zeile.lesen = () => ({ quelle: wahl.value, name: name.value,
+                         belege_ab: ab.value === "datum" ? datum.value.trim() : ab.value,
                          kennung: wahl.value === k.quelle ? (k.name || null) : null });
   zeile.anbieter = () => wahl.value;
   zeile.anbieterfeld = wahl;
+  zeile.datumsfeld = datum;
   zeile.namensfeld = name;
   return zeile;
 }
@@ -505,11 +532,12 @@ $("mail-an").addEventListener("change", () => {
 // Geprüft wird auf dem Server; er nennt je Feld einen Satz. Die Markierung verschwindet,
 // sobald das Feld geändert wird.
 function feldFuer(name) {
-  const treffer = /^konto-(\d+)-(name|quelle)$/.exec(name);
+  const treffer = /^konto-(\d+)-(name|quelle|ab)$/.exec(name);
   if (treffer) {
     const zeile = [...$("kontenliste").children].filter((z) => z.lesen)[Number(treffer[1])];
     if (!zeile) return null;
-    return { element: treffer[2] === "name" ? zeile.namensfeld : zeile.anbieterfeld, nach: zeile };
+    const feld = { name: zeile.namensfeld, quelle: zeile.anbieterfeld, ab: zeile.datumsfeld }[treffer[2]];
+    return { element: feld, nach: zeile };
   }
   const element = $(name);
   return element ? { element, nach: element } : null;

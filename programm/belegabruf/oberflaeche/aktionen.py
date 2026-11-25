@@ -118,7 +118,9 @@ class Steuerung:
                 fehlen = 0
             # name = interne Kennung (für Prüfen/Anmelden), titel = Name für Menschen (darf leer sein)
             konten.append({"quelle": k.quelle, "anzeige": quellen.anzeigename(k.quelle), "name": k.name,
-                           "titel": k.anzeigetitel, "bezeichnung": k.anzeige, "aktiv": k.aktiv, "zustand": self.kontozustand.get(schluessel, "unbekannt"),
+                           "titel": k.anzeigetitel, "bezeichnung": k.anzeige, "aktiv": k.aktiv,
+                           "belege_ab": k.belege_ab,
+                           "ab_text": f"Belege ab {k.ab():%d.%m.%Y}" if k.ab() else "", "zustand": self.kontozustand.get(schluessel, "unbekannt"),
                            "fehlende": fehlen})
         m = einst.mail
         return {
@@ -392,7 +394,12 @@ def einstellungen_aus_eingaben(daten: dict) -> Einstellungen:
             aktiv = alte[(quelle, kennung)].aktiv
         else:
             aktiv = eintrag.get("aktiv") is not False
-        zeilen.append((nr, Konto(quelle=quelle, name=kennung, aktiv=aktiv,
+        try:
+            belege_ab = einstellungen.zeitraum_normal(eintrag.get("belege_ab"))
+        except EinstellungsFehler:
+            sammler.feld(f"konto-{nr}-ab", "Belege ab: bitte ein Datum als TT.MM.JJJJ, z. B. 01.01.2026.")
+            belege_ab = "alle"
+        zeilen.append((nr, Konto(quelle=quelle, name=kennung, aktiv=aktiv, belege_ab=belege_ab,
                                  optionen=dict(alte[(quelle, kennung)].optionen) if (quelle, kennung) in alte else {},
                                  titel=titel)))
     # Namen je Anbieter: bei mehreren Konten Pflicht, nicht zum Verwechseln ähnlich.
