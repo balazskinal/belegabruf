@@ -30,6 +30,10 @@ bringt das Programm ohnehin ein eigenes Chromium mit (Playwright, eigenes Profil
 - **Standardbrowser des Nutzers:** Die Anmeldungen bräuchten trotzdem das zweite Fenster.
 - **Eigene Fenster-Oberfläche (Tkinter o. Ä.):** auf dem Mac unzuverlässig, doppelte Pflege.
 - **Signierte App:** würde das Terminal ganz beseitigen, kostet aber Entwicklerkonten und Pflege.
+- **Selbstaktualisierung (Knopf lädt ZIP und tauscht Programmordner)** (Balazs, 25.11.2026): Ein
+  Programm, das sich selbst Code holt und einspielt, macht ein übernommenes GitHub-Konto sofort zum
+  Angriff auf alle Nutzer; sicher nur mit signierten Paketen. Update bleibt: Hinweis „neuere Version“
+  mit Link → ZIP auspacken → „Belegabruf“ doppelklicken (richtet sich selbst ein).
 
 ## Entschieden 25.11.2026 (Balazs)
 
