@@ -4,7 +4,11 @@ rem Richtet sich beim ersten Mal und nach einem Update selbst ein; jeder Schritt
 rem uv holen, Bausteine (uv sync), Browser (Chromium), dann das Fenster "Belegabruf" oeffnen.
 chcp 65001 >nul
 rem Das eigentliche Programm liegt im Ordner "programm" daneben.
-cd /d "%~dp0..\programm"
+cd /d "%~dp0..\programm" 2>nul || (
+  echo Der Ordner "programm" fehlt neben "Start Windows". Bitte das ZIP vollstaendig auspacken ^(nicht nur den Start-Ordner^).
+  pause
+  exit /b 1
+)
 set "PATH=%USERPROFILE%\.local\bin;%PATH%"
 set PYTHONUTF8=1
 
@@ -29,7 +33,7 @@ if not exist .venv\Scripts\python.exe goto sync
 if not errorlevel 1 goto browser
 :sync
 echo Richte die neue Version ein ... ^(Python und die noetigen Bausteine^)
-uv sync --no-dev --quiet
+uv sync --locked --no-dev --quiet
 if errorlevel 1 goto syncfehler
 type nul > .venv\.belegabruf-sync
 

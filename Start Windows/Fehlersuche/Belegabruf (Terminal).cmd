@@ -2,7 +2,11 @@
 rem Belegabruf im Terminal (Menue wie bis Version 1.x, z. B. zur Fehlersuche) (Windows). Per Doppelklick starten.
 chcp 65001 >nul
 rem Das eigentliche Programm liegt im Ordner "programm" zwei Ebenen hoeher.
-cd /d "%~dp0..\..\programm"
+cd /d "%~dp0..\..\programm" 2>nul || (
+  echo Der Ordner "programm" fehlt neben "Start Windows". Bitte das ZIP vollstaendig auspacken ^(nicht nur den Start-Ordner^).
+  pause
+  exit /b 1
+)
 set "PATH=%USERPROFILE%\.local\bin;%PATH%"
 set PYTHONUTF8=1
 

@@ -471,7 +471,7 @@ def test_starter_erststart_dann_nur_noch_starten(tmp_path):
     lauf = _starten(tmp_path)
     assert lauf.returncode == 0, lauf.stdout + lauf.stderr
     assert "Richte die neue Version ein" in lauf.stdout and "Hole den Browser" in lauf.stdout
-    assert _aufrufe(log) == ["uv sync --no-dev --quiet", "uv run --no-dev --quiet playwright install --no-shell chromium",
+    assert _aufrufe(log) == ["uv sync --locked --no-dev --quiet", "uv run --no-dev --quiet playwright install --no-shell chromium",
                              "uv run --no-dev --quiet belege oberflaeche"]
     # zweiter Start: alles da → nur das Fenster
     lauf = _starten(tmp_path)
@@ -481,7 +481,7 @@ def test_starter_erststart_dann_nur_noch_starten(tmp_path):
     time.sleep(1.1)
     (tmp_path / "programm" / "uv.lock").write_text("neu", encoding="utf-8")
     lauf = _starten(tmp_path)
-    assert _aufrufe(log) == ["uv sync --no-dev --quiet", "uv run --no-dev --quiet belege oberflaeche"]
+    assert _aufrufe(log) == ["uv sync --locked --no-dev --quiet", "uv run --no-dev --quiet belege oberflaeche"]
     # Browser weg (z. B. Cache geleert) → nur der Browser
     (tmp_path / "browser-da").unlink()
     _starten(tmp_path)
@@ -545,7 +545,7 @@ def test_windows_starter_ablauf_und_crlf():
         assert roh.count(b"\n") == roh.count(b"\r\n"), f"{name}: Zeilenenden müssen CRLF sein"
     text = (WURZEL / "Start Windows" / "Belegabruf.cmd").read_text(encoding="utf-8")
     reihenfolge = ["where uv", "astral.sh/uv/install.ps1", ":uvda", "startpruefung umgebung", ":sync",
-                   "uv sync --no-dev --quiet", ".belegabruf-sync", ":browser", "startpruefung browser",
+                   "uv sync --locked --no-dev --quiet", ".belegabruf-sync", ":browser", "startpruefung browser",
                    "playwright install --no-shell chromium", ":start", "belege oberflaeche", ":syncfehler",
                    "rmdir /s /q .venv"]
     stellen = [text.index(t) for t in reihenfolge]
@@ -582,3 +582,29 @@ def test_startpruefung_browser(tmp_path, monkeypatch):
     (tmp_path / f"chromium-{revision}" / "INSTALLATION_COMPLETE").write_text("", encoding="utf-8")
     assert startpruefung.chromium_da()
     assert not (tmp_path / f"chromium-headless-shell-{revision}").exists()
+
+
+@pytestmark_mac
+@pytest.mark.parametrize("datei", ["Start Mac/Belegabruf.command", "Start Mac/Fehlersuche/Belegabruf (Terminal).command"])
+def test_starter_ohne_programmordner_meldet_sich(tmp_path, datei):
+    import shutil
+
+    shutil.copytree(WURZEL / "Start Mac", tmp_path / "Start Mac")  # nur der Start-Ordner ausgepackt
+    lauf = _starten(tmp_path, datei, mit_uv=False)
+    assert lauf.returncode == 1 and "Ordner „programm“ fehlt" in lauf.stdout and "vollständig auspacken" in lauf.stdout
+
+
+def test_starter_holt_uv_nur_von_fester_adresse():
+    import re
+
+    mac = (WURZEL / "Start Mac" / "Belegabruf.command").read_text(encoding="utf-8")
+    win = (WURZEL / "Start Windows" / "Belegabruf.cmd").read_text(encoding="utf-8")
+    assert re.findall(r"curl [^|]*\|", mac) == ["curl -LsSf https://astral.sh/uv/install.sh |"]
+    assert 'irm https://astral.sh/uv/install.ps1 | iex' in win
+    for text in (mac, win):
+        zeile = next(z for z in text.splitlines() if "astral.sh/uv/install" in z and ("curl" in z or "irm" in z))
+        assert "$" not in zeile.split("astral.sh")[0] and "%" not in zeile, zeile  # keine Variablen in der Adresse
+    for name in ("Belegabruf.cmd", "Fehlersuche/Belegabruf (Terminal).cmd"):
+        text = (WURZEL / "Start Windows" / name).read_text(encoding="utf-8")
+        assert '2>nul || (' in text and 'fehlt neben "Start Windows"' in text
+    assert "uv sync --locked --no-dev" in win and "uv sync --locked --no-dev" in mac

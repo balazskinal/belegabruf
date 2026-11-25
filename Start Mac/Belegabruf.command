@@ -3,7 +3,11 @@
 # Richtet sich beim ersten Mal und nach einem Update selbst ein; jeder Schritt nur, wenn nötig:
 # uv holen → Bausteine (uv sync) → Browser (Chromium) → Fenster „Belegabruf“ öffnen.
 # Das eigentliche Programm liegt im Ordner "programm" daneben.
-cd "$(dirname "$0")/../programm" || exit 1
+if ! cd "$(dirname "$0")/../programm" 2>/dev/null; then
+  echo "Der Ordner „programm“ fehlt neben „Start Mac“. Bitte das ZIP vollständig auspacken (nicht nur den Start-Ordner)."
+  read -r -p "Enter zum Schließen"
+  exit 1
+fi
 export PATH="$HOME/.local/bin:$PATH"
 
 abbruch() {
@@ -24,7 +28,7 @@ fi
 # b) Python und Bausteine: fehlt die Umgebung, oder ist uv.lock neuer (Update)?
 if [ ! -x .venv/bin/python ] || ! .venv/bin/python -m belegabruf.startpruefung umgebung >/dev/null 2>&1; then
   echo "Richte die neue Version ein … (Python und die nötigen Bausteine)"
-  if ! uv sync --no-dev --quiet; then
+  if ! uv sync --locked --no-dev --quiet; then
     rm -rf .venv
     abbruch "Das hat nicht geklappt. Besteht eine Internetverbindung? Dann einfach noch einmal doppelklicken."
   fi
