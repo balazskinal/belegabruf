@@ -176,6 +176,15 @@ Einstellungen, Anmeldungen, Protokolle und Belege bleiben dabei erhalten — sie
 Programmordner.
 Ein automatisches Selbst-Update gibt es bewusst nicht.
 
+## Was neu ist
+
+- **1.2.0** — Zwei neue Anbieter: **Xentra** (Abo- und Provisionsrechnungen) und **Skool**
+  (Rechnungen für bezahlte Communities, immer als helles PDF). Beim Update einmal „Einrichten“
+  doppelklicken und die neuen Anbieter dazunehmen.
+- **1.1.0** — Das Protokoll entscheidet, was schon geholt ist (nicht mehr der Belegordner); es liegt
+  bei den Einstellungen. Neu: „Fehlende Dateien neu holen“.
+- **1.0.0** — Erste Version: Airbnb-Rechnungen per Doppelklick.
+
 ## Rechtliches
 
 - Das Programm ruft **deine eigenen Rechnungen aus deinem eigenen Konto** ab, so wie du es von Hand
