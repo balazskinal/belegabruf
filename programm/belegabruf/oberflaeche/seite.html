@@ -58,10 +58,10 @@
     font: inherit; width: 100%; padding: 7px 9px; border: 1px solid var(--linie); border-radius: 7px;
     background: var(--flaeche); color: var(--text); }
   .reihe { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 12px; }
-  .kontozeile { display: grid; grid-template-columns: 140px 1fr auto auto; gap: 8px; align-items: center; margin: 6px 0; }
+  .kontozeile { display: grid; grid-template-columns: 140px 1fr auto; gap: 8px; align-items: center; margin: 6px 0; }
+  input.holen-haken { width: 18px; height: 18px; }
   .kontozeile input[type=checkbox] { width: 18px; height: 18px; }
   .ankreuzen { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 15px; margin-top: 12px; }
-  .holen-haken { margin: 0; white-space: nowrap; }
   .meldung { padding: 9px 12px; border-radius: 7px; margin: 10px 0 0; }
   .meldung.gut { background: var(--gut-grund); color: var(--gut); }
   .meldung.schlecht { background: var(--schlecht-grund); color: var(--schlecht); }
@@ -108,16 +108,18 @@
   <section id="bereich-konten">
     <h2>Konten</h2>
     <table>
-      <thead><tr><th>Anbieter</th><th>Konto</th><th>Anmeldung</th><th></th></tr></thead>
+      <thead><tr><th>Holen</th><th>Anbieter</th><th>Konto</th><th>Anmeldung</th><th></th></tr></thead>
       <tbody id="konten"></tbody>
     </table>
     <p id="keine-konten" class="leise versteckt">Noch kein Konto eingetragen — im Reiter
       <button type="button" class="knopf-verweis" id="zu-einstellungen">Einstellungen</button> hinzufügen.</p>
     <div class="knoepfe oben14">
-      <button id="holen" class="haupt" type="button">Belege holen</button>
+      <button id="holen" class="haupt" type="button" aria-describedby="kein-haken">Belege holen</button>
       <button id="fehlende" type="button">Fehlende Dateien neu holen</button>
       <button id="alle-pruefen" type="button">Alle Anmeldungen prüfen</button>
     </div>
+    <p id="kein-haken" class="meldung warn versteckt">Kein Konto angehakt — bitte bei mindestens einem Konto den
+      Haken „Holen“ setzen. („Alle Anmeldungen prüfen“ prüft trotzdem alle Konten.)</p>
     <p class="leise" id="ordner-hinweis"></p>
   </section>
 
@@ -152,7 +154,7 @@
         <h2 class="oben18">Konten</h2>
         <p class="leise">Mehrere Konten beim selben Anbieter sind möglich (z. B. ein Zugang als Co-Gastgeber).
           Ein Name ist erst nötig, wenn es beim selben Anbieter ein zweites Konto gibt — er ist nur für dich.
-          Ohne Haken bei „Belege holen“ bleibt ein Konto eingetragen und angemeldet, wird beim Holen aber übersprungen.</p>
+          Welche Konten geholt werden, wählst du im Reiter „Belege holen“ mit dem Haken je Konto.</p>
         <div id="kontenliste"></div>
         <button type="button" id="konto-dazu">Konto hinzufügen</button>
 
@@ -278,7 +280,15 @@ function kontenZeigen() {
   koerper.replaceChildren();
   for (const k of zustand.konten) {
     const zeile = element("tr", undefined, k.aktiv ? "" : "aus");
-    zeile.append(element("td", k.anzeige), element("td", (k.titel || "–") + (k.aktiv ? "" : " (wird beim Holen übersprungen)")));
+    // Haken je Konto: „Belege holen“ holt nur angehakte Konten. Ein Klick speichert sofort.
+    const hakenZelle = element("td");
+    const haken = element("input"); haken.type = "checkbox"; haken.checked = k.aktiv; haken.className = "holen-haken";
+    haken.setAttribute("aria-label", k.bezeichnung + ": Belege holen");
+    haken.title = "Ohne Haken bleibt das Konto eingetragen und angemeldet, wird beim Holen aber übersprungen.";
+    haken.dataset.auftrag = "1";
+    haken.addEventListener("change", () => hakenSetzen(k, haken));
+    hakenZelle.append(haken);
+    zeile.append(hakenZelle, element("td", k.anzeige), element("td", k.titel || "–"));
     const zelle = element("td");
     zelle.append(element("span", ZUSTAND_TEXT[k.zustand] || k.zustand, "marke " + k.zustand));
     zeile.append(zelle);
@@ -297,6 +307,7 @@ function kontenZeigen() {
   const fehlen = zustand.konten.reduce((s, k) => s + (k.fehlende || 0), 0);
   $("fehlende").textContent = "Fehlende Dateien neu holen" + (fehlen ? ` (${fehlen})` : "");
   $("fehlende").disabled = !fehlen;
+  holenErlaubt();
   $("ordner-hinweis").textContent = "Belegordner: " + zustand.belegordner;
 }
 
@@ -312,20 +323,14 @@ function kontozeile(k) {
   const name = element("input"); name.type = "text"; name.value = k.titel || ""; name.placeholder = "Name, z. B. privat";
   name.setAttribute("aria-label", "Kontoname");
   wahl.addEventListener("change", namenZeigen);
-  const an = element("label", undefined, "ankreuzen holen-haken");
-  const box = element("input"); box.type = "checkbox"; box.checked = k.aktiv !== false;
-  const erklaerung = "Ohne Haken bleibt das Konto eingetragen und angemeldet, wird beim Holen aber übersprungen.";
-  an.title = erklaerung;
-  box.setAttribute("aria-description", erklaerung);
-  an.append(box, " Belege holen");
   const weg = element("button", "Entfernen"); weg.type = "button";
   weg.addEventListener("click", () => {
     for (const f of [name, wahl]) if (f.satz) markierungWeg(f);
     zeile.remove(); namenZeigen();
   });
-  zeile.append(wahl, name, an, weg);
+  zeile.append(wahl, name, weg);
   // kennung: woran Anmeldung und Protokoll hängen — bleibt beim Umbenennen gleich.
-  zeile.lesen = () => ({ quelle: wahl.value, name: name.value, aktiv: box.checked,
+  zeile.lesen = () => ({ quelle: wahl.value, name: name.value,
                          kennung: wahl.value === k.quelle ? (k.name || null) : null });
   zeile.anbieter = () => wahl.value;
   zeile.anbieterfeld = wahl;
@@ -403,12 +408,32 @@ async function laden(formularAuch) {
   if (zustand.beschaeftigt && !abfrage) beobachten();
 }
 
+let laeuft = false;
 function knoepfeSperren(beschaeftigt) {
+  laeuft = beschaeftigt;
   for (const id of ["holen", "fehlende", "alle-pruefen", "speichern"]) {
     if (beschaeftigt) $(id).disabled = true;
   }
-  if (!beschaeftigt) { $("holen").disabled = false; $("alle-pruefen").disabled = false; $("speichern").disabled = false; }
+  if (!beschaeftigt) { $("alle-pruefen").disabled = false; $("speichern").disabled = false; }
   document.querySelectorAll("[data-auftrag]").forEach((b) => { b.disabled = beschaeftigt; });
+  holenErlaubt();
+}
+
+// „Belege holen“ nur, wenn mindestens ein Konto angehakt ist.
+function holenErlaubt() {
+  const keins = Boolean(zustand) && zustand.konten.length > 0 && !zustand.konten.some((k) => k.aktiv);
+  $("kein-haken").classList.toggle("versteckt", !keins);
+  $("holen").disabled = keins || laeuft;
+}
+
+async function hakenSetzen(k, haken) {
+  zeigeFehler("");
+  try {
+    const r = await api("POST", "/api/konto-holen", { quelle: k.quelle, name: k.name, aktiv: haken.checked });
+    k.aktiv = r.aktiv;
+    haken.closest("tr").classList.toggle("aus", !r.aktiv);
+    holenErlaubt();
+  } catch (e) { haken.checked = k.aktiv; zeigeFehler(e.message); }
 }
 
 const TITEL = { holen: "Belege holen", pruefen: "Anmeldungen prüfen", anmelden: "Anmelden" };

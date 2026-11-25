@@ -155,6 +155,23 @@ class Steuerung:
         zustand["gesichert"] = gesichert.name if gesichert else ""
         return zustand
 
+    def konto_holen_setzen(self, daten: dict) -> dict:
+        """Haken „Holen“ je Konto (gespeichert als ``aktiv``) — sofort, ohne das
+        Einstellungsformular. Gesperrt, solange ein Vorgang läuft."""
+        aktiv = daten.get("aktiv")
+        if not isinstance(aktiv, bool):
+            raise Eingabefehler("Ungültige Eingabe.")
+        with self._sperre:
+            if self.beschaeftigt():
+                raise Eingabefehler("Bitte warten, bis der laufende Vorgang fertig ist.")
+            einst = _geladen()
+            konto = _konten_waehlen(einst, daten, genau_eins=True)[0]
+            konto.aktiv = aktiv
+            if einstellungen.fremde_inhalte():
+                einstellungen.sichern()
+            einstellungen.speichern(einst)
+        return {"aktiv": aktiv}
+
     def mail_passwort_setzen(self, daten: dict) -> dict:
         wert = daten.get("passwort")
         if not isinstance(wert, str) or not wert or len(wert) > 1000 or "\n" in wert or "\r" in wert:
@@ -208,7 +225,7 @@ class Steuerung:
         einst = _geladen()
         konten = einst.aktive_konten()
         if not konten:
-            raise Eingabefehler("Es ist kein Konto eingeschaltet.")
+            raise Eingabefehler("Kein Konto angehakt — bitte bei mindestens einem Konto den Haken „Holen“ setzen.")
         nachholen = daten.get("fehlende") is True
 
         def arbeit(a: Auftrag):
@@ -277,7 +294,7 @@ def _zustand_text(status: str) -> str:
 def _konten_waehlen(einst: Einstellungen, daten: dict, genau_eins: bool = False) -> list[Konto]:
     quelle, name = daten.get("quelle"), daten.get("name")
     if quelle is None and name is None and not genau_eins:
-        konten = einst.aktive_konten()
+        konten = list(einst.konten)  # „Alle Anmeldungen prüfen“: alle, unabhängig vom Haken
     else:
         konten = [k for k in einst.konten if k.quelle == quelle and k.name == name]
     if not konten:
@@ -369,7 +386,13 @@ def einstellungen_aus_eingaben(daten: dict) -> Einstellungen:
         kennung = eintrag.get("kennung")
         if not (isinstance(kennung, str) and (quelle, kennung) in alte):
             kennung = einstellungen.kennung_fuer(titel)
-        zeilen.append((nr, Konto(quelle=quelle, name=kennung, aktiv=eintrag.get("aktiv") is not False,
+        # Ob ein Konto geholt wird, steuert der Haken im Reiter „Belege holen“ (sofort
+        # gespeichert). Das Formular ändert das nicht: bisherige Konten behalten ihren Stand.
+        if (quelle, kennung) in alte:
+            aktiv = alte[(quelle, kennung)].aktiv
+        else:
+            aktiv = eintrag.get("aktiv") is not False
+        zeilen.append((nr, Konto(quelle=quelle, name=kennung, aktiv=aktiv,
                                  optionen=dict(alte[(quelle, kennung)].optionen) if (quelle, kennung) in alte else {},
                                  titel=titel)))
     # Namen je Anbieter: bei mehreren Konten Pflicht, nicht zum Verwechseln ähnlich.

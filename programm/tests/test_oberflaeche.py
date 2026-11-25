@@ -768,11 +768,65 @@ def test_namensfeld_erscheint_erst_beim_zweiten_konto(seite, tmp_path):
     assert p.is_hidden("#kontenliste input[type=text]")
 
 
-def test_haken_heisst_belege_holen_mit_erklaerung(seite):
-    haken = seite.locator("#kontenliste label.holen-haken")
-    assert haken.inner_text().strip() == "Belege holen"
-    assert "übersprungen" in haken.get_attribute("title")
-    assert "übersprungen" in haken.locator("input").get_attribute("aria-description")
+def test_haken_je_konto_im_reiter_belege_holen(server, tmp_path, monkeypatch):
+    """Nachtrag A: Haken in der Kontenliste, ein Klick speichert; ohne Haken kein Holen;
+    „Alle Anmeldungen prüfen“ prüft trotzdem alle."""
+    konten = [{"quelle": "airbnb", "name": "Privat"}, {"quelle": "airbnb", "name": "Co"}]
+    assert _anfrage(server, "POST", "/api/einstellungen", _mit(server), _eingaben(tmp_path, konten=konten))[0].status == 200
+    geprueft = []
+    monkeypatch.setattr(ablauf, "sitzung_pruefen", lambda k: geprueft.append(k.name) or "angemeldet")
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(channel="chromium")
+        p = b.new_page()
+        p.goto(server.adresse)
+        p.wait_for_selector("#version:not(:empty)")
+        haken = p.locator("#konten input.holen-haken")
+        assert haken.count() == 2 and haken.nth(0).get_attribute("aria-label") == "Airbnb (Privat): Belege holen"
+        assert p.locator("#kontenliste input[type=checkbox]").count() == 0  # in den Einstellungen entfällt er
+        haken.nth(1).uncheck()
+        p.wait_for_function("() => document.querySelector('#konten tr:nth-child(2)').classList.contains('aus')")
+        assert [k.aktiv for k in einstellungen.laden().konten] == [True, False]  # sofort gespeichert
+        assert p.is_enabled("#holen")
+        haken.nth(0).uncheck()
+        p.wait_for_selector("#kein-haken:not(.versteckt)")
+        assert p.is_disabled("#holen")
+        assert [k.aktiv for k in einstellungen.laden().konten] == [False, False]
+        # Auswahl wird gemerkt
+        p.reload()
+        p.wait_for_selector("#version:not(:empty)")
+        assert p.is_disabled("#holen") and not p.locator("#konten input.holen-haken").nth(0).is_checked()
+        # Prüfen: alle Konten, unabhängig vom Haken
+        p.click("#alle-pruefen")
+        p.wait_for_function("() => document.querySelectorAll('#konten .marke.angemeldet').length === 2")
+        assert sorted(geprueft) == ["Co", "Privat"]
+        # Einstellungen speichern ändert den Haken nicht zurück
+        p.click("#reiter-einstellungen")
+        p.click("#speichern")
+        p.wait_for_selector("#gespeichert:not(.versteckt)")
+        assert [k.aktiv for k in einstellungen.laden().konten] == [False, False]
+        b.close()
+    antwort, inhalt = _anfrage(server, "POST", "/api/holen", _mit(server), {})
+    assert antwort.status == 400 and "angehakt" in json.loads(inhalt)["fehler"]
+
+
+def test_haken_setzen_gesperrt_waehrend_vorgang_und_prueft_eingaben(server, tmp_path):
+    _speichern(server, tmp_path)
+    for rumpf in ({"quelle": "airbnb", "name": "privat", "aktiv": "nein"}, {"quelle": "airbnb", "name": "x", "aktiv": False}):
+        assert _anfrage(server, "POST", "/api/konto-holen", _mit(server), rumpf)[0].status == 400
+    assert _anfrage(server, "POST", "/api/konto-holen", {}, {"quelle": "airbnb", "name": "privat", "aktiv": False})[0].status == 403
+    import threading
+
+    tor = threading.Event()
+    server.steuerung.starten("holen", lambda a: tor.wait(10))
+    try:
+        antwort, inhalt = _anfrage(server, "POST", "/api/konto-holen", _mit(server),
+                                   {"quelle": "airbnb", "name": "privat", "aktiv": False})
+        assert antwort.status == 400 and "warten" in json.loads(inhalt)["fehler"]
+    finally:
+        tor.set()
+    assert einstellungen.laden().konten[0].aktiv is True
 
 
 def test_einrichtung_laedt_keine_headless_shell():
