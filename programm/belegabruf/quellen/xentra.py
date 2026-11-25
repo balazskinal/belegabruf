@@ -177,12 +177,15 @@ def pdf_herunterladen(adresse: str) -> bytes:
                 angekuendigt = int(laenge)
                 if angekuendigt > pruefung.MAX_PDF_BYTES:
                     raise PdfZuGross()
+            # read1 gibt zurück, was gerade da ist; read(n) würde warten, bis n Bytes da sind —
+            # dann griffe die Gesamtfrist bei einem tröpfelnden Server nicht.
+            lesen = getattr(antwort, "read1", antwort.read)
             teile: list[bytes] = []
             gesamt = 0
             while True:
                 if time.monotonic() > ende:
                     raise DownloadUnvollstaendig(f"Download dauerte länger als {GESAMTFRIST_S} Sekunden")
-                stueck = antwort.read(_STUECK)
+                stueck = lesen(_STUECK)
                 if not stueck:
                     break
                 teile.append(stueck)
