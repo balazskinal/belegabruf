@@ -12,6 +12,14 @@ Belegordner und nicht im Programmordner — und nicht in ``profile/``, denn das
 darf man löschen. Es ist auch die Grundlage für den späteren Upload.
 
 Enthält keine Namen von Gästen oder Kunden — nur Datum, Nummern und Ablageort.
+
+Spalte ``ziele``: wohin der Beleg geliefert ist, mit Komma getrennt.
+    ordner          liegt im Belegordner
+    sevdesk         vom Programm als Entwurf nach sevDesk hochgeladen
+    sevdesk-schon   war schon vorher in sevDesk (beim Einschalten markiert, nie hochgeladen)
+    sevdesk-unklar  Antwort von sevDesk blieb aus — wird nicht noch einmal geschickt
+Fehlt alles mit "sevdesk", ist der Beleg **noch nicht hochgeladen**; der nächste Lauf
+versucht es erneut. Jede Änderung ist eine neue Zeile, die spätere gilt.
 """
 
 from __future__ import annotations
@@ -80,6 +88,69 @@ class Protokoll:
     def anzahl(self, art: str) -> int:
         return sum(1 for z in self._zeilen.values() if z.get("art") == art)
 
+    # ── Ziele je Beleg (z. B. schon in sevDesk?) ─────────────────────────────
+
+    def ziele_von(self, schluessel: str) -> list[str]:
+        zeile = self.eintrag(schluessel)
+        if not zeile:
+            return []
+        return [z for z in (zeile.get("ziele") or "").split(",") if z]
+
+    def in_sevdesk(self, schluessel: str) -> bool:
+        """Hochgeladen, schon vorher drin oder unklar — in allen Fällen nicht (noch einmal) schicken."""
+        return any(z in SEVDESK_ERLEDIGT for z in self.ziele_von(schluessel))
+
+    def ziel_ergaenzen(self, schluessel: str, ziel: str) -> None:
+        zeile = self.eintrag(schluessel)
+        if zeile is None or ziel in self.ziele_von(schluessel):
+            return
+        neu = dict(zeile)
+        neu["zeitpunkt"] = datetime.now().isoformat(timespec="seconds")
+        neu["ziele"] = ",".join(self.ziele_von(schluessel) + [ziel])
+        self._anhaengen([neu])
+
+    def ziel_entfernen(self, schluessel: str, ziel: str) -> None:
+        zeile = self.eintrag(schluessel)
+        if zeile is None or ziel not in self.ziele_von(schluessel):
+            return
+        neu = dict(zeile)
+        neu["zeitpunkt"] = datetime.now().isoformat(timespec="seconds")
+        neu["ziele"] = ",".join(z for z in self.ziele_von(schluessel) if z != ziel)
+        self._anhaengen([neu])
+
+    def upload_offen(self) -> list[str]:
+        """Rechnungen, die noch nicht in sevDesk sind (älteste zuerst)."""
+        offen = [s for s, z in self._zeilen.items() if z.get("art") == "rechnung" and not self.in_sevdesk(s)]
+        return sorted(offen, key=lambda s: (self._zeilen[s].get("rechnungsdatum") or "", s))
+
+    def sevdesk_war_an(self) -> bool:
+        """Lief das Konto beim letzten Mal schon mit Ziel sevDesk? Steht im Protokoll
+        selbst (Zeile ``einstellung:sevdesk``), damit es nie verloren geht."""
+        zeile = self.eintrag(SEVDESK_SCHALTER)
+        return bool(zeile) and zeile.get("ziele") == "an"
+
+    def sevdesk_schalten(self, an: bool) -> None:
+        if self.sevdesk_war_an() == an:
+            return
+        self._anhaengen([{
+            "zeitpunkt": datetime.now().isoformat(timespec="seconds"),
+            "quelle": self.quelle, "konto": self.konto, "art": "einstellung",
+            "schluessel": SEVDESK_SCHALTER, "ziele": "an" if an else "aus",
+        }])
+
+    def als_schon_in_sevdesk_markieren(self) -> int:
+        """Beim Einschalten von sevDesk: Alles, was bis jetzt geholt ist, gilt als schon drin."""
+        neu = []
+        jetzt = datetime.now().isoformat(timespec="seconds")
+        for schluessel in self.upload_offen():
+            zeile = dict(self._zeilen[schluessel])
+            zeile["zeitpunkt"] = jetzt
+            zeile["ziele"] = ",".join(self.ziele_von(schluessel) + ["sevdesk-schon"])
+            neu.append(zeile)
+        if neu:
+            self._anhaengen(neu)
+        return len(neu)
+
     def _anhaengen(self, zeilen: list[dict]) -> None:
         neu_anlegen = not self.datei.exists()
         self.datei.parent.mkdir(parents=True, exist_ok=True)
@@ -111,6 +182,9 @@ class Protokoll:
             "ziele": ",".join(ziele),
         }])
 
+
+SEVDESK_SCHALTER = "einstellung:sevdesk"
+SEVDESK_ERLEDIGT = {"sevdesk", "sevdesk-schon", "sevdesk-unklar"}
 
 ALTER_NAME = "protokoll.csv"
 NACH_UEBERNAHME = "protokoll.csv.uebernommen"

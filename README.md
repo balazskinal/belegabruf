@@ -1,8 +1,9 @@
 # Belegabruf
 
 Holt Rechnungen, die es nur im eingeloggten Konto eines Anbieters gibt, per Doppelklick auf den
-eigenen Rechner. **Version 1 kann Airbnb:** die Rechnungen über die Airbnb-Servicegebühren für
-Gastgeber, jede Buchung als eigenes PDF.
+eigenen Rechner. **Es kann Airbnb:** die Rechnungen über die Airbnb-Servicegebühren für
+Gastgeber, jede Buchung als eigenes PDF. **Seit Version 2** lädt es neue Rechnungen auf Wunsch
+zusätzlich als Entwurf nach **sevDesk** hoch.
 
 **Das ist kein Dienst — jeder betreibt seine eigene Kopie.** Niemand außer dir sieht deine
 Anmeldung oder deine Belege. Es gibt keinen Server, kein Konto bei uns, keinen Support-Vertrag.
@@ -30,6 +31,9 @@ Belegordner löschst oder verschiebst.** Das merkt sich ein **Protokoll** bei de
 im Belegordner). Den Belegordner darfst du also jederzeit leeren oder an die Buchhaltung bzw. den
 Steuerberater weiterreichen, ohne dass alles wiederkommt. Gastnamen kommen nirgends vor — weder in
 Dateinamen noch im Protokoll.
+
+5. Ist **sevDesk** eingeschaltet, lädt es jede neue Rechnung dort als **Entwurf** hoch (siehe
+   [Upload nach sevDesk](#upload-nach-sevdesk)). Die Datei bleibt trotzdem im Belegordner.
 
 **Wichtig:** Airbnb zeigt nur die **letzten 12 Monate**. Was älter ist, ist weg. Am besten einmal
 im Monat laufen lassen. Liegt der letzte Lauf über zwei Monate zurück, warnt das Programm beim Start.
@@ -81,6 +85,7 @@ Administratorrechte nötig.
    - Ein Name für dein Konto — nur für dich, z. B. „privat“. Hast du mehrere Airbnb-Konten
      (z. B. einen Zugang als Co-Gastgeber), kannst du mehrere eintragen; jedes bekommt seine eigene Anmeldung.
    - Der Belegordner (Vorschlag: `Dokumente/Belege`)
+   - Ob die Rechnungen auch nach sevDesk sollen — dann fragt es nach dem API-Schlüssel (siehe unten)
 6. Zum Schluss öffnet sich das Airbnb-Anmeldefenster. Melde dich an. Fertig.
 
 ## Benutzen
@@ -105,6 +110,41 @@ geholt wurde. Stattdessen beim Start **E** und dann **2 „Fehlende Dateien neu 
 kommt alles wieder, was im Protokoll steht, aber im Belegordner fehlt — soweit Airbnb es noch anbietet
 (die letzten 12 Monate).
 
+## Upload nach sevDesk
+
+Auf Wunsch lädt das Programm jede **neu geholte** Rechnung als **Entwurf** nach sevDesk hoch. Du
+findest sie dort bei den Belegen als offenen Entwurf, mit dem PDF im Anhang.
+
+**Was im Entwurf steht:** nur, was das Programm ohnehin weiß — Belegdatum, Rechnungsnummer (als
+Belegnummer), Lieferant „Airbnb“ und die Steuerregel (Vorgabe: Reverse Charge nach §13b UStG).
+**Betrag und Konto bleiben leer — die ergänzt du in sevDesk.** Gebucht wird nichts. Gutschriften
+kommen genauso an, mit „(Gutschrift)“ hinter der Belegnummer.
+
+**Einschalten:** „Einrichten“ doppelklicken und bei „Nach sevDesk hochladen?“ mit **j** antworten.
+Dann fragt es nach dem **API-Schlüssel** (in sevDesk unter *Einstellungen → Benutzer → API-Token*).
+Beim Einfügen sieht man nichts — das ist Absicht. Der Schlüssel kommt in den **Passwortspeicher
+deines Rechners** (Mac: Schlüsselbund, Windows: Anmeldeinformationsverwaltung) und **nie in eine
+Datei**. In den Einstellungen steht nur, unter welchem Eintrag er liegt (Vorschlag:
+`belegabruf/sevdesk`). Hast du schon einen Eintrag, kannst du den angeben. Austauschen oder löschen
+ebenfalls über „Einrichten“. Auf dem Mac fragt der Schlüsselbund beim ersten Mal, ob das Programm den
+Eintrag lesen darf — dort **„Immer erlauben“** wählen (nach einem Update kann die Frage wiederkommen).
+
+**Alter Bestand:** Beim Einschalten gilt alles, was bis dahin geholt ist, als **schon in sevDesk**
+und wird nicht hochgeladen. Hochgeladen wird nur, was danach neu dazukommt.
+
+**Nie doppelt:** Das Protokoll merkt sich, was hochgeladen ist. Klappt ein Upload nicht (kein
+Internet, falscher Schlüssel, sevDesk lehnt ab), bleibt der Beleg im Belegordner, die Zusammenfassung
+zeigt die Meldung von sevDesk, und der **nächste Lauf versucht es erneut**. Kommt von sevDesk gar
+keine Antwort, ist unklar, ob der Entwurf angelegt wurde. Dann schickt das Programm ihn **nicht** noch
+einmal und sagt dir, welche Rechnung du in sevDesk nachsehen sollst.
+
+**Was das Programm bei sevDesk darf:** Ein sevDesk-API-Schlüssel hat alle Rechte deines Benutzers —
+einschränken lässt er sich nicht. Deshalb ruft das Programm **ausschließlich das Hochladen** auf:
+Datei hochladen (`/Voucher/Factory/uploadTempFile`) und Entwurf anlegen
+(`/Voucher/Factory/saveVoucher`); beim Einrichten einmal `/SevClient`, um den Schlüssel zu prüfen.
+Es liest, ändert oder löscht sonst nichts. Jeder andere Aufruf wird im Programm verweigert, bevor er
+das Netz erreicht (`programm/belegabruf/ziele/sevdesk.py`, Liste `ERLAUBT`).
+
 ## Wo was liegt
 
 | Was | Wo |
@@ -112,7 +152,8 @@ kommt alles wieder, was im Protokoll steht, aber im Belegordner fehlt — soweit
 | Deine Belege | der Belegordner, den du beim Einrichten angegeben hast |
 | Einstellungen | Mac: `~/Library/Application Support/belegabruf/einstellungen.toml` · Windows: `%APPDATA%\belegabruf\einstellungen.toml` |
 | Anmeldungen (Browserprofile) | im selben Ordner unter `profile/` — **darf man jederzeit löschen** |
-| Protokolle (was schon geholt ist) | im selben Ordner unter `protokolle/<anbieter>/<konto>.csv` — **nie löschen** |
+| Protokolle (was schon geholt und hochgeladen ist) | im selben Ordner unter `protokolle/<anbieter>/<konto>.csv` — **nie löschen** |
+| sevDesk-Schlüssel | im Passwortspeicher des Betriebssystems, nie in einer Datei |
 
 Die Einstellungsdatei ist eine Textdatei mit Erklärungen und lässt sich mit jedem Texteditor
 ändern. Ein Konto lässt sich dort mit `aktiv = "nein"` vorübergehend ausschalten.
@@ -167,7 +208,8 @@ uv run belege holen --fehlende                  # dazu Fehlendes neu holen
 ```
 
 `belege holen` gibt mit `--json` ein maschinenlesbares Ergebnis aus (Fortschritt geht nach stderr).
-Exit-Code: 0 = alles gut, 2 = Anmeldung nötig oder abgelaufen, 1 = Fehler. So lassen sich die
+Exit-Code: 0 = alles gut, 2 = Anmeldung nötig oder abgelaufen, nicht alles geholt oder nicht alles
+nach sevDesk hochgeladen (später noch einmal), 1 = Fehler. So lassen sich die
 Bausteine später auch aus einer Automatisierung (z. B. n8n) aufrufen.
 
 ### Aufbau
@@ -175,22 +217,24 @@ Bausteine später auch aus einer Automatisierung (z. B. n8n) aufrufen.
 ```
 Start Mac/, Start Windows/   Startdateien (wechseln nach programm/ und rufen "belege" auf)
 programm/
-  pyproject.toml, uv.lock    Abhängigkeiten (Python, Playwright, PyMuPDF)
+  pyproject.toml, uv.lock    Abhängigkeiten (Python, Playwright, PyMuPDF, keyring)
   tests/
   belegabruf/
     cli.py            Kommandozeile und Ablauf beim Doppelklick
     ablauf.py         Gerüst: prüfen, anmelden lassen, holen, abliefern
     quellen/          ein Baustein je Anbieter (Version 1: airbnb.py)
       basis.py        die feste Schnittstelle für Bausteine
-    ziele/            wohin Belege geliefert werden (Version 1: ordner.py)
+    ziele/            wohin Belege geliefert werden: ordner.py, sevdesk.py
     protokoll.py      Protokoll je Anbieter und Konto — entscheidet, was schon geholt ist
     pruefung.py       nie eine Anmelde-, 404- oder leere Seite als Beleg speichern
 ```
 
 Ein **Baustein (Quelle)** kann genau drei Dinge: `sitzung_pruefen()`, `anmelden_lassen()` und
 `belege_holen()`. Er speichert nichts selbst, sondern übergibt jeden Beleg an die **Ziele**. Das
-Ziel „ordner“ legt Dateien ab; weitere Ziele (z. B. Upload an eine Buchhaltungssoftware) kommen als
-eigene Datei in `ziele/` dazu, ohne dass sich die Quellen ändern.
+Ziel „ordner“ legt Dateien ab und ist immer dabei. Das Ziel „sevdesk“ lädt danach hoch, was laut
+Protokoll noch nicht in sevDesk ist. Weitere Ziele (z. B. Lexware Office) kommen als eigene Datei in
+`ziele/` dazu, ohne dass sich die Quellen ändern. Ziele mit API-Schlüssel lesen ihn nur über
+`keyring` und rufen nur die Aufrufe zum Hochladen auf.
 
 Tests (im Ordner `programm`): `uv run --group dev pytest`
 
@@ -222,4 +266,8 @@ Die GitHub Action baut das ZIP und hängt es an das Release.
 ## Offen
 
 - **Windows:** noch von niemandem getestet (Abnahmepunkt 5). Wer es ausprobiert, bitte Rückmeldung.
-- Weitere Bausteine und das Ziel „Upload an die Buchhaltung“ folgen in späteren Versionen.
+- **sevDesk:** Ob sevDesk einen Entwurf ganz ohne Betrag und Konto über die API annimmt, ist nicht
+  dokumentiert; das zeigt die erste echte neue Rechnung. Lehnt sevDesk ab, steht seine Meldung in der
+  Zusammenfassung und nichts geht verloren. Eine automatische Belegerkennung wie beim Mail-Eingang gibt
+  es über die API nicht.
+- Weitere Bausteine und Ziele (z. B. Lexware Office) folgen in späteren Versionen.

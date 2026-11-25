@@ -8,7 +8,8 @@
                                 Unbeaufsichtigt holen, öffnet nie ein Fenster
                                 (für spätere Automatisierung, z. B. n8n)
 
-Exit-Codes von "holen" und "pruefen": 0 alles gut, 2 Anmeldung nötig/abgelaufen, 1 Fehler.
+Exit-Codes von "holen" und "pruefen": 0 alles gut, 2 Anmeldung nötig/abgelaufen, nicht alles
+geholt oder nicht alles nach sevDesk hochgeladen (später noch einmal), 1 Fehler.
 """
 
 from __future__ import annotations
@@ -34,6 +35,8 @@ def _exit_code(ergebnisse: list) -> int:
     if "fehler" in status:
         return 1
     if status & {"anmeldung_noetig", "abgelaufen", "unvollstaendig"}:
+        return 2
+    if any(e.upload_fehler or e.nicht_hochgeladen or e.upload_unklar for e in ergebnisse):
         return 2
     return 0
 

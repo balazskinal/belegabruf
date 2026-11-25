@@ -41,12 +41,38 @@ class Konto:
         return f"{self.quelle} ({self.name})"
 
 
+#: Vorgabe für den Eintrag im Passwortspeicher des Betriebssystems: "Dienst/Konto".
+STANDARD_SCHLUESSEL = "belegabruf/sevdesk"
+#: Steuerregel des Entwurfs in sevDesk: 5 = Reverse Charge gem. §13b UStG (Airbnb sitzt in Irland).
+STANDARD_STEUERREGEL = "5"
+
+
+@dataclass
+class SevDeskEinstellung:
+    """Ziel sevDesk. Hier steht nie der Schlüssel selbst, nur wo er im
+    Passwortspeicher des Betriebssystems liegt (Schlüsselbund bzw.
+    Anmeldeinformationsverwaltung)."""
+
+    schluessel: str = STANDARD_SCHLUESSEL  # "Dienst/Konto"
+    steuerregel: str = STANDARD_STEUERREGEL
+
+    @property
+    def dienst_und_konto(self) -> tuple[str, str]:
+        dienst, _, konto = self.schluessel.partition("/")
+        return dienst.strip(), konto.strip()
+
+
 @dataclass
 class Einstellungen:
     belegordner: Path
     konten: list[Konto]
     ziele: list[str] = field(default_factory=lambda: ["ordner"])
     sichtbar: bool = False  # Abruf im sichtbaren Fenster (nur zur Fehlersuche)
+    sevdesk: SevDeskEinstellung = field(default_factory=SevDeskEinstellung)
+
+    @property
+    def sevdesk_an(self) -> bool:
+        return "sevdesk" in self.ziele
 
     def aktive_konten(self, quelle: str | None = None, konto: str | None = None) -> list[Konto]:
         return [
@@ -83,11 +109,26 @@ def laden(datei: Path | None = None) -> Einstellungen:
     ziele = roh.get("ziele") or ["ordner"]
     if isinstance(ziele, str):
         ziele = [ziele]
+    ziele = [str(z).strip().lower() for z in ziele]
+    if "ordner" not in ziele:  # Der Belegordner ist immer dabei.
+        ziele.insert(0, "ordner")
+    roh_sevdesk = roh.get("sevdesk") or {}
+    if not isinstance(roh_sevdesk, dict):
+        raise EinstellungsFehler("[sevdesk] muss ein Abschnitt sein.")
+    sevdesk = SevDeskEinstellung(
+        schluessel=str(roh_sevdesk.get("schluessel") or STANDARD_SCHLUESSEL).strip(),
+        steuerregel=str(roh_sevdesk.get("steuerregel") or STANDARD_STEUERREGEL).strip(),
+    )
+    dienst, konto = sevdesk.dienst_und_konto
+    if not dienst or not konto:
+        raise EinstellungsFehler(
+            f"[sevdesk] schluessel = \"{sevdesk.schluessel}\" muss die Form \"Dienst/Konto\" haben.")
     return Einstellungen(
         belegordner=belegordner,
         konten=konten,
-        ziele=[str(z).strip().lower() for z in ziele],
+        ziele=ziele,
         sichtbar=_wahrheitswert(roh.get("sichtbar"), False),
+        sevdesk=sevdesk,
     )
 
 
@@ -102,12 +143,13 @@ def als_text(einst: Einstellungen) -> str:
         "# Du kannst diese Datei mit jedem Texteditor ändern oder einfach noch einmal",
         "# \"Einrichten\" doppelklicken. Zeilen mit # am Anfang sind nur Erklärungen.",
         "# Hier stehen keine Passwörter — angemeldet wird immer im Browserfenster.",
+        "# Der sevDesk-Schlüssel liegt im Passwortspeicher des Betriebssystems, nie hier.",
         "",
         "# Wohin die Belege gespeichert werden.",
         f"belegordner = {_toml_text(str(einst.belegordner))}",
         "",
-        "# Wohin die Belege geliefert werden. Version 1 kennt nur \"ordner\"",
-        "# (der Belegordner oben). Später kommt \"sevdesk\" dazu.",
+        "# Wohin die Belege geliefert werden: \"ordner\" (der Belegordner oben, immer dabei)",
+        "# und auf Wunsch \"sevdesk\" (Upload als Entwurf, siehe Abschnitt [sevdesk] unten).",
         "ziele = [" + ", ".join(_toml_text(z) for z in einst.ziele) + "]",
         "",
         "# Abruf im sichtbaren Browserfenster? Nur zur Fehlersuche: \"ja\".",
@@ -127,6 +169,16 @@ def als_text(einst: Einstellungen) -> str:
         ]
         for schluessel, wert in konto.optionen.items():
             zeilen.append(f"{schluessel} = {_toml_text(str(wert))}")
+    zeilen += [
+        "",
+        "# Nur wichtig, wenn bei ziele \"sevdesk\" steht.",
+        "# schluessel: wo der API-Schlüssel im Passwortspeicher liegt, als \"Dienst/Konto\"",
+        "#   (nicht der Schlüssel selbst!). Eingeben oder austauschen über \"Einrichten\".",
+        "# steuerregel: wird im Entwurf eingetragen; 5 = Reverse Charge gem. §13b UStG.",
+        "[sevdesk]",
+        f"schluessel = {_toml_text(einst.sevdesk.schluessel)}",
+        f"steuerregel = {_toml_text(einst.sevdesk.steuerregel)}",
+    ]
     return "\n".join(zeilen) + "\n"
 
 

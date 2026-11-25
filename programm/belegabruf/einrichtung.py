@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from belegabruf import einstellungen, pfade, quellen
-from belegabruf.einstellungen import Einstellungen, Konto
+from belegabruf.einstellungen import Einstellungen, Konto, SevDeskEinstellung
 
 
 def _frage(text: str, standard: str = "") -> str:
@@ -96,14 +96,96 @@ def einrichten() -> Einstellungen:
     print("\nWo sollen die Belege hin? (Ordner wird angelegt, falls es ihn noch nicht gibt.)")
     ordner = Path(_frage("Belegordner", standard_ordner)).expanduser()
 
+    sevdesk_an, sevdesk_einst = _sevdesk_abfragen(alt)
+
     neu = Einstellungen(
         belegordner=ordner,
         konten=konten,
-        ziele=alt.ziele if alt else ["ordner"],
+        ziele=["ordner", "sevdesk"] if sevdesk_an else ["ordner"],
         sichtbar=alt.sichtbar if alt else False,
+        sevdesk=sevdesk_einst,
     )
     ordner.mkdir(parents=True, exist_ok=True)
     datei = einstellungen.speichern(neu)
     print(f"\n✓ Gespeichert in {datei}")
     print("  (Die Datei kannst du auch mit einem Texteditor ändern.)")
     return neu
+
+
+# ── sevDesk ──────────────────────────────────────────────────────────────────
+
+
+def _schluessel_eingeben(dienst: str, konto: str) -> bool:
+    """Fragt den Schlüssel verdeckt ab (er erscheint nicht auf dem Bildschirm) und legt
+    ihn in den Passwortspeicher. Er wird nie in eine Datei geschrieben."""
+    import getpass
+
+    from belegabruf.ziele import sevdesk
+
+    print(
+        "\n  Den API-Schlüssel findest du in sevDesk unter Einstellungen → Benutzer → API-Token.\n"
+        "  Füge ihn hier ein und drück Enter. Man sieht beim Einfügen nichts — das ist Absicht."
+    )
+    try:
+        wert = getpass.getpass("  API-Schlüssel (leer = abbrechen): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        wert = ""
+    if not wert:
+        print("  Kein Schlüssel eingegeben.")
+        return False
+    sevdesk.schluessel_speichern(dienst, konto, wert)
+    print("  ✓ Im Passwortspeicher deines Rechners abgelegt.")
+    return True
+
+
+def _sevdesk_abfragen(alt: Einstellungen | None) -> tuple[bool, SevDeskEinstellung]:
+    from belegabruf.ziele import sevdesk
+
+    einst = alt.sevdesk if alt else SevDeskEinstellung()
+    vorher_an = bool(alt and alt.sevdesk_an)
+    print(
+        "\nSollen die Rechnungen zusätzlich als Entwurf nach sevDesk hochgeladen werden?\n"
+        "  Eingetragen werden nur Datum, Rechnungsnummer und Lieferant; Betrag und Konto ergänzt\n"
+        "  du in sevDesk. Das Programm lädt dort nur hoch — es liest, ändert oder löscht nichts.\n"
+        "  Alles, was bis jetzt geholt ist, gilt dann als schon in sevDesk und wird nicht hochgeladen."
+    )
+    if not _ja("Nach sevDesk hochladen?", vorher_an):
+        dienst, konto = einst.dienst_und_konto
+        if vorher_an and dienst == "belegabruf" and sevdesk.schluessel_vorhanden(dienst, konto):
+            if _ja("  Den sevDesk-Schlüssel aus dem Passwortspeicher löschen?", True):
+                sevdesk.schluessel_loeschen(dienst, konto)
+                print("  ✓ Gelöscht.")
+        return False, einst
+
+    print(
+        "\n  Der Schlüssel liegt im Passwortspeicher deines Rechners (Mac: Schlüsselbund, Windows:\n"
+        "  Anmeldeinformationsverwaltung), nie in einer Datei. Unter welchem Eintrag? Enter übernimmt\n"
+        "  den Vorschlag. Hast du schon einen Eintrag, gib ihn als Dienst/Konto ein."
+    )
+    while True:
+        eintrag = _frage("  Eintrag (Dienst/Konto)", einst.schluessel)
+        dienst, _, konto = eintrag.partition("/")
+        if dienst.strip() and konto.strip():
+            break
+        print("  Bitte in der Form Dienst/Konto, z. B. belegabruf/sevdesk.")
+    einst = SevDeskEinstellung(schluessel=f"{dienst.strip()}/{konto.strip()}", steuerregel=einst.steuerregel)
+    dienst, konto = einst.dienst_und_konto
+
+    if sevdesk.schluessel_vorhanden(dienst, konto):
+        print("  Unter diesem Eintrag liegt schon ein Schlüssel.")
+        if _ja("  Austauschen?", False):
+            _schluessel_eingeben(dienst, konto)
+    elif not _schluessel_eingeben(dienst, konto):
+        print("  Ohne Schlüssel wird nichts hochgeladen. Du kannst ihn später über „Einrichten“ eingeben.")
+        return True, einst
+
+    print("  Prüfe den Schlüssel bei sevDesk …")
+    try:
+        meldung = sevdesk.schluessel_pruefen(sevdesk.Verbindung(sevdesk.schluessel_lesen(dienst, konto)))
+    except Exception as fehler:  # noqa: BLE001
+        meldung = f"Der Passwortspeicher ließ sich nicht lesen ({type(fehler).__name__})."
+    if meldung:
+        print(f"  ✗ {meldung}\n  Bitte noch einmal „Einrichten“ und den Schlüssel austauschen.")
+    else:
+        print("  ✓ Der Schlüssel funktioniert.")
+    return True, einst

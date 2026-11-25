@@ -1,7 +1,8 @@
 """Verzeichnis der Ziele (wohin Belege geliefert werden).
 
-Version 1: nur ``ordner``. Version 2 bringt ``sevdesk`` (Upload per API) als
-weitere Datei in diesem Ordner — Quellen und Gerüst bleiben dabei unverändert.
+``ordner`` legt Dateien ab (immer dabei). ``sevdesk`` (Upload als Entwurf per API,
+siehe sevdesk.py) läuft nach dem Abruf über das Protokoll und steht deshalb nicht in
+dieser Liste — Quellen bleiben dabei unverändert.
 """
 
 from __future__ import annotations

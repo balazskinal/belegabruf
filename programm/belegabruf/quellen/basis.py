@@ -59,6 +59,13 @@ class Ergebnis:
     hinweise: list[str] = field(default_factory=list)
     fehler: str = ""
     neue_dateien: list[str] = field(default_factory=list)
+    # Ziel sevDesk (nur wenn eingeschaltet)
+    sevdesk: bool = False
+    hochgeladen: int = 0  # in diesem Lauf als Entwurf hochgeladen
+    nicht_hochgeladen: int = 0  # warten noch, der nächste Lauf versucht es erneut
+    upload_fehler: str = ""  # Meldung von sevDesk im Klartext (nie mit Schlüssel)
+    upload_unklar: list[str] = field(default_factory=list)  # Rechnungsnummern: Antwort blieb aus
+    als_schon_markiert: int = 0  # beim Einschalten als „schon in sevDesk“ markiert
 
     def als_dict(self) -> dict:
         return dict(self.__dict__)

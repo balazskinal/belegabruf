@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from typing import Callable
 
@@ -11,6 +12,7 @@ from belegabruf.browser import BrowserFehlt, ProfilBelegt
 from belegabruf.einstellungen import Einstellungen, Konto
 from belegabruf.protokoll import Protokoll, altes_protokoll_uebernehmen
 from belegabruf.quellen.basis import Beleg, Ergebnis, Quelle, SitzungAbgelaufen, Umgebung
+from belegabruf.ziele import sevdesk
 
 Melden = Callable[[str], None]
 
@@ -52,6 +54,84 @@ def anmelden(konto: Konto, melden: Melden) -> bool:
         return False
 
 
+def sevdesk_vorbereiten(einst: Einstellungen, protokoll: Protokoll) -> int:
+    """Ziel sevDesk ein- oder ausgeschaltet? Beim Einschalten gilt alles, was bis
+    jetzt geholt ist, als schon in sevDesk (wurde von Hand hochgeladen). Gibt die
+    Zahl der so markierten Rechnungen zurück."""
+    if not einst.sevdesk_an:
+        protokoll.sevdesk_schalten(False)
+        return 0
+    if protokoll.sevdesk_war_an():
+        return 0
+    anzahl = protokoll.als_schon_in_sevdesk_markieren()
+    protokoll.sevdesk_schalten(True)
+    return anzahl
+
+
+def hochladen(einst: Einstellungen, protokoll: Protokoll, erg: Ergebnis, melden: Melden,
+              verbindung: sevdesk.Verbindung | None = None) -> None:
+    """Lädt alle Rechnungen hoch, die noch nicht in sevDesk sind — neue und solche,
+    bei denen es letztes Mal nicht geklappt hat. Hält beim ersten Fehler an: Was
+    übrig bleibt, versucht der nächste Lauf."""
+    erg.sevdesk = True
+    offen = protokoll.upload_offen()
+    if not offen:
+        return
+    if verbindung is None:
+        try:
+            verbindung = sevdesk.Verbindung(sevdesk.schluessel_lesen(*einst.sevdesk.dienst_und_konto))
+        except sevdesk.SchluesselFehlt as fehler:
+            erg.upload_fehler = str(fehler)
+            erg.nicht_hochgeladen = len(offen)
+            return
+        except Exception as fehler:  # noqa: BLE001 - Passwortspeicher gesperrt o. Ä.
+            erg.upload_fehler = (f"Der Passwortspeicher ließ sich nicht lesen ({type(fehler).__name__}). "
+                                 "Beim nächsten Start noch einmal versuchen.")
+            erg.nicht_hochgeladen = len(offen)
+            return
+    ziel = sevdesk.SevDesk(verbindung, einst.sevdesk.steuerregel)
+    ohne_datei = 0
+    melden(f"{len(offen)} Rechnung(en) werden nach sevDesk hochgeladen …")
+    for schluessel in offen:
+        zeile = protokoll.eintrag(schluessel) or {}
+        datei = protokoll.lokale_datei(schluessel)
+        if datei is None or not datei.exists():
+            ohne_datei += 1
+            continue
+        nummer = zeile.get("rechnungsnummer") or ""
+        try:
+            datum = date.fromisoformat(zeile.get("rechnungsdatum") or "")
+        except ValueError:
+            datum = None
+        try:
+            ziel.hochladen(
+                quelle=zeile.get("quelle") or protokoll.quelle, dateiname=datei.name,
+                inhalt=datei.read_bytes(), rechnungsdatum=datum, rechnungsnummer=nummer,
+                gutschrift="_Gutschrift" in datei.name,
+                vor_entwurf=lambda: protokoll.ziel_ergaenzen(schluessel, "sevdesk-unklar"),
+            )
+        except sevdesk.Abgelehnt as fehler:
+            protokoll.ziel_entfernen(schluessel, "sevdesk-unklar")  # sicher nicht angelegt
+            erg.upload_fehler = f"Rechnung {nummer}: {fehler}"
+            break
+        except sevdesk.Uebertragungsfehler as fehler:
+            if fehler.vielleicht_angekommen:
+                erg.upload_unklar.append(nummer)
+            else:
+                protokoll.ziel_entfernen(schluessel, "sevdesk-unklar")
+            erg.upload_fehler = f"Rechnung {nummer}: {fehler}"
+            break
+        protokoll.ziel_entfernen(schluessel, "sevdesk-unklar")
+        protokoll.ziel_ergaenzen(schluessel, "sevdesk")
+        erg.hochgeladen += 1
+    erg.nicht_hochgeladen = len(protokoll.upload_offen())
+    if ohne_datei:
+        erg.hinweise.append(
+            f"{ohne_datei} Rechnung(en) sind noch nicht in sevDesk, liegen aber nicht mehr im Belegordner. "
+            "E → „Fehlende Dateien neu holen“, dann werden sie hochgeladen."
+        )
+
+
 def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool = False) -> Ergebnis:
     """Holt die Belege eines Kontos. Stürzt nie ab, sondern meldet im Ergebnis.
 
@@ -60,8 +140,11 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
     """
     uebernahme(einst)
     protokoll = protokoll_fuer(einst, konto)
+    markiert = sevdesk_vorbereiten(einst, protokoll)
     try:
-        ziele = [ziel_verzeichnis.erstellen(name, einst.belegordner) for name in einst.ziele]
+        # Lokale Ziele (Ordner) beim Abruf; sevDesk lädt danach hoch, was noch fehlt.
+        ziele = [ziel_verzeichnis.erstellen(name, einst.belegordner)
+                 for name in einst.ziele if name != "sevdesk"]
         quelle = quelle_fuer(konto)
     except KeyError as fehler:
         return Ergebnis(konto.quelle, konto.name, status="fehler", fehler=str(fehler).strip("'\""))
@@ -82,7 +165,9 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
             if ort is not None and lokal is None:
                 lokal = ort
         if protokoll.eintrag(beleg.schluessel) is None or beleg.art == "rechnung":
-            protokoll.eintragen(beleg, lokal, [z.name for z in ziele])
+            # Schon in sevDesk? Das bleibt so, auch wenn die Datei neu geholt wird — nie doppelt.
+            bisher = [z for z in protokoll.ziele_von(beleg.schluessel) if z.startswith("sevdesk")]
+            protokoll.eintragen(beleg, lokal, [z.name for z in ziele] + bisher)
         return [str(lokal)] if lokal else []
 
     umgebung = Umgebung(
@@ -102,6 +187,13 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
         ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=f"{type(fehler).__name__}: {str(fehler).splitlines()[0][:200]}")
     if ergebnis.status in {"ok", "unvollstaendig"}:
         zustand.lauf_merken(konto.quelle, konto.name)
+    if einst.sevdesk_an:
+        ergebnis.als_schon_markiert = markiert
+        try:
+            hochladen(einst, protokoll, ergebnis, melden)
+        except Exception as fehler:  # noqa: BLE001 - nie abstürzen, immer melden
+            ergebnis.upload_fehler = f"Hochladen abgebrochen ({type(fehler).__name__})."
+            ergebnis.nicht_hochgeladen = len(protokoll.upload_offen())
     fehlen = len(protokoll.fehlende("rechnung"))
     if fehlen:
         ergebnis.hinweise.append(
@@ -136,6 +228,25 @@ def zusammenfassung(ergebnisse: list[Ergebnis], belegordner: Path) -> str:
                     f"  Kontrolle: Monatsübersichten nennen {erg.erwartet} Rechnungen, "
                     f"davon geholt: {erg.vorhanden} — {passt}"
                 )
+        if erg.sevdesk:
+            if erg.als_schon_markiert:
+                zeilen.append(f"  sevDesk eingeschaltet: {erg.als_schon_markiert} schon geholte Rechnung(en) "
+                              "gelten als schon in sevDesk und werden nicht hochgeladen.")
+            if erg.hochgeladen:
+                zeilen.append(f"  sevDesk: {erg.hochgeladen} als Entwurf hochgeladen "
+                              "(Betrag und Konto dort ergänzen)")
+            if erg.nicht_hochgeladen:
+                zeilen.append(f"  sevDesk: {erg.nicht_hochgeladen} noch nicht hochgeladen — liegen im Belegordner, "
+                              "der nächste Lauf versucht es erneut")
+            if not erg.hochgeladen and not erg.nicht_hochgeladen and not erg.upload_unklar:
+                zeilen.append("  sevDesk: nichts Neues hochzuladen")
+            if erg.upload_fehler:
+                zeilen.append(f"  ! sevDesk: {erg.upload_fehler}")
+            for nummer in erg.upload_unklar:
+                zeilen.append(
+                    f"  ! sevDesk: Bei Rechnung {nummer} kam keine Antwort. Ob der Entwurf angelegt ist, ist unklar — "
+                    "bitte in sevDesk nachsehen. Fehlt er, von Hand hochladen. (Das Programm schickt ihn nicht "
+                    "noch einmal, damit er nicht doppelt ankommt.)")
         for abw in erg.abweichungen:
             zeilen.append(f"  ! {abw}")
         for hinweis in erg.hinweise:
