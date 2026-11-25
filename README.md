@@ -1,8 +1,10 @@
 # Belegabruf
 
 Holt Rechnungen, die es nur im eingeloggten Konto eines Anbieters gibt, per Doppelklick auf den
-eigenen Rechner. **Version 1 kann Airbnb:** die Rechnungen über die Airbnb-Servicegebühren für
-Gastgeber, jede Buchung als eigenes PDF.
+eigenen Rechner. Es kann:
+
+- **Airbnb:** die Rechnungen über die Airbnb-Servicegebühren für Gastgeber, jede Buchung als eigenes PDF.
+- **Skool:** die Rechnungen für bezahlte Mitgliedschaften in Skool-Communities (siehe [Skool](#skool)).
 
 **Das ist kein Dienst — jeder betreibt seine eigene Kopie.** Niemand außer dir sieht deine
 Anmeldung oder deine Belege. Es gibt keinen Server, kein Konto bei uns, keinen Support-Vertrag.
@@ -77,11 +79,28 @@ Administratorrechte nötig.
 4. Ein schwarzes Fenster geht auf und lädt alles Nötige (ein Hilfsprogramm namens *uv*, Python und
    einen eigenen Browser). Das dauert beim ersten Mal ein paar Minuten.
 5. Dann kommen ein paar Fragen. **Enter übernimmt jeweils den Vorschlag in [Klammern].**
-   - Welche Anbieter (zurzeit nur Airbnb)
+   - Welche Anbieter (Airbnb, Skool)
    - Ein Name für dein Konto — nur für dich, z. B. „privat“. Hast du mehrere Airbnb-Konten
      (z. B. einen Zugang als Co-Gastgeber), kannst du mehrere eintragen; jedes bekommt seine eigene Anmeldung.
    - Der Belegordner (Vorschlag: `Dokumente/Belege`)
 6. Zum Schluss öffnet sich das Airbnb-Anmeldefenster. Melde dich an. Fertig.
+
+## Skool
+
+Skool zeigt die Rechnungen unter *Einstellungen → Zahlungsverlauf*, je Zahlung eine Rechnung. Einen
+PDF-Knopf gibt es dort nicht: Das Programm öffnet jede Rechnung im (unsichtbaren) Browser, prüft, dass
+Überschrift und Gesamtbetrag da sind, und speichert sie selbst als PDF:
+`skool/<Jahr>/<Datum>_<Community>_<Rechnungs-ID>.pdf`. Bist du Mitglied in mehreren bezahlten
+Communities, kommen alle mit; die Community steht im Dateinamen. Am Ende vergleicht es, ob so viele
+Rechnungen geholt sind, wie der Zahlungsverlauf nennt.
+
+Das Programm **liest nur und lädt herunter**. Es klickt bei Skool nichts an — weder
+Zahlungsmethoden noch Kündigung.
+
+**Anmeldung mit Google:** Wer sich bei Skool sonst „Mit Google“ anmeldet, wird im Anmeldefenster des
+Programms womöglich von Google blockiert („Dieser Browser oder diese App ist möglicherweise nicht
+sicher“). Dann bei Skool mit **E-Mail und Passwort** anmelden. Hast du noch kein Skool-Passwort,
+leg vorher in deinem normalen Browser eins fest (bei der Skool-Anmeldung über „Passwort vergessen“).
 
 ## Benutzen
 
@@ -180,7 +199,7 @@ programm/
   belegabruf/
     cli.py            Kommandozeile und Ablauf beim Doppelklick
     ablauf.py         Gerüst: prüfen, anmelden lassen, holen, abliefern
-    quellen/          ein Baustein je Anbieter (Version 1: airbnb.py)
+    quellen/          ein Baustein je Anbieter: airbnb.py, skool.py
       basis.py        die feste Schnittstelle für Bausteine
     ziele/            wohin Belege geliefert werden (Version 1: ordner.py)
     protokoll.py      Protokoll je Anbieter und Konto — entscheidet, was schon geholt ist
@@ -222,4 +241,7 @@ Die GitHub Action baut das ZIP und hängt es an das Release.
 ## Offen
 
 - **Windows:** noch von niemandem getestet (Abnahmepunkt 5). Wer es ausprobiert, bitte Rückmeldung.
+- **Skool:** Der erste echte Lauf steht noch aus; getestet ist mit nachgebauten Seiten. Ob der
+  Zahlungsverlauf bei sehr vielen Zahlungen nachlädt, ist ungeprüft — das Programm scrollt dafür nach
+  unten und vergleicht am Ende die Anzahl.
 - Weitere Bausteine und das Ziel „Upload an die Buchhaltung“ folgen in späteren Versionen.

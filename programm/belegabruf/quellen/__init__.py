@@ -15,9 +15,16 @@ def _airbnb():
     return Airbnb
 
 
+def _skool():
+    from belegabruf.quellen.skool import Skool
+
+    return Skool
+
+
 # Kurzname -> (Anzeigename, Lader). Geladen wird erst, wenn gebraucht.
 QUELLEN = {
     "airbnb": ("Airbnb", _airbnb),
+    "skool": ("Skool", _skool),
 }
 
 
