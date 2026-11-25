@@ -84,6 +84,8 @@ def start() -> int:
             print("  (alten Ordner belegabruf-v… löschen, neues ZIP auspacken — Einstellungen, Anmeldungen\n   und Protokolle bleiben erhalten.)")
 
         for k in konten:
+            if k.quelle != "airbnb":  # nur Airbnb zeigt bloß die letzten 12 Monate
+                continue
             zuletzt = zustand.zu_lange_her(k.quelle, k.name)
             if zuletzt:
                 print(

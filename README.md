@@ -1,10 +1,15 @@
 # Belegabruf
 
 Holt Rechnungen, die es nur im eingeloggten Konto eines Anbieters gibt, per Doppelklick auf den
-eigenen Rechner. **Es kann Airbnb:** die Rechnungen über die Airbnb-Servicegebühren für
-Gastgeber, jede Buchung als eigenes PDF. **Seit Version 2** verschickt es neue Rechnungen auf Wunsch
-zusätzlich **per Mail** — z. B. an die Belegadresse deines Buchhaltungsprogramms oder an deine
-Steuerberatung.
+eigenen Rechner. Es kann:
+
+- **Airbnb:** die Rechnungen über die Airbnb-Servicegebühren für Gastgeber, jede Buchung als eigenes PDF.
+- **Skool:** die Rechnungen für bezahlte Mitgliedschaften in Skool-Communities (siehe [Skool](#skool)).
+- **Xentra:** die Rechnungen für das Xentra-Abonnement und Provisionen (siehe [Xentra](#xentra)).
+
+**Seit Version 1.3** verschickt es neue Rechnungen auf Wunsch zusätzlich **per Mail** — z. B. an die
+Belegadresse deines Buchhaltungsprogramms oder an deine Steuerberatung. Verschickt wird über **dein
+eigenes Postfach**; einen Versanddienst bringt das Programm nicht mit.
 
 **Das ist kein Dienst — jeder betreibt seine eigene Kopie.** Niemand außer dir sieht deine
 Anmeldung oder deine Belege. Es gibt keinen Server, kein Konto bei uns, keinen Support-Vertrag.
@@ -83,12 +88,44 @@ Administratorrechte nötig.
 4. Ein schwarzes Fenster geht auf und lädt alles Nötige (ein Hilfsprogramm namens *uv*, Python und
    einen eigenen Browser). Das dauert beim ersten Mal ein paar Minuten.
 5. Dann kommen ein paar Fragen. **Enter übernimmt jeweils den Vorschlag in [Klammern].**
-   - Welche Anbieter (zurzeit nur Airbnb)
+   - Welche Anbieter (Airbnb, Skool, Xentra)
    - Ein Name für dein Konto — nur für dich, z. B. „privat“. Hast du mehrere Airbnb-Konten
      (z. B. einen Zugang als Co-Gastgeber), kannst du mehrere eintragen; jedes bekommt seine eigene Anmeldung.
    - Der Belegordner (Vorschlag: `Dokumente/Belege`)
    - Ob die Rechnungen auch per Mail verschickt werden sollen (Vorschlag: nein; siehe unten)
 6. Zum Schluss öffnet sich das Airbnb-Anmeldefenster. Melde dich an. Fertig.
+
+## Skool
+
+Skool zeigt die Rechnungen unter *Einstellungen → Zahlungsverlauf*, je Zahlung eine Rechnung. Einen
+PDF-Knopf gibt es dort nicht: Das Programm öffnet jede Rechnung im (unsichtbaren) Browser, prüft, dass
+Überschrift und Gesamtbetrag da sind, und speichert sie selbst als PDF:
+`skool/<Jahr>/<Datum>_<Community>_<Rechnungs-ID>.pdf`. Bist du Mitglied in mehreren bezahlten
+Communities, kommen alle mit; die Community steht im Dateinamen. Am Ende vergleicht es, ob so viele
+Rechnungen geholt sind, wie der Zahlungsverlauf nennt. Das PDF kommt immer im **hellen Design**
+heraus (gut zum Drucken und für die Texterkennung), auch wenn dein Skool-Konto auf Dunkel steht — das
+gilt nur für den Ausdruck, deine Einstellung bei Skool bleibt, wie sie ist.
+
+Das Programm **liest nur und lädt herunter**. Es klickt bei Skool nichts an — weder
+Zahlungsmethoden noch Kündigung.
+
+**Anmeldung mit Google:** Wer sich bei Skool sonst „Mit Google“ anmeldet, wird im Anmeldefenster des
+Programms womöglich von Google blockiert („Dieser Browser oder diese App ist möglicherweise nicht
+sicher“). Dann bei Skool mit **E-Mail und Passwort** anmelden. Hast du noch kein Skool-Passwort,
+leg vorher in deinem normalen Browser eins fest (bei der Skool-Anmeldung über „Passwort vergessen“).
+## Xentra
+
+Xentra zeigt die Rechnungen unter *Abrechnung → Rechnungen*: Datum, Beschreibung, Betrag, Status und
+ein Knopf „PDF herunterladen“. Das Programm drückt diesen Knopf für jede Zeile — wie du es mit der
+Maus tun würdest —, lädt das PDF und speichert es als
+`xentra/<Jahr>/<Datum>_xentra_<Rechnungsnummer>.pdf`. Die Beschreibung kommt absichtlich nicht in den
+Dateinamen (bei Provisionen stehen dort Gastnamen). Am Ende vergleicht es, ob so viele Rechnungen
+vorliegen, wie die Liste zeigt.
+
+Das Programm **liest nur und lädt herunter**. Angeklickt werden nur der Reiter „Rechnungen“ und die
+Knöpfe „PDF herunterladen“ — nichts an Abo, Zahlungsmethode oder Einstellungen. Damit es merkt, was
+schon geholt ist, drückt es bei jedem Lauf alle Download-Knöpfe einmal; geladen und gespeichert wird
+aber nur, was neu ist.
 
 ## Benutzen
 
@@ -118,6 +155,11 @@ Auf Wunsch verschickt das Programm jede **neu geholte** Rechnung als **eigene Ma
 Anhang** — an eine oder mehrere Adressen, je Rechnung und Adresse eine Mail. Betreff zum Beispiel
 „Beleg Airbnb AIUC-… vom 27.10.2026“. So kommt die Rechnung überall an, wo es eine Belegadresse gibt
 (Buchhaltungsprogramm, Steuerberatung), und wird dort gelesen wie jede andere Belegmail.
+
+**Das Programm bringt keinen Versanddienst mit.** Verschickt wird über **dein eigenes Postfach** —
+genauso, als würdest du die Mail selbst in deinem Mailprogramm schreiben. Deshalb fragt die Einrichtung
+nach den Zugangsdaten deines Postfachs. Die Mails liegen danach je nach Anbieter auch in deinem Ordner
+„Gesendet“.
 
 **Einschalten:** „Einrichten“ doppelklicken und bei „Per Mail verschicken?“ mit **j** antworten.
 Dann fragt es nach den Angaben deines Mailkontos — die findest du bei deinem Mailanbieter unter
@@ -202,6 +244,18 @@ Einstellungen, Anmeldungen, Protokolle und Belege bleiben dabei erhalten — sie
 Programmordner.
 Ein automatisches Selbst-Update gibt es bewusst nicht.
 
+## Was neu ist
+
+- **1.3.0** — Neue Rechnungen auf Wunsch zusätzlich **per Mail** verschicken (über dein eigenes
+  Postfach, siehe [Versand per Mail](#versand-per-mail)). Beim Update einmal „Einrichten“
+  doppelklicken; die Frage nach dem Mailversand steht auf „nein“, bis du sie mit „j“ beantwortest.
+- **1.2.0** — Zwei neue Anbieter: **Xentra** (Abo- und Provisionsrechnungen) und **Skool**
+  (Rechnungen für bezahlte Communities, immer als helles PDF). Beim Update einmal „Einrichten“
+  doppelklicken und die neuen Anbieter dazunehmen.
+- **1.1.0** — Das Protokoll entscheidet, was schon geholt ist (nicht mehr der Belegordner); es liegt
+  bei den Einstellungen. Neu: „Fehlende Dateien neu holen“.
+- **1.0.0** — Erste Version: Airbnb-Rechnungen per Doppelklick.
+
 ## Rechtliches
 
 - Das Programm ruft **deine eigenen Rechnungen aus deinem eigenen Konto** ab, so wie du es von Hand
@@ -242,7 +296,7 @@ programm/
   belegabruf/
     cli.py            Kommandozeile und Ablauf beim Doppelklick
     ablauf.py         Gerüst: prüfen, anmelden lassen, holen, abliefern
-    quellen/          ein Baustein je Anbieter (Version 1: airbnb.py)
+    quellen/          ein Baustein je Anbieter: airbnb.py, skool.py, xentra.py
       basis.py        die feste Schnittstelle für Bausteine
     ziele/            wohin Belege geliefert werden: ordner.py, mail.py
     protokoll.py      Protokoll je Anbieter und Konto — entscheidet, was schon geholt ist
