@@ -51,6 +51,36 @@ Die Bedienseite zeigt den Zustand und erkennt die Anmeldung von selbst. Abruf un
 unsichtbar im Hintergrund. Die Bedienseite selbst läuft als App-Fenster (ohne Adressleiste) mit einem
 eigenen, leeren Profil (`profile/_bedienseite`).
 
+## Nachtrag 25.11.2026: Anmerkungen aus der Neuinstallation (Balazs)
+
+Balazs hat 2.0.0 als komplette Neuinstallation getestet. Drei Anmerkungen ändern Entscheidungen bzw.
+die Datenhaltung:
+
+1. **Kontoname optional.** Ein Konto braucht nur den Anbieter. Ein Name ist erst Pflicht, wenn es beim
+   selben Anbieter ein zweites Konto gibt (Datei, Oberfläche und Terminal-Einrichtung prüfen gleich).
+   Dafür trennt das Programm **Kennung** und **Name**: An der Kennung hängen Browserprofil (Anmeldung),
+   Protokoll und Zustand; der Name ist nur Anzeige. Ein Konto ohne Namen hat die Kennung `standard` und
+   heißt in der Anzeige nur „Airbnb“. Bei bisherigen Konten mit Namen sind Kennung und Name gleich —
+   Profil- und Protokollpfade ändern sich nicht. Wird ein Konto umbenannt (z. B. das bisher namenlose,
+   wenn ein zweites dazukommt), behält es seine Kennung; die Einstellungsdatei schreibt sie dann als
+   `kennung = "…"` dazu. Sonst ginge mit dem Umbenennen die Anmeldung verloren und das Protokoll
+   begänne von vorn (Rechnungen kämen doppelt).
+2. **Zwei Reiter** statt einer langen Seite: „Belege holen“ (Konten mit Anmeldestatus, Anmelden/Prüfen,
+   Holen mit Fortschritt, Zusammenfassung) und „Einstellungen“ (Belegordner, Konten, Mail, Passwort).
+   Erster Start ohne Konten öffnet „Einstellungen“, sonst „Belege holen“. Wechsel jederzeit; während
+   eines Vorgangs ist nur Speichern gesperrt. Ohne Framework, die CSP mit Nonce bleibt; Tastatur nach
+   WAI-ARIA (Tabs mit Pfeiltasten, Pos1/Ende).
+3. **Ablage nach Monat wählbar:** Einstellung `ablage = "jahr"` (Standard, wie bisher:
+   `<anbieter>/<JJJJ>/`) oder `"monat"` (`<anbieter>/<JJJJ>/<MM>/`), maßgeblich ist das Rechnungsdatum;
+   der Dateiname bleibt mit Datum vorne. Die Umstellung gilt nur für neue Belege — nichts wird
+   verschoben. Der Duplikatschutz hängt weiter am Protokoll (Schlüssel), nicht am Pfad; das Protokoll
+   speichert je Beleg den Pfad, unter dem er abgelegt wurde. Die **Airbnb-Monatsübersichten** bleiben in
+   `airbnb/kontrolle/`: Sie heißen schon `<JJJJ-MM>_…`, sind Kontrollberichte und keine Belege, und ein
+   Unterordner je Monat mit genau einer Datei brächte nichts.
+
+Die übrigen Anmerkungen (Haken „Belege holen“, Einrichtung ohne Headless Shell, Rückmeldung am
+Speichern-Knopf, Absender vorbelegt, Port springt mit der Verschlüsselung) ändern keine Entscheidung.
+
 ## Folgen
 
 Windows-Test ist Pflicht, bevor 2.0.0 veröffentlicht wird.

@@ -29,6 +29,7 @@ Anmeldung oder deine Belege. Es gibt keinen Server, kein Konto bei uns, keinen S
 3. Danach holt es alles allein und unsichtbar, in ruhigem, menschlichem Tempo:
    - die **Monatsübersichten** der letzten 12 Monate → Ordner `airbnb/kontrolle/`
    - jede **Einzelrechnung** daraus → `airbnb/<Jahr>/<Rechnungsdatum>_<Buchungscode>_<Rechnungsnummer>.pdf`
+     (auf Wunsch nach Jahr und Monat: `airbnb/<Jahr>/<Monat>/…`, Einstellung „Unterordner“)
 4. Am Ende steht eine Zusammenfassung: wie viele neu, wie viele schon da, und ob die Anzahl zu den
    Monatsübersichten passt.
 
@@ -89,16 +90,21 @@ Administratorrechte nötig.
      Informationen“** und dann **„Trotzdem ausführen“** klicken.
 4. Ein schwarzes Fenster geht auf und lädt alles Nötige (ein Hilfsprogramm namens *uv*, Python und
    einen eigenen Browser). Das dauert beim ersten Mal ein paar Minuten.
-5. Dann öffnet sich das Fenster **„Belegabruf“**. Dort unter **Einstellungen**:
-   - den **Belegordner** (Vorschlag: `Dokumente/Belege`),
-   - deine **Konten**: Anbieter (Airbnb, Skool, Xentra) und ein Name nur für dich, z. B. „privat“. Hast du
-     mehrere Konten beim selben Anbieter (z. B. einen Zugang als Co-Gastgeber), trag sie einzeln ein —
-     jedes bekommt seine eigene Anmeldung,
+5. Dann öffnet sich das Fenster **„Belegabruf“** mit den beiden Reitern **„Belege holen“** und
+   **„Einstellungen“**. Beim ersten Start ist „Einstellungen“ offen. Dort:
+   - den **Belegordner** (Vorschlag: `Dokumente/Belege`) und darunter die **Unterordner**: nach Jahr
+     (wie bisher) oder nach Jahr und Monat. Das gilt für neue Belege; bereits abgelegte bleiben, wo sie
+     sind,
+   - deine **Konten**: den Anbieter (Airbnb, Skool, Xentra). Ein Name ist erst nötig, wenn du beim selben
+     Anbieter mehrere Konten hast (z. B. einen Zugang als Co-Gastgeber) — dann bekommt jedes einen Namen
+     nur für dich und seine eigene Anmeldung. Ohne Haken bei **„Belege holen“** bleibt ein Konto
+     eingetragen und angemeldet, wird beim Holen aber übersprungen,
    - auf Wunsch den **Versand per Mail** (siehe unten),
 
-   dann **„Einstellungen speichern“**.
-6. Oben bei **Konten** je Konto einmal **„Anmelden“**: Es öffnet sich ein eigenes Fenster, dort meldest
-   du dich ganz normal an. Danach steht beim Konto „angemeldet“. Fertig.
+   dann **„Einstellungen speichern“**. Fehlt etwas, steht das direkt am Knopf, und die Felder sind rot
+   markiert.
+6. Im Reiter **„Belege holen“** je Konto einmal **„Anmelden“**: Es öffnet sich ein eigenes Fenster, dort
+   meldest du dich ganz normal an. Danach steht beim Konto „angemeldet“. Fertig.
 
 Das schwarze Terminalfenster bleibt dabei klein offen — **nicht schließen, solange Belegabruf läuft.**
 Beenden über den Knopf **„Beenden“** im Fenster „Belegabruf“ (oder das Fenster schließen).
@@ -269,8 +275,9 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 - **2.0.0** — **Bedienung im Fenster statt im Terminal.** „Belege holen“ öffnet das Fenster
   „Belegabruf“: Einstellungen als Formular (auch Mail-Passwort, direkt in den Passwortspeicher), je
   Konto Anmelden und Prüfen, Belege holen mit Fortschritt und Zusammenfassung. Das bisherige Menü gibt es
-  weiter über „Belegabruf (Terminal)“. Beim Update einmal „Einrichten“ doppelklicken.
-  **Windows ist noch ungetestet.**
+  weiter über „Belegabruf (Terminal)“. Ein Kontoname ist nur noch nötig, wenn es beim selben Anbieter
+  mehrere Konten gibt. Neu wählbar: Unterordner nach Jahr und Monat. Beim Update einmal „Einrichten“
+  doppelklicken. **Windows ist noch ungetestet.**
 - **1.3.0** — Neue Rechnungen auf Wunsch zusätzlich **per Mail** verschicken (über dein eigenes
   Postfach, siehe [Versand per Mail](#versand-per-mail)). Beim Update einmal „Einrichten“
   doppelklicken; die Frage nach dem Mailversand steht auf „nein“, bis du sie mit „j“ beantwortest.
