@@ -181,8 +181,12 @@ def _sevdesk_abfragen(alt: Einstellungen | None) -> tuple[bool, SevDeskEinstellu
         if regel.isdigit():
             break
         if not regel:
-            print("  Ohne Steuerregel wird nichts hochgeladen. Du kannst sie später über „Einrichten“ eintragen.")
-            break
+            print(
+                "  ✗ Ohne Steuerregel kann sevDesk keinen Entwurf anlegen. Der Upload nach sevDesk bleibt\n"
+                "    deshalb AUSGESCHALTET (alles andere ist gespeichert). Sobald du die Nummer weißt:\n"
+                "    noch einmal „Einrichten“ doppelklicken."
+            )
+            return False, einst
         print("  Bitte nur die Nummer eingeben, z. B. 14.")
     einst = SevDeskEinstellung(schluessel=einst.schluessel, steuerregel=regel)
 

@@ -491,3 +491,16 @@ def test_protokoll_aus_1_1_bekommt_neue_spalte(tmp_path):
     assert neu.eintrag("rechnung:a1")["sevdesk_id"] == "77"
     assert neu.eintrag("monat:2026-10")["datei"] == "airbnb/kontrolle/m.pdf"
     assert neu.anzahl("rechnung") == 1
+
+
+def test_einrichten_ohne_steuerregel_bleibt_sevdesk_aus(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("BELEGABRUF_DATEN", str(tmp_path / "daten"))
+    a = Attrappe()
+    monkeypatch.setattr(sevdesk.urllib.request, "urlopen", a)
+    _einrichten.speicher = _Speicher()
+    # …, sevDesk?, Eintrag, Steuerregel leer
+    einst, speicher = _einrichten(monkeypatch, tmp_path, ["", "", "n", "", "j", "", ""], verdeckt=PLATZHALTER)
+    assert not einst.sevdesk_an
+    assert speicher.daten == {} and a.aufrufe == []  # kein Schlüssel abgefragt, nichts gesendet
+    assert "AUSGESCHALTET" in capsys.readouterr().out
+    assert not einstellungen.laden().sevdesk_an
