@@ -1428,12 +1428,66 @@ def test_alte_datei_aus_einrichten_gilt_nicht_als_eigene_kommentare(tmp_path):
     assert einstellungen.fremde_inhalte(datei) == []
 
 
-def test_fehlende_dateien_erklaert_ohne_terminal_taste(seite, tmp_path):
-    p = seite
-    p.click("#reiter-holen")
-    assert "versehentlich gelöscht oder verschoben" in p.inner_text("#fehlende-erklaerung")
-    assert p.get_attribute("#fehlende", "aria-describedby") == "fehlende-erklaerung"
+def test_hinweise_ohne_terminal_taste():
     import inspect
 
     quelltext = inspect.getsource(ablauf)
     assert "E →" not in quelltext and "„Fehlende Dateien neu holen“" in quelltext
+
+
+# ── Infoboxen beim Drüberfahren und bei Tastaturfokus ────────────────────────
+
+
+def _box_zu(p, knopf: str):
+    return p.locator(f"#{p.get_attribute(knopf, 'aria-describedby')}")
+
+
+def test_infobox_am_grauen_knopf_bei_hover_fokus_und_esc(seite):
+    p = seite
+    p.click("#reiter-holen")
+    assert p.is_disabled("#fehlende")  # nichts fehlt → grau
+    box = _box_zu(p, "#fehlende")
+    assert box.get_attribute("role") == "tooltip" and box.is_hidden()
+    text = box.text_content()
+    assert "versehentlich gelöscht oder verschoben" in text and "nicht erneut gemailt" in text and "Grau" in text
+    # Maus auf den grauen Knopf: Infobox erscheint trotzdem (Hülle bekommt den Hover)
+    p.hover("#fehlende", force=True)
+    assert box.is_visible()
+    p.mouse.move(5, 5)
+    assert box.is_hidden()
+    # ohne Maus: das ⓘ daneben per Tastatur
+    info = p.locator("#fehlende ~ button.info-knopf")
+    assert info.get_attribute("aria-describedby") == box.get_attribute("id")
+    info.focus()
+    assert box.is_visible()
+    p.keyboard.press("Escape")
+    assert box.is_hidden()
+    p.keyboard.press("Tab")
+    p.keyboard.press("Shift+Tab")
+    assert box.is_visible()  # wieder fokussiert → wieder da
+
+
+def test_infoboxen_an_allen_vier_stellen(server, tmp_path):
+    _speichern(server, tmp_path)
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(channel="chromium")
+        p = b.new_page()
+        p.goto(server.adresse)
+        p.wait_for_selector("#version:not(:empty)")
+        assert "auch bei Konten ohne Haken" in _box_zu(p, "#alle-pruefen").text_content()
+        haken = p.locator("#konten input.holen-haken").first
+        assert haken.get_attribute("aria-describedby") == "info-holen"
+        assert "übersprungen" in p.locator("#info-holen").text_content()
+        p.hover("#kopf-holen")
+        assert p.is_visible("#info-holen")
+        p.click("#reiter-einstellungen")
+        wahl = p.locator("#kontenliste select[aria-label='Belege ab']")
+        box = p.locator("#" + wahl.get_attribute("aria-describedby"))
+        assert "nicht vermerkt" in box.text_content() and box.is_hidden()
+        wahl.focus()
+        assert box.is_visible()
+        # keine HTML-Einschleusung: nur Text
+        assert p.evaluate("[...document.querySelectorAll('.infobox')].every(e => e.children.length === 0)")
+        b.close()

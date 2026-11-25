@@ -73,6 +73,18 @@
   .versteckt { display: none; }
   .unsichtbar { visibility: hidden; }
   a { color: var(--akzent); }
+  /* Infobox beim Drüberfahren und bei Tastaturfokus. Hängt am umgebenden Element, damit sie auch
+     bei einem grauen (disabled) Knopf erscheint; Esc schließt sie. */
+  .info-huelle { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+  .infobox { display: none; position: absolute; left: 0; top: calc(100% + 6px); z-index: 10; width: max-content;
+    max-width: 320px; padding: 8px 10px; border-radius: 7px; background: var(--text); color: var(--grund);
+    font-size: 13px; font-weight: 400; line-height: 1.4; text-align: left; white-space: normal;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .18); }
+  .info-huelle:hover .infobox, .info-huelle:focus-within .infobox { display: block; }
+  .info-huelle.zu .infobox { display: none; }
+  button.info-knopf { border: none; background: none; padding: 2px 4px; color: var(--leise); font-size: 15px;
+    line-height: 1; cursor: help; }
+  button.info-knopf:hover { color: var(--akzent); }
   .feld-fehler, .feld-fehler:focus-visible { border-color: var(--schlecht) !important; outline: 2px solid var(--schlecht); outline-offset: 0; }
   .feldsatz { color: var(--schlecht); font-size: 13px; margin: 3px 0 0; }
   .kontozeile + .feldsatz { margin: -2px 0 6px; }
@@ -112,19 +124,16 @@
   <section id="bereich-konten">
     <h2>Konten</h2>
     <table>
-      <thead><tr><th>Holen</th><th>Anbieter</th><th>Konto</th><th>Anmeldung</th><th></th></tr></thead>
+      <thead><tr><th id="kopf-holen">Holen</th><th>Anbieter</th><th>Konto</th><th>Anmeldung</th><th></th></tr></thead>
       <tbody id="konten"></tbody>
     </table>
     <p id="keine-konten" class="leise versteckt">Noch kein Konto eingetragen — im Reiter
       <button type="button" class="knopf-verweis" id="zu-einstellungen">Einstellungen</button> hinzufügen.</p>
     <div class="knoepfe oben14">
       <button id="holen" class="haupt" type="button" aria-describedby="kein-haken">Belege holen</button>
-      <button id="fehlende" type="button" aria-describedby="fehlende-erklaerung">Fehlende Dateien neu holen</button>
+      <button id="fehlende" type="button">Fehlende Dateien neu holen</button>
       <button id="alle-pruefen" type="button">Alle Anmeldungen prüfen</button>
     </div>
-    <p class="leise" id="fehlende-erklaerung">„Fehlende Dateien neu holen“ holt Belege noch einmal, die schon
-      geholt wurden, aber im Belegordner fehlen (z. B. versehentlich gelöscht oder verschoben). Nur aktiv, wenn
-      welche fehlen.</p>
     <p id="kein-haken" class="meldung warn versteckt">Kein Konto angehakt — bitte bei mindestens einem Konto den
       Haken „Holen“ setzen. („Alle Anmeldungen prüfen“ prüft trotzdem alle Konten.)</p>
     <p class="leise" id="ordner-hinweis"></p>
@@ -263,6 +272,42 @@ function zeigeFehler(text) {
   f.classList.toggle("versteckt", !text);
 }
 
+// ── Infoboxen ──────────────────────────────────────────────────────────────
+const INFO = {
+  fehlende: "Holt Belege noch einmal, die schon geholt wurden, aber im Belegordner fehlen – z. B. versehentlich "
+    + "gelöscht oder verschoben. Bereits verschickte Belege werden nicht erneut gemailt. Grau, wenn nichts fehlt.",
+  pruefen: "Prüft bei allen Konten, ob die Anmeldung noch gilt – auch bei Konten ohne Haken. Es wird nichts geholt.",
+  holen: "Mit Haken holt „Belege holen“ dieses Konto. Ohne Haken bleibt es eingetragen und angemeldet, "
+    + "wird aber übersprungen. Ein Klick speichert die Auswahl.",
+  belege_ab: "Ältere Belege werden nicht geholt und nicht vermerkt – erweiterst du den Zeitraum später, kommen sie "
+    + "beim nächsten Lauf. „Letzter Monat“ heißt ab dem 1. des Vormonats.",
+};
+let infoNummer = 0;
+
+// Legt um ein Element eine Hülle mit Infobox (role=tooltip). Die Hülle bekommt Hover und Fokus
+// auch dann, wenn das Element selbst grau ist; das ⓘ macht sie ohne Maus erreichbar.
+function infobox(ziel, text, mitKnopf = true, id = null) {
+  const huelle = element("span", undefined, "info-huelle");
+  const box = element("span", text, "infobox");
+  box.id = id || "info-" + (++infoNummer);
+  box.setAttribute("role", "tooltip");
+  if (ziel.parentNode) ziel.replaceWith(huelle);
+  huelle.append(ziel);
+  ziel.setAttribute("aria-describedby", box.id);
+  if (mitKnopf) {
+    const knopf = element("button", "ⓘ", "info-knopf");
+    knopf.type = "button";
+    knopf.setAttribute("aria-label", "Erklärung");
+    knopf.setAttribute("aria-describedby", box.id);
+    huelle.append(knopf);
+  }
+  huelle.append(box);
+  huelle.addEventListener("keydown", (e) => { if (e.key === "Escape") huelle.classList.add("zu"); });
+  huelle.addEventListener("mouseleave", () => huelle.classList.remove("zu"));
+  huelle.addEventListener("focusout", () => huelle.classList.remove("zu"));
+  return huelle;
+}
+
 function element(tag, text, klasse) {
   const e = document.createElement(tag);
   if (text !== undefined) e.textContent = text;
@@ -308,7 +353,7 @@ function kontenZeigen() {
     const hakenZelle = element("td");
     const haken = element("input"); haken.type = "checkbox"; haken.checked = k.aktiv; haken.className = "holen-haken";
     haken.setAttribute("aria-label", k.bezeichnung + ": Belege holen");
-    haken.title = "Ohne Haken bleibt das Konto eingetragen und angemeldet, wird beim Holen aber übersprungen.";
+    haken.setAttribute("aria-describedby", "info-holen");
     haken.dataset.auftrag = "1";
     haken.addEventListener("change", () => hakenSetzen(k, haken));
     hakenZelle.append(haken);
@@ -371,7 +416,7 @@ function kontozeile(k) {
     zeile.remove(); namenZeigen();
   });
   const zeitraum = element("div", undefined, "zeitraum");
-  zeitraum.append(ab, datum);
+  zeitraum.append(infobox(ab, INFO.belege_ab, false), datum);
   zeile.append(wahl, name, zeitraum, weg);
   // kennung: woran Anmeldung und Protokoll hängen — bleibt beim Umbenennen gleich.
   zeile.lesen = () => ({ quelle: wahl.value, name: name.value,
@@ -766,6 +811,12 @@ $("beenden").addEventListener("click", async () => {
     document.querySelectorAll("button").forEach((b) => { b.disabled = true; });
   } catch (e) { zeigeFehler(e.message); }
 });
+
+infobox($("fehlende"), INFO.fehlende);
+infobox($("alle-pruefen"), INFO.pruefen);
+// Haken „Holen“: eine Infobox am Spaltenkopf; jeder Haken verweist darauf (aria-describedby).
+const kopfHolen = element("span", "Holen");
+$("kopf-holen").replaceChildren(infobox(kopfHolen, INFO.holen, true, "info-holen"));
 
 laden(true).catch((e) => zeigeFehler(e.message));
 </script>
