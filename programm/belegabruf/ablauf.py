@@ -166,7 +166,8 @@ def liefern(einst: Einstellungen, protokoll: Protokoll, erg: Ergebnis, melden: M
     if ohne_datei:
         erg.hinweise.append(
             f"{len(ohne_datei)} Rechnung(en) sind noch nicht überall angekommen, liegen aber nicht mehr im "
-            "Belegordner. E → „Fehlende Dateien neu holen“, dann werden sie verschickt."
+            "Belegordner. Mit „Fehlende Dateien neu holen“ kommen sie wieder und werden dann verschickt "
+            "(im Terminal-Menü: E)."
         )
 
 
@@ -248,7 +249,8 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
     if fehlen:
         ergebnis.hinweise.append(
             f"{fehlen} schon geholte Rechnung(en) liegen nicht mehr im Belegordner. Das ist in Ordnung, "
-            "wenn du sie weitergegeben hast. Sonst: E → „Fehlende Dateien neu holen“."
+            "wenn du sie weitergegeben hast. Sonst holt „Fehlende Dateien neu holen“ sie noch einmal "
+            "(im Terminal-Menü: E)."
         )
     return ergebnis
 

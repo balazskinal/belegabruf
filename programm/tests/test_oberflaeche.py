@@ -1426,3 +1426,14 @@ def test_alte_datei_aus_einrichten_gilt_nicht_als_eigene_kommentare(tmp_path):
     assert '"Einrichten" doppelklicken' in alt and 'Ändern über "Einrichten"' in alt
     datei.write_text(alt, encoding="utf-8")
     assert einstellungen.fremde_inhalte(datei) == []
+
+
+def test_fehlende_dateien_erklaert_ohne_terminal_taste(seite, tmp_path):
+    p = seite
+    p.click("#reiter-holen")
+    assert "versehentlich gelöscht oder verschoben" in p.inner_text("#fehlende-erklaerung")
+    assert p.get_attribute("#fehlende", "aria-describedby") == "fehlende-erklaerung"
+    import inspect
+
+    quelltext = inspect.getsource(ablauf)
+    assert "E →" not in quelltext and "„Fehlende Dateien neu holen“" in quelltext
