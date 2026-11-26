@@ -196,8 +196,9 @@ class Airbnb(Quelle):
 
     def _hosts(self) -> set[str]:
         """Erlaubte Hosts für Rechnungsseiten: der Host der eingestellten Adresse (Vorgabe
-        www.airbnb.de). Die Monatsübersichten verlinken ihre Rechnungen genau dorthin."""
-        return {pruefung.host_von(self._adresse())}
+        www.airbnb.de) und www.airbnb.com — Konten in anderer Sprache bzw. Region könnten ihre
+        Rechnungen dorthin verlinken. Sonst nichts."""
+        return {pruefung.host_von(self._adresse()), "www.airbnb.com"}
 
     # 1. Sitzung prüfen ------------------------------------------------------
     def sitzung_pruefen(self) -> bool:

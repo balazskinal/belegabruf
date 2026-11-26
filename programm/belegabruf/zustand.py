@@ -27,6 +27,21 @@ def _speichern(daten: dict) -> None:
     datei.write_text(json.dumps(daten, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def entfernt() -> set[str]:
+    """Kennungen („quelle/kurzname“) von Konten, die in den Einstellungen entfernt wurden. Ihr
+    Profil und Protokoll bleiben liegen, gelten aber nie als verwaist (waisen.py)."""
+    return set(_laden().get("entfernt", []))
+
+
+def entfernt_abgleichen(weg: set[str], da: set[str]) -> None:
+    """Beim Speichern: ``weg`` (entfernte Konten) vermerken, ``da`` (vorhandene) austragen."""
+    daten = _laden()
+    neu = (set(daten.get("entfernt", [])) | weg) - da
+    if neu != set(daten.get("entfernt", [])):
+        daten["entfernt"] = sorted(neu)
+        _speichern(daten)
+
+
 def _schluessel(quelle: str, konto: str) -> str:
     return f"{quelle}/{konto}"
 

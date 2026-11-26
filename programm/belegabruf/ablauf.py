@@ -184,13 +184,17 @@ def ausgelassen(konto: Konto) -> Ergebnis:
 
 def _uebernahme_abschliessen(einst: Einstellungen, konto: Konto, protokoll: Protokoll) -> int:
     """Erster Lauf nach der Übernahme eines verwaisten Protokolls: Was darin steht, gilt als
-    schon verarbeitet — für jedes Lieferziel als „schon geliefert“, der erste Lauf als erledigt.
-    So geht der Altbestand nie wegen der Übernahme per Mail raus. Gibt die Zahl der so
-    markierten Rechnungen zurück (0, wenn schon früher übernommen)."""
+    schon verarbeitet — für jedes Lieferziel, das in diesem Protokoll **noch nie an** war, als
+    „schon geliefert“; der erste Lauf als erledigt. So geht der Altbestand nie wegen der
+    Übernahme per Mail raus. War ein Ziel schon an, bleibt alles, wie es ist: Was dort offen ist
+    (Versand gescheitert), geht beim nächsten Versuch raus. Gibt die Zahl der so markierten
+    Rechnungen zurück (0, wenn schon früher übernommen)."""
     if not konto.uebernommen_von or not protokoll.uebernahme_vermerken(konto.uebernommen_von):
         return 0
     markiert = 0
     for name in lieferziel_namen(einst):
+        if protokoll.je_eingeschaltet(name):
+            continue
         markiert = max(markiert, protokoll.als_schon_markieren(name))
         protokoll.schalten(name, True)
     protokoll.erstlauf_setzen("fertig")
@@ -266,8 +270,6 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
             f"„{konto.uebernommen_von}“ bekommen). Schon Geholtes kommt nicht noch einmal"
             + (f"; {uebernommen} Rechnung(en) daraus gelten als verschickt" if uebernommen else "")
             + ". Festgehalten wird das beim nächsten Speichern der Einstellungen.")
-    if konto.hinweis:
-        ergebnis.hinweise.append(konto.hinweis)
     ergebnis.ab = ab.isoformat() if ab else ""
     if ab is not None and ab > date.today():  # z. B. von Hand in die Datei geschrieben
         ergebnis.hinweise.append(f"„Belege ab {ab:%d.%m.%Y}“ liegt in der Zukunft — so wird nichts geholt. "

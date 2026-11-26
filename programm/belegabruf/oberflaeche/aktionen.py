@@ -125,10 +125,13 @@ class Steuerung:
     # Zustand für die Seite ---------------------------------------------------
 
     def zustand(self) -> dict:
+        nicht_lesbar = ""
         try:
             einst = einstellungen.laden()
             eingerichtet = True
-        except EinstellungsFehler:
+        except EinstellungsFehler as fehler:
+            if isinstance(fehler, einstellungen.EinstellungNichtLesbar):
+                nicht_lesbar = einstellungen.nicht_lesbar_text(fehler)
             einst = Einstellungen(belegordner=pfade.standard_belegordner(), konten=[])
             eingerichtet = False
         konten = []
@@ -162,7 +165,9 @@ class Steuerung:
                      "passwort": "hinterlegt" if _passwort_da(m) else "fehlt", "erstversand": m.erstversand},
             "beschaeftigt": self.beschaeftigt(),
             "auftrag_art": self.auftrag.art if self.beschaeftigt() else None,
-            "datei_fremd": _fremd(),
+            "datei_fremd": [] if nicht_lesbar else _fremd(),
+            # Die Datei ist da, aber nicht lesbar: Die Seite zeigt das sofort und sperrt „Speichern“.
+            "nicht_lesbar": nicht_lesbar,
         }
 
     # Einstellungen ------------------------------------------------------------

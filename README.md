@@ -96,11 +96,18 @@ Administratorrechte nötig.
    Windows“** (beide liegen oben im ausgepackten Ordner). Beim ersten Mal richtet er sich ein, danach
    öffnet er nur noch das Fenster.
 
-   **Beim ersten Mal fragt dein Rechner einmal nach, ob du das wirklich öffnen willst.** Das ist
-   normal bei Programmen, die nicht aus einem App-Store kommen:
-   - **Mac:** Es kommt die Meldung, die Datei könne nicht geöffnet werden. Dann
-     *Systemeinstellungen → Datenschutz & Sicherheit* öffnen, ganz nach unten scrollen und bei
-     „Belegabruf Mac.command wurde blockiert“ auf **„Trotzdem öffnen“** klicken.
+   **Beim ersten Mal fragt dein Rechner nach, ob du das wirklich öffnen willst.** Das ist normal bei
+   Programmen, die nicht aus einem App-Store kommen:
+   - **Mac (macOS 15 und neuer):** Es erscheint die Meldung *„Apple konnte nicht überprüfen, ob
+     ‚Belegabruf Mac.command‘ frei von Schadsoftware ist …“*.
+     1. Dort auf **„Fertig“** klicken — **nicht** auf „In den Papierkorb legen“.
+     2. *Systemeinstellungen → Datenschutz & Sicherheit* öffnen, ganz nach unten scrollen und bei
+        „‚Belegabruf Mac.command‘ wurde blockiert …“ auf **„Trotzdem öffnen“** klicken; mit Passwort
+        bzw. Touch ID bestätigen.
+     3. **„Belegabruf Mac“ noch einmal doppelklicken** und in der nächsten Frage „Öffnen“ wählen.
+
+     Nach jedem **neu geladenen ZIP** (also bei jedem Update) fragt macOS wieder — dann dieselben
+     Schritte.
    - **Windows:** Es erscheint „Der Computer wurde durch Windows geschützt“. Auf **„Weitere
      Informationen“** und dann **„Trotzdem ausführen“** klicken.
 4. Ein schwarzes Fenster geht auf und lädt alles Nötige (ein Hilfsprogramm namens *uv*, Python und
@@ -363,11 +370,12 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
     nach dem Speichern im Fenster erhalten; bisher wurden sie zu Text.
   - Booking.com: Ist während eines Downloads das Netz weg, heißt es „nicht geladen“ statt „Anmeldung
     abgelaufen“ — abgelaufen nur, wenn wirklich die Anmeldeseite kommt.
-  - **Konten finden ihre frühere Anmeldung wieder.** Hat ein Konto seine interne Kennung verloren (z. B.
-    entfernt und ohne Namen neu angelegt, oder die Einstellungsdatei war beim Einrichten nicht lesbar),
-    übernimmt es Anmeldung und Protokoll von früher — wenn eindeutig ist, welches dazugehört. Schon
-    Geholtes kommt dann nicht noch einmal und wird nicht (noch einmal) verschickt. Ist es nicht
-    eindeutig, wird das Konto ausgelassen, und die Zusammenfassung sagt, was zu tun ist.
+  - **Konten ohne Namen finden ihre frühere Anmeldung wieder.** Hat ein Konto ohne Namen seine interne
+    Kennung verloren (z. B. war die Einstellungsdatei beim Einrichten nicht lesbar, oder der Name wurde
+    von Hand gelöscht), übernimmt es Anmeldung und Protokoll von früher — wenn genau eines in Frage kommt.
+    Schon Geholtes kommt dann nicht noch einmal und wird deshalb nicht verschickt. Konten mit Namen und
+    Konten, die du in den Einstellungen entfernt hast, geben nie etwas an ein anderes Konto weiter. Ist es
+    nicht eindeutig, wird das Konto ausgelassen, und die Zusammenfassung sagt, was zu tun ist.
   - Ist die Einstellungsdatei nicht lesbar, speichert das Fenster nicht mehr darüber, sondern sagt, wie
     man sie repariert.
 - **2.1.0** — **Booking.com** als neuer Anbieter: Kommissionsrechnungen (werden wie alle Belege abgelegt

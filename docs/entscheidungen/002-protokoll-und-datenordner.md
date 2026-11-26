@@ -45,11 +45,15 @@ Profil und Protokoll hängen an der internen Kennung eines Kontos (seit 2.0: Nam
 Einstellungsdatei beim Einrichten nicht lesbar, Name von Hand gelöscht —, entstand bisher still ein
 neues, leeres Protokoll; alles wurde noch einmal geholt (bei „Erster Versand: auch“ auch verschickt).
 
-Seit 2.1.1 (`waisen.py`): Hat ein Konto kein Protokoll unter seiner Kennung, und gibt es beim selben
-Anbieter **genau ein** Protokoll (bzw. ohne Protokoll genau ein Profil), das zu keinem Konto gehört,
-übernimmt das Konto dessen Kennung; beim nächsten Speichern steht sie als `kennung` in der Datei. Der
-Inhalt des übernommenen Protokolls gilt als verarbeitet: Er wird für alle Lieferziele einmalig als
-„schon geliefert“ markiert (`einstellung:uebernahme` im Protokoll), nie deshalb verschickt. Ist es nicht
+Seit 2.1.1 (`waisen.py`): Hat ein Konto **ohne Namen** (Standard-Kennung, ohne `kennung` in der Datei)
+kein Protokoll unter seiner Kennung, und gibt es beim selben Anbieter **genau ein** Protokoll (bzw. ohne
+Protokoll genau ein Profil), das zu keinem Konto gehört und nicht als entfernt vermerkt ist, übernimmt
+das Konto dessen Kennung; beim nächsten Speichern steht sie als `kennung` in der Datei. Konten mit Namen
+oder ausdrücklicher `kennung` werden nie umgebogen; wer ein Konto in den Einstellungen entfernt, dessen
+Profil und Protokoll werden als entfernt vermerkt (`entfernt` im Merkzettel) und nie weitergegeben. Der
+Inhalt des übernommenen Protokolls gilt als verarbeitet: Für jedes Lieferziel, das darin noch nie an
+war, wird er einmalig als „schon geliefert“ markiert (`einstellung:uebernahme` im Protokoll); war ein
+Ziel schon an, bleibt Offenes (gescheiterter Versand) offen. Ist es nicht
 eindeutig, wird nicht geraten — das Konto wird ausgelassen, mit Meldung. Über eine unlesbare
 Einstellungsdatei wird nicht mehr gespeichert.
 

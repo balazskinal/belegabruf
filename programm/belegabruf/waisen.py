@@ -10,16 +10,21 @@ Programm würde still neu anmelden lassen und alles noch einmal holen. Das passi
 (c) beim Speichern die alte Datei nicht lesbar war (seit 2.1.1 abgelehnt, siehe aktionen),
 (d) der Name in der Datei von Hand gelöscht wurde.
 
-Regel: Hat ein Konto unter seiner Kennung **kein Protokoll**, und gibt es beim selben Anbieter
-**genau ein** verwaistes Protokoll (das zu keinem anderen Konto gehört), übernimmt es dessen
-Kennung — und damit Protokoll und Profil. Gibt es kein verwaistes Protokoll, aber genau ein
-verwaistes Profil und das Konto hat weder Protokoll noch Profil, wird das Profil übernommen.
-Ist es nicht eindeutig (mehrere Waisen oder mehrere Konten ohne Protokoll), wird nicht geraten:
-Diese Konten werden ausgelassen, mit einer Meldung, was zu tun ist.
+Regel (seit der Prüfung zu PR #20 enger):
+
+* Übernommen wird nur bei einem Konto **ohne Namen** und ohne ``kennung`` in der Datei (also mit
+  der Standard-Kennung) — genau der Fall, in dem die Kennung verloren gegangen sein kann. Ein
+  Konto mit Namen oder mit ausdrücklicher ``kennung`` wird nie umgebogen.
+* Es muss **genau ein** verwaistes Protokoll beim selben Anbieter geben (ohne Protokoll: genau
+  ein verwaistes Profil). Verwaist heißt: Es gehört zu keinem Konto, und es wurde nicht beim
+  Entfernen eines Kontos als „entfernt“ vermerkt (``zustand.entfernt``). Ein absichtlich
+  entferntes Konto gibt seine Anmeldung also nie an ein neues weiter.
+* Nicht eindeutig (mehrere Waisen): nicht raten, das Konto auslassen — mit dem Ausweg, ihm einen
+  Namen zu geben.
 
 Die übernommene Kennung steht danach im Konto; beim nächsten Speichern schreibt die Datei sie
 als ``kennung`` fest. Was im übernommenen Protokoll steht, gilt als schon verarbeitet — es wird
-nie deshalb verschickt (siehe ``ablauf.abrufen``).
+nie deshalb verschickt (siehe ``ablauf._uebernahme_abschliessen``).
 """
 
 from __future__ import annotations
@@ -58,50 +63,57 @@ def _kennung_aus_protokoll(datei: Path, ersatz: str) -> str:
     return ersatz
 
 
-def zuordnen(einst) -> None:
-    """Setzt bei verwaisten Konten die Kennung (``Konto.name``) und ``uebernommen_von`` bzw.
-    ``auslassen_grund``. Ändert keine Datei."""
-    from belegabruf import quellen
+def _waisen(quelle: str, eigene: set[str], gefunden: dict[str, Path]) -> list[str]:
+    """Kennungen (Kurzname) mit Profil bzw. Protokoll, aber ohne Konto und nicht entfernt."""
+    from belegabruf import zustand
 
+    entfernt = {s.split("/", 1)[1] for s in zustand.entfernt() if s.startswith(pfade.kurzname(quelle) + "/")}
+    return sorted(set(gefunden) - eigene - entfernt)
+
+
+def _kandidat(konten) -> object | None:
+    """Das eine Konto, dessen Kennung verloren gegangen sein kann: ohne Namen, ohne kennung."""
+    from belegabruf.einstellungen import STANDARD_KENNUNG
+
+    ohne = [k for k in konten if not k.anzeigetitel.strip() and not k.kennung_aus_datei
+            and k.name == STANDARD_KENNUNG]
+    return ohne[0] if len(ohne) == 1 else None
+
+
+def zuordnen(einst) -> None:
+    """Setzt bei einem verwaisten Konto die Kennung (``Konto.name``) und ``uebernommen_von``
+    bzw. ``auslassen_grund``. Ändert keine Datei."""
     for quelle in dict.fromkeys(k.quelle for k in einst.konten):
         konten = [k for k in einst.konten if k.quelle == quelle]
+        konto = _kandidat(konten)
+        if konto is None:
+            continue
         eigene = {pfade.kurzname(k.name) for k in konten}
         protokolle, profile = _protokolle(quelle), _profile(quelle)
-        waisen_protokoll = sorted(set(protokolle) - eigene)
-        waisen_profil = sorted(set(profile) - eigene)
-        ohne_protokoll = [k for k in konten if pfade.kurzname(k.name) not in protokolle]
-        anbieter = quellen.anzeigename(quelle)
-
-        if waisen_protokoll and not ohne_protokoll:
-            # Schon früher neu angefangen (vor 2.1.1): nicht mehr automatisch zu lösen, nur sagen.
-            for k in konten:
-                alt = ", ".join(waisen_protokoll)
-                k.hinweis = (f"Es gibt bei {anbieter} ein früheres Protokoll ohne Konto ({alt}). "
-                             "Wurden Belege doppelt geholt (Dateien mit „-2“), stammt es von einem früheren Konto.")
-        if waisen_protokoll and ohne_protokoll:
-            if len(waisen_protokoll) == 1 and len(ohne_protokoll) == 1:
-                kurz = waisen_protokoll[0]
-                _uebernehmen(ohne_protokoll[0], _kennung_aus_protokoll(protokolle[kurz], kurz))
-            else:
-                _auslassen(ohne_protokoll, anbieter, waisen_protokoll, "Protokolle")
-            continue
-        ohne_alles = [k for k in ohne_protokoll if pfade.kurzname(k.name) not in profile]
-        if waisen_profil and ohne_alles:
-            if len(waisen_profil) == 1 and len(ohne_alles) == 1:
-                _uebernehmen(ohne_alles[0], waisen_profil[0])
-            else:
-                _auslassen(ohne_alles, anbieter, waisen_profil, "Anmeldungen")
+        kurz = pfade.kurzname(konto.name)
+        if kurz in protokolle:
+            continue  # hat ein eigenes Protokoll: nichts verloren
+        waisen = _waisen(quelle, eigene, protokolle)
+        if waisen:
+            _entscheiden(konto, quelle, waisen, lambda w, p=protokolle: _kennung_aus_protokoll(p[w], w))
+        elif kurz not in profile:
+            _entscheiden(konto, quelle, _waisen(quelle, eigene, profile), lambda w: w)
 
 
-def _uebernehmen(konto, kennung: str) -> None:
-    konto.uebernommen_von = konto.name
-    konto.name = kennung
+def _entscheiden(konto, quelle: str, waisen: list[str], kennung) -> None:
+    if len(waisen) == 1:
+        konto.uebernommen_von = konto.name
+        konto.name = kennung(waisen[0])
+    elif waisen:
+        _auslassen(konto, quelle, waisen)
 
 
-def _auslassen(konten, anbieter: str, waisen: list[str], was: str) -> None:
-    satz = (f"Bei {anbieter} gibt es {len(waisen)} frühere {was} ohne Konto ({', '.join(waisen)}), aber nicht "
-            "eindeutig, welches Konto dazugehört. Damit nichts doppelt geholt wird, wird dieses Konto ausgelassen. "
-            "Bitte in der Einstellungsdatei beim Konto die richtige Zeile kennung = \"…\" eintragen "
-            f"(einer der Namen in Klammern).")
-    for k in konten:
-        k.auslassen_grund = satz
+def _auslassen(konto, quelle: str, waisen: list[str]) -> None:
+    from belegabruf import quellen
+
+    konto.auslassen_grund = (
+        f"Bei {quellen.anzeigename(quelle)} liegen mehrere frühere Anmeldungen ohne Konto "
+        f"({', '.join(waisen)}). Ob eine davon zu diesem Konto gehört, ist nicht eindeutig — deshalb wird es "
+        "ausgelassen, damit nichts doppelt oder einem falschen Konto zugeordnet wird. Gib dem Konto in den "
+        "Einstellungen einen Namen: Heißt es wie sein früheres Konto, nutzt es dessen Anmeldung wieder; "
+        "mit einem neuen Namen fängt es neu an.")

@@ -112,7 +112,7 @@ def test_airbnb_eingestellte_laenderadresse_gilt():
     from belegabruf.quellen.airbnb import Airbnb
 
     quelle = Airbnb(Konto("airbnb", "a", optionen={"adresse": "https://www.airbnb.at"}), None)
-    assert quelle._hosts() == {"www.airbnb.at"}
+    assert quelle._hosts() == {"www.airbnb.at", "www.airbnb.com"}
 
 
 def test_skool_weiterleitung_auf_fremden_host():

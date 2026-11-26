@@ -57,7 +57,7 @@ class Konto:
     # Übernahme verwaister Konten (waisen.py), nur im Speicher, nie in der Datei:
     uebernommen_von: str = field(default="", compare=False)  # Kennung vor der Übernahme
     auslassen_grund: str = field(default="", compare=False)  # nicht eindeutig → nicht holen
-    hinweis: str = field(default="", compare=False)
+    kennung_aus_datei: bool = field(default=False, compare=False)  # stand „kennung = …“ in der Datei?
 
     def ab(self, heute: date | None = None) -> date | None:
         """Ab welchem Rechnungsdatum geholt wird (None = alle)."""
@@ -265,8 +265,9 @@ def nicht_lesbar_text(fehler: Exception) -> str:
     """Warum mit einer unlesbaren Datei nicht gespeichert (bzw. neu eingerichtet) wird."""
     return (f"Die bisherige Einstellungsdatei ist nicht lesbar: {fehler} — gespeichert würden sonst Konten mit "
             "neuen Kennungen (neue Anmeldung, alles noch einmal geholt). Bitte die Datei "
-            f"{pfade.einstellungsdatei()} mit einem Texteditor reparieren, oder sie umbenennen und dann neu "
-            "einrichten. Frühere Anmeldungen und Protokolle werden dann, wo eindeutig, wieder übernommen.")
+            f"{pfade.anzeigepfad(pfade.einstellungsdatei())} mit einem Texteditor reparieren, oder sie "
+            "umbenennen und dann neu einrichten. Frühere Anmeldungen und Protokolle werden dann, wo eindeutig, "
+            "wieder übernommen.")
 
 
 def laden(datei: Path | None = None) -> Einstellungen:
@@ -276,7 +277,7 @@ def laden(datei: Path | None = None) -> Einstellungen:
     if not datei.exists():
         raise EinstellungsFehler(f"Noch nicht eingerichtet (keine Datei {datei}).")
     try:
-        einst = aus_text(datei.read_text(encoding="utf-8"), str(datei))
+        einst = aus_text(datei.read_text(encoding="utf-8"), pfade.anzeigepfad(datei))
     except EinstellungNichtLesbar:
         raise
     except EinstellungsFehler as fehler:
@@ -308,7 +309,8 @@ def aus_text(text: str, herkunft: str = "Einstellungen") -> Einstellungen:
         if not isinstance(eintrag, dict) or not eintrag.get("quelle"):
             raise EinstellungsFehler("Jedes [[konto]] braucht 'quelle'.")
         titel = str(eintrag.get("name") or "").strip()
-        kennung = str(eintrag.get("kennung") or "").strip() or kennung_fuer(titel)
+        ausdruecklich = str(eintrag.get("kennung") or "").strip()
+        kennung = ausdruecklich or kennung_fuer(titel)
         optionen = {k: v for k, v in eintrag.items() if k not in {"quelle", "name", "aktiv", "kennung", "belege_ab"}}
         konten.append(
             Konto(
@@ -318,6 +320,7 @@ def aus_text(text: str, herkunft: str = "Einstellungen") -> Einstellungen:
                 optionen=optionen,
                 titel=titel,
                 belege_ab=zeitraum_normal(eintrag.get("belege_ab")),
+                kennung_aus_datei=bool(ausdruecklich),
             )
         )
     konten_unterscheidbar(konten)
@@ -515,7 +518,7 @@ def fremde_inhalte(datei: Path | None = None) -> list[str]:
         roh = tomllib.loads(text)
         einst = aus_text(text)
     except (tomllib.TOMLDecodeError, EinstellungsFehler):
-        return ["die Datei ist fehlerhaft und wird ersetzt"]
+        return []  # nicht lesbar: Das sagt die Oberfläche eigens (nicht_lesbar), gespeichert wird dann nicht
     funde = [f"Eintrag „{k}“" for k in roh if k not in BEKANNT_OBEN]
     mail_roh = roh.get("mail") if isinstance(roh.get("mail"), dict) else {}
     funde += [f"Eintrag „mail.{k}“" for k in mail_roh if k not in BEKANNT_MAIL]
@@ -541,6 +544,23 @@ def sichern(datei: Path | None = None) -> Path | None:
     return ziel
 
 
+def _entfernte_vermerken(datei: Path, einst: Einstellungen) -> None:
+    """Konten, die gegenüber der bisherigen Datei fehlen, als entfernt vermerken: Ihr Profil
+    und Protokoll gelten dann nie als verwaist — ein neu angelegtes Konto übernimmt sie nicht."""
+    from belegabruf import zustand
+
+    try:
+        alt = aus_text(datei.read_text(encoding="utf-8")) if datei.exists() else None
+    except (EinstellungsFehler, OSError, UnicodeDecodeError):
+        alt = None
+    if alt is None:
+        return
+    def schluessel(konten):
+        return {f"{pfade.kurzname(k.quelle)}/{pfade.kurzname(k.name)}" for k in konten}
+    da = schluessel(einst.konten)
+    zustand.entfernt_abgleichen(schluessel(alt.konten) - da, da)
+
+
 def speichern(einst: Einstellungen, datei: Path | None = None) -> Path:
     """Schreibt atomar: erst eine Zwischendatei, auf die Platte gebracht (fsync), dann
     ersetzen. So liegt nie eine halbe Einstellungsdatei da, auch wenn der Rechner
@@ -549,6 +569,7 @@ def speichern(einst: Einstellungen, datei: Path | None = None) -> Path:
 
     datei = datei or pfade.einstellungsdatei()
     datei.parent.mkdir(parents=True, exist_ok=True)
+    _entfernte_vermerken(datei, einst)
     zwischen = datei.with_name(datei.name + ".teil")
     with open(zwischen, "w", encoding="utf-8") as f:
         f.write(als_text(einst))
