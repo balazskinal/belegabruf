@@ -1,8 +1,8 @@
 # ADR-004: Abliefern — zuerst per Mail, danach per API
 
 - **Datum:** 25.11.2026
-- **Status:** ✅ gilt · Mail-Weg = Version 1.3.0 · sevDesk-API = Version 2.1.0 (früher als 1.4.0 geplant;
-  verschoben hinter die Oberfläche 2.0.0, siehe ADR-005)
+- **Status:** ✅ gilt · Mail-Weg = Version 1.3.0 · API-Ziele (sevDesk, Lexware Office) **geparkt**
+  seit 26.11.2026 (Nachtrag unten)
 
 ## Kontext
 
@@ -65,3 +65,14 @@ Der erste Lauf steht als `einstellung:erstlauf` (offen/fertig) im Protokoll des 
 ein Lauf die Rechnungsliste gelesen hat (Status ok oder unvollständig) — nicht erst bei einem fehlerfreien
 Lauf, sonst würde ein Konto mit einer dauerhaft kaputten Rechnung nie mailen. Bisherige Protokolle mit
 Rechnungen gelten nicht als neu. Geprüft wird die Einstellung zentral in `einstellungen.pruefen`.
+
+## Nachtrag 26.11.2026: API-Ziele geparkt
+
+Die Ziele sevDesk und Lexware Office über die API werden vorerst **nicht gebaut**.
+- Jede Nutzerin und jeder Nutzer müsste dafür einen API-Schlüssel mit Schreibrechten auf die eigene
+  Buchhaltung hinterlegen. Das wollen die wenigsten, und es ist ein Risiko, das der Nutzen nicht aufwiegt.
+- Der Mailweg (1.3.0) erreicht dieselben Programme schon heute über ihre Beleg-Mailadresse und hat sich
+  bewährt.
+
+Der fertige sevDesk-Stand bleibt als geschlossener PR #3 mit Label „geparkt“ und Branch `version-2`
+erhalten, ebenso die Issues #12 und #14. Wieder aufnehmen, wenn jemand den API-Weg ausdrücklich braucht.
