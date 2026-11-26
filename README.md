@@ -420,8 +420,9 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 
 ## Was neu ist
 
-- **2.2.1** — **Einrichtung auf frischen Rechnern repariert:** Die Starter richten jetzt fest Python 3.12
-  ein. Bisher konnte uv auf einem neuen Rechner Python 3.15 laden; dafür gibt es einen von PyMuPDF
+- **2.2.1** — **Einrichtung auf Rechnern ohne passendes Python repariert.** Die Starter richten jetzt fest
+  Python 3.12 ein; eine schon angelegte Umgebung mit anderer Python-Version wird beim nächsten Start
+  neu aufgebaut. Bisher konnte uv auf einem neuen Rechner Python 3.15 laden; dafür gibt es einen von PyMuPDF
   benötigten Baustein (onnxruntime) noch nicht, und die Einrichtung brach mit „Das hat nicht geklappt“ ab.
   Dazu der Prüf-Workflow für jeden Pull Request (siehe „Prüfungen“).
 - **2.2.0** — **Einrichten und Update mit einer Zeile** im Terminal bzw. in PowerShell (siehe ganz oben):
