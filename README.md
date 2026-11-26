@@ -51,6 +51,10 @@ Danach öffnen sich der Ordner „Belegabruf“ und das Fenster „Belegabruf“
 paar Minuten lang alles Nötige (siehe [Erster Start](#erster-start-einmalig-ca-5-minuten), ab Schritt 4).
 Später reicht ein Doppelklick auf **„Belegabruf Mac“** bzw. **„Belegabruf Windows“** in diesem Ordner.
 
+**Hast du Belegabruf bisher aus dem ZIP gestartet** (Ordner `belegabruf-v…`), kannst du den alten Ordner
+löschen. Ab jetzt startest du aus dem Ordner „Belegabruf“ in deinen Dokumenten. Einstellungen und
+Anmeldungen bleiben, sie liegen im Datenordner.
+
 **Update:** dieselbe Zeile noch einmal (Belegabruf vorher beenden). Ersetzt werden nur die
 Programmdateien im Ordner „Belegabruf“; Einstellungen, Anmeldungen und Protokolle bleiben, sie liegen im
 Datenordner. Was du selbst in den Ordner gelegt hast, bleibt ebenfalls.

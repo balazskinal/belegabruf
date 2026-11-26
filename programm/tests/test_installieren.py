@@ -234,3 +234,129 @@ def test_update_hinweis_nennt_die_zeile(monkeypatch):
     monkeypatch.setattr(aktualisierung.sys, "platform", "win32")
     assert aktualisierung.update_zeile() == f"irm {REPO}/releases/latest/download/installieren.ps1 | iex"
     assert "PowerShell" in aktualisierung.update_hinweis()
+
+
+# ── Nachbesserung nach der Prüfung (M1, M2, N2–N4) ───────────────────────────
+
+
+@nur_mac
+def test_abgeschnittenes_skript_tut_nichts(tmp_path, netz):
+    """M1: Bricht die Übertragung ab (curl | bash), läuft nichts halb: Alles steckt in main(),
+    das erst die letzte Zeile aufruft. Danach läuft der vollständige Aufruf sauber durch."""
+    netz.release("v2.0.1")
+    zeilen = SH.read_text(encoding="utf-8").splitlines(keepends=True)
+    for schnitt in (len(zeilen) // 3, len(zeilen) // 2, len(zeilen) - 2, len(zeilen) - 1):
+        teil = tmp_path / "teil.sh"
+        teil.write_text("".join(zeilen[:schnitt]), encoding="utf-8")
+        bin_ordner = tmp_path / "bin"
+        bin_ordner.mkdir(exist_ok=True)
+        netz.curl(bin_ordner)
+        heim = tmp_path / "heim"
+        heim.mkdir(exist_ok=True)
+        subprocess.run(["/bin/bash", str(teil)], capture_output=True, text=True, timeout=60,
+                       env={"PATH": f"{bin_ordner}:/usr/bin:/bin:/usr/sbin", "HOME": str(heim),
+                            "TMPDIR": str(tmp_path), "BELEGABRUF_VERSION": "v2.0.1", "BELEGABRUF_NICHT_STARTEN": "1"})
+        assert not (heim / "Documents" / "Belegabruf").exists(), f"abgeschnitten nach Zeile {schnitt}: lief los"
+        assert netz.aufrufe() == []
+    lauf, ziel = _starten(tmp_path, netz, "v2.0.1")
+    assert lauf.returncode == 0, lauf.stdout + lauf.stderr
+
+
+def _alter_stand(ziel: Path, tag: str = "v2.0.1") -> None:
+    """Ein Update, das mittendrin abbrach: alte Fassung in .belegabruf-alt, die neue halb da."""
+    alt = ziel / ".belegabruf-alt"
+    (alt / "programm").mkdir(parents=True)
+    (alt / "programm" / "pyproject.toml").write_text(f'version = "{tag[1:]}"\n')
+    (alt / "Belegabruf Mac.command").write_text("#!/bin/bash\n")
+    (alt / ".belegabruf-version").write_text(tag + "\n")
+    (ziel / "Doku").mkdir()  # schon von der neuen Fassung eingespielt
+    (ziel / "meine-notiz.txt").write_text("bleibt")
+
+
+@nur_mac
+def test_reste_eines_abgebrochenen_updates_werden_zurueckgespielt(tmp_path, netz):
+    ziel = tmp_path / "heim" / "Documents" / "Belegabruf"
+    _alter_stand(ziel)
+    netz.release("v2.1.1")
+    lauf, ziel = _starten(tmp_path, netz, "v2.1.1")
+    assert lauf.returncode == 0, lauf.stdout + lauf.stderr
+    assert "nicht fertig" in lauf.stdout and "aktualisiert" in lauf.stdout  # als Belegabruf erkannt
+    assert (ziel / ".belegabruf-version").read_text().strip() == "v2.1.1"
+    assert not (ziel / ".belegabruf-alt").exists() and (ziel / "meine-notiz.txt").read_text() == "bleibt"
+
+
+@nur_mac
+def test_mv_scheitert_beim_beiseitelegen_alte_version_bleibt(tmp_path, netz):
+    """M2: Scheitert ein mv beim Beiseitelegen, kommt alles zurück (und der Lauf meldet es)."""
+    netz.release("v2.0.1")
+    _starten(tmp_path, netz, "v2.0.1")
+    netz.release("v2.1.1")
+    falsch = tmp_path / "bin" / "mv"
+    falsch.write_text('#!/bin/bash\ncase "$1|$2" in */Fehlersuche\\|*/.belegabruf-alt/) exit 1;; esac\n'
+                      'exec /bin/mv "$@"\n', encoding="utf-8")
+    falsch.chmod(0o755)
+    lauf, ziel = _starten(tmp_path, netz, "v2.1.1")
+    assert lauf.returncode == 1 and "wiederhergestellt" in lauf.stderr
+    assert (ziel / ".belegabruf-version").read_text().strip() == "v2.0.1"
+    assert (ziel / "programm" / "pyproject.toml").read_text() == 'version = "2.0.1"\n'
+    assert not (ziel / ".belegabruf-alt").exists()
+    falsch.unlink()
+    lauf, ziel = _starten(tmp_path, netz, "v2.1.1")  # danach geht es ganz normal
+    assert lauf.returncode == 0 and (ziel / ".belegabruf-version").read_text().strip() == "v2.1.1"
+
+
+@nur_mac
+def test_zielpfad_wird_normalisiert(tmp_path, netz):
+    """N2: „..“ wird aufgelöst, bevor geprüft wird."""
+    netz.release("v2.0.1")
+    heim = tmp_path / "heim"
+    lauf, _ = _starten(tmp_path, netz, "v2.0.1", ziel=Path(f"{heim}/Documents/../../ausserhalb"))
+    assert lauf.returncode == 1 and "Benutzerordner" in lauf.stderr
+    lauf, _ = _starten(tmp_path, netz, "v2.0.1", ziel=Path(f"{heim}/a/../Belegabruf"))
+    assert lauf.returncode == 0 and (heim / "Belegabruf" / ".belegabruf-version").exists()
+
+
+@nur_mac
+def test_laufpruefung_nimmt_den_pfad_woertlich(tmp_path, netz):
+    """N4: Ein Punkt im Ordnernamen ist kein Platzhalter — ein anderes Programm in einem
+    ähnlich heißenden Ordner blockiert das Update nicht, das eigene schon."""
+    netz.release("v2.0.1")
+    heim = tmp_path / "heim"
+    ziel = heim / "Bele.abruf"
+    fremd = subprocess.Popen(["/bin/bash", "-c", f"exec -a '{heim}/BeleXabruf/programm/x' sleep 30"])
+    try:
+        lauf, _ = _starten(tmp_path, netz, "v2.0.1", ziel=ziel)
+        assert lauf.returncode == 0, lauf.stdout + lauf.stderr
+    finally:
+        fremd.kill()
+    eigen = subprocess.Popen(["/bin/bash", "-c", f"exec -a '{ziel}/programm/.venv/bin/python' sleep 30"])
+    try:
+        lauf, _ = _starten(tmp_path, netz, "v2.0.1", ziel=ziel)
+        assert lauf.returncode == 1 and "läuft gerade" in lauf.stderr
+    finally:
+        eigen.kill()
+
+
+@nur_mac
+def test_ohne_json_in_plutil_liest_javascript(tmp_path, netz):
+    """N3: Kann plutil (älteres macOS) kein JSON, liest JavaScript für Automation die Antwort."""
+    netz.release("v2.0.1")
+    (tmp_path / "bin").mkdir(exist_ok=True)
+    plutil = tmp_path / "bin" / "plutil"
+    plutil.write_text("#!/bin/bash\nexit 1\n", encoding="utf-8")
+    plutil.chmod(0o755)
+    lauf, ziel = _starten(tmp_path, netz, "v2.0.1")
+    assert lauf.returncode == 0, lauf.stdout + lauf.stderr
+    assert (ziel / ".belegabruf-version").read_text().strip() == "v2.0.1"
+
+
+def test_installationsort_eine_konstante_je_skript():
+    import re
+
+    sh = SH.read_text(encoding="utf-8")
+    ps = PS1.read_text(encoding="utf-8")
+    assert sh.count('INSTALLATIONSORT="$HOME/Documents/Belegabruf"') == 1 and sh.count("Documents/Belegabruf") == 1
+    assert ps.count("'Belegabruf'") == 1 and "$BelegabrufInstallationsort" in ps
+    assert sh.rstrip().endswith('main "$@"')
+    assert "TrimEnd('\\') + '\\'" in ps  # Präfixvergleich mit Trenner
+    assert "IndexOf($suche" in ps and not re.search(r"-like\s+\"\*\$ziel", ps)

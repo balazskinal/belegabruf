@@ -16,6 +16,9 @@
 # Was PowerShell selbst laedt, bekommt kein "Mark of the Web" - so erscheint die Warnung
 # "Der Computer wurde durch Windows geschuetzt" nicht, die bei einem im Browser geladenen ZIP kommt.
 
+# Der Installationsordner - die einzige Stelle dafuer.
+$BelegabrufInstallationsort = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Belegabruf'
+
 function Invoke-BelegabrufEinrichtung {
     # Nur in dieser Funktion (mit "irm | iex" liefe es sonst in der Sitzung des Nutzers weiter).
     $ErrorActionPreference = 'Stop'
@@ -24,7 +27,8 @@ function Invoke-BelegabrufEinrichtung {
     $repo = 'balazskinal/belegabruf'
     $api = "https://api.github.com/repos/$repo/releases"
     $downloads = "https://github.com/$repo/releases/"
-    $ziel = if ($env:BELEGABRUF_ZIEL) { $env:BELEGABRUF_ZIEL } else { Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Belegabruf' }
+    $ziel = if ($env:BELEGABRUF_ZIEL) { $env:BELEGABRUF_ZIEL } else { $BelegabrufInstallationsort }
+    $ziel = [IO.Path]::GetFullPath($ziel).TrimEnd('\')   # ".." aufloesen, bevor geprueft wird
     $version = "$env:BELEGABRUF_VERSION"
     $eigene = @('Belegabruf Mac.command', 'Belegabruf Windows.cmd', 'programm', 'Fehlersuche', 'Doku', '.belegabruf-version')
 
@@ -42,9 +46,36 @@ function Invoke-BelegabrufEinrichtung {
     if ($version -and $version -notmatch '^v\d+\.\d+\.\d+$') {
         Stop-Einrichtung "BELEGABRUF_VERSION='$version' ist keine Versionsnummer wie v2.1.1."
     }
-    $profil = [Environment]::GetFolderPath('UserProfile')
-    if (-not ([IO.Path]::GetFullPath($ziel)).StartsWith($profil, [StringComparison]::OrdinalIgnoreCase)) {
-        Stop-Einrichtung 'Der Zielordner muss in deinem Benutzerordner liegen.'
+    # Mit Trenner vergleichen, damit C:\Users\Bob nicht auf C:\Users\Bobby passt.
+    $profil = [Environment]::GetFolderPath('UserProfile').TrimEnd('\') + '\'
+    if (-not $ziel.StartsWith($profil, [StringComparison]::OrdinalIgnoreCase)) {
+        Stop-Einrichtung "Der Installationsordner muss in deinem Benutzerordner liegen (nicht: $ziel)."
+    }
+    $altName = '.belegabruf-alt'
+
+    function Test-Belegabruf([string]$ordner) {
+        return (Test-Path -LiteralPath (Join-Path $ordner '.belegabruf-version')) -or
+            (Test-Path -LiteralPath (Join-Path $ordner 'Belegabruf Windows.cmd')) -or
+            (Test-Path -LiteralPath (Join-Path $ordner $altName))
+    }
+
+    function Restore-Reste([string]$ordner) {
+        # Ein abgebrochenes Update zuruecknehmen: die alte Fassung gilt.
+        $alt = Join-Path $ordner $altName
+        if (-not (Test-Path -LiteralPath $alt)) { return }
+        Write-Host 'Ein frueheres Update wurde nicht fertig - stelle die bisherige Version wieder her ...'
+        foreach ($eintrag in $eigene) {
+            $vorher = Join-Path $alt $eintrag
+            if (Test-Path -LiteralPath $vorher) {
+                $jetzt = Join-Path $ordner $eintrag
+                if (Test-Path -LiteralPath $jetzt) { Remove-Item -Recurse -Force -LiteralPath $jetzt }
+                Move-Item -LiteralPath $vorher -Destination $ordner
+            }
+        }
+        if (Get-ChildItem -Force -LiteralPath $alt | Select-Object -First 1) {
+            Stop-Einrichtung "Im Ordner $alt liegen unerwartete Dateien - bitte nachsehen."
+        }
+        Remove-Item -Force -LiteralPath $alt
     }
 
     $arbeit = Join-Path ([IO.Path]::GetTempPath()) ("belegabruf-einrichten-" + [Guid]::NewGuid().ToString('N'))
@@ -116,43 +147,43 @@ function Invoke-BelegabrufEinrichtung {
         if ((Test-Path $ziel) -and -not (Test-Path $ziel -PathType Container)) {
             Stop-Einrichtung "'$ziel' ist eine Datei, kein Ordner."
         }
-        $kennzeichen = (Test-Path (Join-Path $ziel '.belegabruf-version')) -or (Test-Path (Join-Path $ziel 'Belegabruf Windows.cmd'))
-        if ((Test-Path $ziel) -and (Get-ChildItem -Force -Path $ziel | Select-Object -First 1) -and -not $kennzeichen) {
+        $kennzeichen = Test-Belegabruf $ziel
+        if ((Test-Path -LiteralPath $ziel) -and (Get-ChildItem -Force -LiteralPath $ziel | Select-Object -First 1) -and -not $kennzeichen) {
             Stop-Einrichtung "Im Ordner '$ziel' liegen schon andere Dateien, aber kein Belegabruf. Bitte den Ordner umbenennen."
         }
+        $suche = "$ziel\programm\"   # woertlich vergleichen, nicht als Muster
         $laeuft = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-            Where-Object { $_.CommandLine -and $_.CommandLine -like "*$ziel\programm\*" } | Select-Object -First 1
+            Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($suche, [StringComparison]::OrdinalIgnoreCase) -ge 0 } |
+            Select-Object -First 1
         if ($laeuft) {
             Stop-Einrichtung "Belegabruf laeuft gerade. Bitte erst beenden (Knopf 'Beenden' im Fenster), dann die Zeile noch einmal."
         }
         New-Item -ItemType Directory -Force -Path $ziel | Out-Null
+        Restore-Reste $ziel
         Set-Content -Path (Join-Path $quelle.FullName '.belegabruf-version') -Value $tag -Encoding ASCII
-        $alt = Join-Path $ziel '.belegabruf-alt'
-        if (Test-Path $alt) { Remove-Item -Recurse -Force -LiteralPath $alt }
+        $alt = Join-Path $ziel $altName
         New-Item -ItemType Directory -Path $alt | Out-Null
-        foreach ($eintrag in $eigene) {
-            $pfad = Join-Path $ziel $eintrag
-            if (Test-Path -LiteralPath $pfad) { Move-Item -LiteralPath $pfad -Destination $alt }
-        }
         try {
+            # Beiseitelegen und Einspielen im selben try: Scheitert ein Schritt, kommt die alte Fassung zurueck.
+            foreach ($eintrag in $eigene) {
+                $pfad = Join-Path $ziel $eintrag
+                if (Test-Path -LiteralPath $pfad) { Move-Item -LiteralPath $pfad -Destination $alt }
+            }
             foreach ($eintrag in $eigene) {
                 $neu = Join-Path $quelle.FullName $eintrag
                 if (Test-Path -LiteralPath $neu) { Move-Item -LiteralPath $neu -Destination $ziel }
             }
         } catch {
-            foreach ($eintrag in $eigene) {
-                $pfad = Join-Path $ziel $eintrag
-                if (Test-Path -LiteralPath $pfad) { Remove-Item -Recurse -Force -LiteralPath $pfad }
-                $vorher = Join-Path $alt $eintrag
-                if (Test-Path -LiteralPath $vorher) { Move-Item -LiteralPath $vorher -Destination $ziel }
-            }
+            Restore-Reste $ziel
             Stop-Einrichtung 'Das Einspielen hat nicht geklappt; die bisherige Version ist wiederhergestellt.'
         }
         Remove-Item -Recurse -Force -LiteralPath $alt
 
         if ($kennzeichen) { Write-Host "OK Belegabruf ist auf $tag aktualisiert: $ziel" }
         else { Write-Host "OK Belegabruf $tag ist eingerichtet: $ziel" }
-        Write-Host '   Einstellungen und Anmeldungen bleiben im Datenordner (%APPDATA%\belegabruf).'
+        Write-Host "   Ab jetzt startest du Belegabruf mit 'Belegabruf Windows' in diesem Ordner."
+        Write-Host '   Hast du Belegabruf bisher aus dem ZIP gestartet (Ordner belegabruf-v...), kannst du den alten'
+        Write-Host '   Ordner loeschen. Einstellungen und Anmeldungen liegen im Datenordner (%APPDATA%\belegabruf) und bleiben.'
         Write-Host '   Update spaeter: dieselbe Zeile noch einmal in PowerShell.'
 
         # 4. Starten
