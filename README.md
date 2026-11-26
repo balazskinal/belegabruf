@@ -23,6 +23,51 @@ Anmeldung oder deine Belege. Es gibt keinen Server, kein Konto bei uns, keinen S
 
 ---
 
+## Einrichten — mit einer Zeile (empfohlen)
+
+Eine Zeile kopieren, einfügen, Enter. Sie lädt die neueste Version von GitHub, **prüft ihre
+Prüfsumme**, legt sie in den **Programme-Ordner deines Benutzerkontos** (siehe unten) und startet sie. Dabei
+erscheint **keine Sicherheitsmeldung** (anders als beim ZIP aus dem Browser, siehe unten). Keine
+Administratorrechte nötig; du brauchst eine Internetverbindung.
+
+**Mac**
+1. Das Programm **Terminal** öffnen: <kbd>⌘</kbd> + <kbd>Leertaste</kbd>, „Terminal“ tippen, Enter.
+2. Diese Zeile einfügen und Enter drücken:
+
+   ```bash
+   curl -fsSL https://github.com/balazskinal/belegabruf/releases/latest/download/installieren.sh | bash
+   ```
+
+**Windows**
+1. **PowerShell** öffnen: Startmenü, „PowerShell“ tippen, „Windows PowerShell“ anklicken (nicht „Als
+   Administrator“ — das ist nicht nötig).
+2. Diese Zeile einfügen (Rechtsklick) und Enter drücken:
+
+   ```powershell
+   irm https://github.com/balazskinal/belegabruf/releases/latest/download/installieren.ps1 | iex
+   ```
+
+Danach öffnet sich das Fenster „Belegabruf“. Beim ersten Mal lädt es noch ein paar Minuten lang alles
+Nötige (siehe [Erster Start](#erster-start-einmalig-ca-5-minuten), ab Schritt 4).
+
+| | wo es liegt | später starten |
+|---|---|---|
+| Mac | `~/Applications/Belegabruf` — im Finder: Benutzerordner → **Programme** → Belegabruf | **Spotlight** (<kbd>⌘</kbd> + <kbd>Leertaste</kbd>) „Belegabruf“, oder im Finder „Belegabruf Mac“ doppelklicken |
+| Windows | `%LOCALAPPDATA%\Programs\Belegabruf` | **Startmenü → „Belegabruf“** (legt die Zeile an), oder „Belegabruf Windows“ im Ordner |
+
+Der Programmordner liegt nicht in „Dokumente“ und nicht in iCloud bzw. OneDrive.
+
+**Hast du Belegabruf bisher aus dem ZIP gestartet** (Ordner `belegabruf-v…`), kannst du den alten Ordner
+löschen; ab jetzt startest du wie oben. Einstellungen und Anmeldungen bleiben, sie liegen im Datenordner.
+
+**Update:** dieselbe Zeile noch einmal (Belegabruf vorher beenden). Ersetzt werden nur die
+Programmdateien im Ordner „Belegabruf“; Einstellungen, Anmeldungen und Protokolle bleiben, sie liegen im
+Datenordner. Was du selbst in den Ordner gelegt hast, bleibt ebenfalls.
+
+Was die Zeile genau tut, steht im Skript selbst: [installieren.sh](https://github.com/balazskinal/belegabruf/blob/main/installieren.sh) (Mac),
+[installieren.ps1](https://github.com/balazskinal/belegabruf/blob/main/installieren.ps1) (Windows). Es lädt nur von `github.com/balazskinal/belegabruf` und
+bricht ab, wenn die Prüfsumme nicht stimmt oder fehlt.
+
 ## Was das Programm macht
 
 1. Du doppelklickst **„Belegabruf Mac“** bzw. **„Belegabruf Windows“** und dann im Fenster
@@ -85,8 +130,9 @@ daneben. Eine Verknüpfung (Mac: Alias) auf dem Schreibtisch geht.
 
 ## Erster Start (einmalig, ca. 5 Minuten)
 
-Du brauchst eine Internetverbindung. Installiert wird nur in deinem Benutzerkonto, keine
-Administratorrechte nötig.
+Am einfachsten mit der [Zeile oben](#einrichten--mit-einer-zeile-empfohlen). **Von Hand mit dem ZIP** geht
+es so — dabei fragt dein Rechner einmal nach (siehe Schritt 3). Du brauchst eine Internetverbindung.
+Installiert wird nur in deinem Benutzerkonto, keine Administratorrechte nötig.
 
 1. **Herunterladen:** Auf der Seite [Neueste Version](https://github.com/balazskinal/belegabruf/releases/latest)
    die Datei `belegabruf-v….zip` laden.
@@ -104,7 +150,8 @@ Administratorrechte nötig.
      2. *Systemeinstellungen → Datenschutz & Sicherheit* öffnen, ganz nach unten scrollen und bei
         „‚Belegabruf Mac.command‘ wurde blockiert …“ auf **„Trotzdem öffnen“** klicken; mit Passwort
         bzw. Touch ID bestätigen.
-     3. **„Belegabruf Mac“ noch einmal doppelklicken** und in der nächsten Frage „Öffnen“ wählen.
+     3. **„Belegabruf Mac“ noch einmal doppelklicken** und die nächste Rückfrage bestätigen (je nach
+        macOS-Version heißt der Knopf „Öffnen“ oder „Trotzdem öffnen“).
 
      Nach jedem **neu geladenen ZIP** (also bei jedem Update) fragt macOS wieder — dann dieselben
      Schritte.
@@ -344,7 +391,15 @@ umbenannt (nicht gelöscht). Danach kannst du die alte Datei wegwerfen.
 
 ## Neue Version installieren (Update)
 
-Beim Start steht ein Hinweis, wenn es eine neuere Version gibt. Dann:
+Beim Start steht ein Hinweis, wenn es eine neuere Version gibt.
+
+**Mit einer Zeile (empfohlen):** Belegabruf beenden und
+[dieselbe Zeile wie beim Einrichten](#einrichten--mit-einer-zeile-empfohlen) noch einmal ins Terminal bzw. in
+PowerShell — fertig. Wer bisher mit dem ZIP gearbeitet hat: Die Zeile legt Belegabruf im Programme-Ordner
+an (siehe [oben](#einrichten--mit-einer-zeile-empfohlen)); den alten Ordner `belegabruf-v…` kannst du danach
+löschen (Einstellungen und Anmeldungen bleiben).
+
+**Von Hand mit dem ZIP:**
 
 1. Den **alten Ordner `belegabruf-v…` komplett löschen** (mit allem darin, auch `programm`).
 2. Die neue ZIP-Datei von [Neueste Version](https://github.com/balazskinal/belegabruf/releases/latest) laden und auspacken.
@@ -363,6 +418,11 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 
 ## Was neu ist
 
+- **2.2.0** — **Einrichten und Update mit einer Zeile** im Terminal bzw. in PowerShell (siehe ganz oben):
+  lädt die neueste Version, prüft die Prüfsumme, legt sie in den Programme-Ordner des Benutzers (Mac
+  `~/Applications/Belegabruf`, Windows `%LOCALAPPDATA%\Programs\Belegabruf` mit Eintrag im Startmenü) und
+  startet sie — ohne Sicherheitsmeldung. Der Hinweis „neuere Version“ nennt jetzt diese Zeile. Pfade in Meldungen
+  zeigen den Benutzerordner als `~`.
 - **2.1.1** — **Belege nur vom Anbieter selbst**, für alle Anbieter gleich geprüft (siehe oben): nur
   `https`, kein fremder Port, keine Benutzerangaben, Host genau der des Anbieters — vor dem Aufruf und
   nach einer Weiterleitung. Abgewiesenes steht in der Zusammenfassung. Kleinigkeiten:
@@ -460,6 +520,7 @@ Passwortspeicher), nie heraus. Die Tests dazu stehen in `programm/tests/test_obe
 Belegabruf Mac.command,      Starter (wechseln nach programm/, richten ein, rufen "belege oberflaeche" auf)
 Belegabruf Windows.cmd
 Fehlersuche/                 Starter für das Menü im Terminal ("belege start")
+installieren.sh, .ps1         Einrichten/Update mit einer Zeile (die Release-Action hängt sie an jedes Release)
 README.md, LICENSE           im ZIP unter Doku/ (die Release-Action kopiert sie dorthin)
 programm/
   pyproject.toml, uv.lock    Abhängigkeiten (Python, Playwright, PyMuPDF, keyring)

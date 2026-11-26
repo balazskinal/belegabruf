@@ -8,11 +8,27 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import urllib.request
 
 from belegabruf import GITHUB_REPO, __version__
 
 NEUESTE_SEITE = f"https://github.com/{GITHUB_REPO}/releases/latest"
+
+#: Einrichten und Update mit einer Zeile (ab 2.2.0): Was curl bzw. PowerShell lädt, bekommt
+#: keine Quarantäne bzw. kein Mark-of-the-Web — keine Sicherheitsmeldung beim Start.
+UPDATE_MAC = f"curl -fsSL https://github.com/{GITHUB_REPO}/releases/latest/download/installieren.sh | bash"
+UPDATE_WINDOWS = f"irm https://github.com/{GITHUB_REPO}/releases/latest/download/installieren.ps1 | iex"
+
+
+def update_zeile() -> str:
+    """Die Update-Zeile für dieses System."""
+    return UPDATE_WINDOWS if sys.platform == "win32" else UPDATE_MAC
+
+
+def update_hinweis() -> str:
+    """Wo die Zeile hinkommt — für Menschen."""
+    return "in PowerShell" if sys.platform == "win32" else "im Programm „Terminal“"
 
 
 def _als_tupel(text: str) -> tuple[int, ...]:

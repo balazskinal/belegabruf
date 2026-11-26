@@ -154,6 +154,8 @@ class Steuerung:
             "version": __version__,
             "neuere_version": self.neuere,
             "neueste_seite": aktualisierung.NEUESTE_SEITE if self.neuere else "",
+            "update_zeile": aktualisierung.update_zeile(),
+            "update_wo": aktualisierung.update_hinweis(),
             "eingerichtet": eingerichtet,
             "belegordner": str(einst.belegordner),
             "ablage": einst.ablage,

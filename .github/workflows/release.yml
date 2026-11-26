@@ -46,11 +46,37 @@ jobs:
           find "dist/$NAME" -name "__pycache__" -type d -prune -exec rm -rf {} +
           chmod +x "dist/$NAME/"*.command "dist/$NAME/Fehlersuche/"*.command
           (cd dist && zip -r -X "$NAME.zip" "$NAME")
+          # Dasselbe ZIP mit festem Namen: …/releases/latest/download/belegabruf.zip zeigt immer
+          # auf die neueste Version (für die Ein-Zeilen-Einrichtung), dazu seine Prüfsumme.
+          cp "dist/$NAME.zip" dist/belegabruf.zip
+          (cd dist && sha256sum belegabruf.zip > belegabruf.zip.sha256)
+          cp installieren.sh installieren.ps1 dist/
 
       - name: Release anlegen
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "dist/belegabruf-${GITHUB_REF_NAME}.zip" \
+          cat > dist/notizen.md <<'NOTIZEN'
+          **Einrichten und Update mit einer Zeile** (empfohlen, ohne Sicherheitsmeldung):
+
+          Mac, im Programm „Terminal“:
+
+              curl -fsSL https://github.com/balazskinal/belegabruf/releases/latest/download/installieren.sh | bash
+
+          Windows, in „PowerShell“:
+
+              irm https://github.com/balazskinal/belegabruf/releases/latest/download/installieren.ps1 | iex
+
+          Das lädt die neueste Version, prüft ihre Prüfsumme, legt sie in den Programme-Ordner deines
+          Benutzerkontos (Mac: ~/Applications/Belegabruf, Windows: %LOCALAPPDATA%\Programs\Belegabruf mit
+          Eintrag im Startmenü) und startet sie. Update: dieselbe Zeile noch einmal. Einstellungen und
+          Anmeldungen bleiben erhalten (sie liegen im Datenordner).
+
+          Oder von Hand: `belegabruf.zip` laden, auspacken, „Belegabruf Mac“ bzw. „Belegabruf Windows“
+          doppelklicken. Dabei fragt macOS bzw. Windows einmal nach (siehe Doku/README.md).
+          NOTIZEN
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/belegabruf-${GITHUB_REF_NAME}.zip" dist/belegabruf.zip dist/belegabruf.zip.sha256 \
+            dist/installieren.sh dist/installieren.ps1 \
             --title "Belegabruf ${GITHUB_REF_NAME}" \
-            --notes "Herunterladen: belegabruf-${GITHUB_REF_NAME}.zip. Erster Start und Update: ZIP auspacken, im ausgepackten Ordner „Belegabruf Mac“ bzw. „Belegabruf Windows“ doppelklicken (richtet sich selbst ein). Beim Update den alten Programmordner vorher löschen. Einstellungen und Anmeldungen liegen im Datenordner und bleiben erhalten. Anleitung: Doku/README.md."
+            --notes-file dist/notizen.md

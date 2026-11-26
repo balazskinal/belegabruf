@@ -253,7 +253,7 @@ def test_keine_hive_homes_bezuege_im_repo():
     for datei in wurzel.rglob("*"):
         if any(t in datei.parts for t in (".git", ".venv", "__pycache__")) or not datei.is_file():
             continue
-        if datei.suffix not in {".py", ".md", ".toml", ".yml", ".command", ".cmd", ".txt", ""}:
+        if datei.suffix not in {".py", ".md", ".toml", ".yml", ".command", ".cmd", ".txt", ".sh", ".ps1", ".html", ""}:
             continue
         inhalt = datei.read_text(encoding="utf-8", errors="ignore").lower()
         for wort in verboten:

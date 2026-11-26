@@ -5,6 +5,7 @@ Alle Adressen sind erfunden (example.com)."""
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -258,11 +259,12 @@ def test_belege_ab_sagt_dass_nachgeholtes_verschickt_wird():
 def test_texte_nennen_den_starter_beim_namen(monkeypatch):
     """Nach dem Umzug heißt der Starter „Belegabruf Mac“ bzw. „Belegabruf Windows“ — so steht
     es auch in den Hinweisen (wieder öffnen, Browser fehlt, Update)."""
+    echt = pfade.sys.platform
     monkeypatch.setattr(pfade.sys, "platform", "darwin")
     assert pfade.starter() == "Belegabruf Mac"
     monkeypatch.setattr(pfade.sys, "platform", "win32")
     assert pfade.starter() == "Belegabruf Windows"
-    from importlib import resources
-
-    seite = resources.files("belegabruf.oberflaeche").joinpath("seite.html").read_text(encoding="utf-8")
-    assert "„Belegabruf Mac“ bzw. „Belegabruf Windows“ doppelklicken" in seite
+    monkeypatch.setattr(pfade.sys, "platform", echt)  # nicht mit vorgetäuschtem Windows weitermachen
+    # Seit 2.2.0 nennt der Update-Hinweis der Seite die Zeile für Terminal bzw. PowerShell.
+    seite = (Path(pfade.__file__).parent / "oberflaeche" / "seite.html").read_text(encoding="utf-8")
+    assert "Update mit einer Zeile ${zustand.update_wo}: ${zustand.update_zeile}" in seite
