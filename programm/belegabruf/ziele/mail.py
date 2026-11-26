@@ -149,7 +149,7 @@ class Postausgang:
         except Exception:  # noqa: BLE001
             try:
                 smtp.close()
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001 - Verbindung nach Fehler ohnehin verloren  # nosec B110
                 pass
 
     def kaputt(self) -> None:
@@ -157,7 +157,7 @@ class Postausgang:
         if self._verbindung is not None:
             try:
                 self._verbindung.close()
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001 - Abmelden am Ende, Verbindung ohnehin vorbei  # nosec B110
                 pass
         self._verbindung = None
 

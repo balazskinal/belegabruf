@@ -27,7 +27,7 @@ def _konsole_vorbereiten() -> None:
     for strom in (sys.stdout, sys.stderr):
         try:
             strom.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 - Konsole ohne reconfigure: Ausgabe bleibt, wie sie ist  # nosec B110
             pass
 
 

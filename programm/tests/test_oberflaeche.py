@@ -1732,3 +1732,30 @@ def test_neues_konto_anmelden_erst_nach_dem_speichern(seite, tmp_path):
     zeile = p.locator("#kontenliste .kontozeile").first
     assert zeile.locator("button:has-text('Anmelden')").is_visible()
     assert "noch nie angemeldet" in zeile.inner_text()
+
+
+def test_verwerfen_setzt_die_socket_frist_zurueck():
+    """Die kurze Frist beim Verwerfen gilt nur dort — danach die bisherige Frist."""
+    import io
+
+    from belegabruf.oberflaeche.server import Handler
+
+    class Verbindung:
+        frist = None
+
+        def gettimeout(self):
+            return self.frist
+
+        def settimeout(self, wert):
+            self.frist = wert
+
+    h = Handler.__new__(Handler)
+    h.connection = Verbindung()
+    h.connection.frist = 42.0
+    h.rfile = io.BytesIO(b"x" * 10)
+    h._verwerfen(10)
+    assert h.connection.frist == 42.0
+    h.connection.frist = None
+    h.rfile = io.BytesIO(b"")
+    h._verwerfen(1000)  # Absender schickt weniger als angekündigt
+    assert h.connection.frist is None

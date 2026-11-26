@@ -691,3 +691,34 @@ def test_python_version_landet_im_zip(tmp_path):
     assert "belegabruf-v9.9.9/programm/.python-version" in namen
     with zipfile.ZipFile(quelle / "dist" / "belegabruf.zip") as z:
         assert z.read("belegabruf-v9.9.9/programm/.python-version").decode().strip() == "3.12"
+
+
+@pytest.mark.parametrize("inhalt, erwartet", [
+    ("3.12\n", (3, 12)),
+    ("3.12.7\n", (3, 12)),
+    ("cpython-3.12\n", (3, 12)),
+    ("cpython-3.12.7-macos-aarch64-none\n", (3, 12)),
+    ("cpython@3.12\n", (3, 12)),
+    ("# Kommentar\n\n  3.13  \n", (3, 13)),
+    ("pypy\n", None),
+    ("", None),
+])
+def test_python_version_robust_gelesen(inhalt, erwartet):
+    from belegabruf import startpruefung
+
+    assert startpruefung.gewollte_python(inhalt) == erwartet
+
+
+@pytest.mark.parametrize("datei", ["3.12.7\n", "cpython-3.12\n", "# fest\n3.12\n"])
+def test_kein_neues_einrichten_bei_anderer_schreibweise(tmp_path, datei):
+    """Mit „3.12.7“ oder „cpython-3.12“ und einer .venv mit 3.12 nicht bei jedem Start neu."""
+    from belegabruf import startpruefung
+
+    (tmp_path / "uv.lock").write_text("", encoding="utf-8")
+    (tmp_path / ".python-version").write_text(datei, encoding="utf-8")
+    (tmp_path / ".venv").mkdir()
+    (tmp_path / ".venv" / startpruefung.MERKER).write_text("", encoding="utf-8")
+    (tmp_path / ".venv" / "pyvenv.cfg").write_text("version_info = 3.12\n", encoding="utf-8")
+    assert startpruefung.umgebung_aktuell(tmp_path)
+    (tmp_path / ".venv" / "pyvenv.cfg").write_text("version_info = 3.15.0\n", encoding="utf-8")
+    assert not startpruefung.umgebung_aktuell(tmp_path)

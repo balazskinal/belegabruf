@@ -421,7 +421,7 @@ class Booking(Quelle):
         finally:
             try:
                 probe.close()
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001 - Prüf-Tab schon zu  # nosec B110
                 pass
 
     # 2. Anmelden lassen -----------------------------------------------------

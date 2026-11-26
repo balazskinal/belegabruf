@@ -379,7 +379,7 @@ class Xentra(Quelle):
             if popup is not None:
                 try:
                     popup.close()
-                except Exception:  # noqa: BLE001
+                except Exception:  # noqa: BLE001 - Download-Fenster schon zu  # nosec B110
                     pass
 
     def belege_holen(self, umgebung: Umgebung) -> Ergebnis:
