@@ -856,8 +856,8 @@ $("formular").addEventListener("submit", async (ereignis) => {
     $("gespeichert").textContent = r.gesichert
       ? `Gespeichert. Die bisherige Datei liegt unverändert als „${r.gesichert}“ daneben.`
       : "Gespeichert.";
+    await laden(true);  // erst neu aufbauen, dann melden, sonst greift man noch auf die alte Zeile zu
     $("gespeichert").classList.remove("versteckt");
-    await laden(true);
   } catch (e) {
     const felder = Object.entries(e.felder || {});
     const markiert = felder.filter(([name, satz]) => markieren(name, satz)).length;
