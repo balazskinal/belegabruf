@@ -69,20 +69,77 @@ def test_mailadresse_ok(adresse, ok):
     assert einstellungen.mailadresse_ok(adresse) is ok
 
 
-def test_mailadresse_gleiche_regel_in_datei_und_oberflaeche(tmp_path):
-    """Datei und Formular lehnen dieselben Adressen ab (früher prüften sie verschieden)."""
+def test_neue_eingaben_pruefen_streng(tmp_path):
+    """Formular und Terminal-Einrichtung nehmen nur name@domain.tld an."""
     from belegabruf.oberflaeche.aktionen import Eingabefehler, einstellungen_aus_eingaben
 
     for adresse in ("@example.com", "beleg@example"):
-        with pytest.raises(einstellungen.EinstellungsFehler, match="keine Mailadresse"):
-            einstellungen.aus_text(f'[mail]\nempfaenger = ["{adresse}"]\n')
         with pytest.raises(Eingabefehler) as fehler:
             einstellungen_aus_eingaben({"belegordner": str(tmp_path / "B"), "konten": [],
                                         "mail": {"empfaenger": [adresse]}})
         assert "keine Mailadresse" in fehler.value.felder["empfaenger"]
 
 
+DATEI_2_0_0 = """# Einstellungen für Belegabruf
+belegordner = "{ordner}"
+ablage = "jahr"
+
+[[konto]]
+quelle = "airbnb"
+name = "Privat"
+belege_ab = "alle"
+
+[mail]
+server = "smtp.example.com"
+port = 465
+verschluesselung = "ssl"
+benutzer = "x@y"
+absender = "x@y"
+empfaenger = ["x@y", "beleg@example.com"]
+erstversand = "nicht"
+"""
+
+
+@pytest.mark.parametrize("ziele", ['ziele = ["ordner"]\n', 'ziele = ["ordner", "mail"]\n'])
+def test_datei_aus_2_0_0_mit_milder_adresse_laedt_weiter(tmp_path, ziele):
+    """Eine Datei aus 2.0.0 mit „x@y“ (ohne Punkt) muss lesbar bleiben — mit Mail aus und an.
+    Sonst zeigte die Oberfläche „nicht eingerichtet“, und neues Einrichten gäbe neue Kennungen."""
+    datei = pfade.einstellungsdatei()
+    datei.parent.mkdir(parents=True, exist_ok=True)
+    datei.write_text(ziele + DATEI_2_0_0.format(ordner=tmp_path / "Belege"), encoding="utf-8")
+    einst = einstellungen.laden()
+    assert [k.name for k in einst.konten] == ["Privat"]
+    assert einst.mail.empfaenger == ["x@y", "beleg@example.com"] and einst.mail.absender == "x@y"
+    assert einstellungen.pruefen(einst).mail.absender == "x@y"  # auch das Zurückschreiben geht
+
+
+def test_datei_ohne_at_wird_weiter_abgelehnt():
+    with pytest.raises(einstellungen.EinstellungsFehler, match="keine Mailadresse"):
+        einstellungen.aus_text('[mail]\nempfaenger = ["keine-adresse"]\n')
+
+
+def test_oberflaeche_zeigt_konten_einer_datei_aus_2_0_0(tmp_path):
+    from belegabruf.oberflaeche.aktionen import Steuerung
+
+    datei = pfade.einstellungsdatei()
+    datei.parent.mkdir(parents=True, exist_ok=True)
+    datei.write_text('ziele = ["ordner"]\n' + DATEI_2_0_0.format(ordner=tmp_path / "Belege"), encoding="utf-8")
+    zustand = Steuerung().zustand()
+    assert zustand["eingerichtet"] and [k["name"] for k in zustand["konten"]] == ["Privat"]
+
+
 # ── eine Regel für Kontonamen ────────────────────────────────────────────────
+
+
+def test_fehlender_name_und_verwechslung_zugleich():
+    """N2: Fehlt bei einem Konto der Name, werden die übrigen trotzdem auf Verwechslung geprüft."""
+    konten = [Konto("airbnb", "standard", titel=""), Konto("airbnb", "Privat", titel="Privat"),
+              Konto("airbnb", "privat!", titel="privat!")]
+    fehler = dict(einstellungen.kontonamen_fehler(konten))
+    assert set(fehler) == {0, 2}
+    assert "braucht jedes einen Namen" in fehler[0] and "dasselbe" in fehler[2]
+    with pytest.raises(einstellungen.EinstellungsFehler, match="braucht jedes einen Namen"):
+        einstellungen.konten_unterscheidbar(konten)  # die erste Meldung bleibt der fehlende Name
 
 
 def test_kontonamen_fehler_nennt_jedes_betroffene_konto():

@@ -168,12 +168,18 @@ class Einstellungen:
         auswahl = [k for k in self.konten if k.aktiv and (quelle is None or k.quelle == quelle)]
         if konto is None:
             return auswahl
-        treffer: list[Konto] = []
-        for q in dict.fromkeys(k.quelle for k in auswahl):
-            je_quelle = [k for k in auswahl if k.quelle == q]
-            nach_titel = [k for k in je_quelle if k.anzeigetitel == konto]
-            treffer += nach_titel[:1] or [k for k in je_quelle if k.name == konto][:1]
-        return treffer
+        quellen_der_auswahl = dict.fromkeys(k.quelle for k in auswahl)
+        treffer = (_eines_je_quelle([k for k in auswahl if k.quelle == q], konto) for q in quellen_der_auswahl)
+        return [k for k in treffer if k is not None]
+
+
+def _eines_je_quelle(konten: list[Konto], konto: str) -> Konto | None:
+    """Das Konto eines Anbieters zu ``konto``: erst nach Name, dann nach Kennung."""
+    for passt in (lambda k: k.anzeigetitel == konto, lambda k: k.name == konto):
+        gefunden = next((k for k in konten if passt(k)), None)
+        if gefunden is not None:
+            return gefunden
+    return None
 
 
 def kollision_text(anbieter: str, a: Konto, b: Konto, kurz: str) -> str:
@@ -216,7 +222,7 @@ def kontonamen_fehler(konten: list[Konto]) -> list[tuple[int, str]]:
         if len(nummern) > 1 and ohne_namen:
             satz = f"Bei {anbieter} sind mehrere Konten eingetragen — dann braucht jedes einen Namen."
             fehler += [(nr, satz) for nr in ohne_namen]
-            continue
+            nummern = [nr for nr in nummern if nr not in ohne_namen]  # die übrigen gleich mitprüfen
         kennungen: dict[str, int] = {}
         titel: dict[str, int] = {}
         for nr in nummern:
@@ -239,7 +245,8 @@ def konten_unterscheidbar(konten: list[Konto]) -> None:
 
 def mailadresse_ok(adresse: str) -> bool:
     """Eine einzelne Mailadresse: etwas@etwas.tld, ohne Leerzeichen und Komma.
-    Die einzige Stelle dafür (Datei, Oberfläche, Terminal)."""
+    Die Regel für neue Eingaben (Oberfläche, Terminal-Einrichtung). Beim Laden der Datei
+    gilt bewusst weiter die mildere Regel von 2.0.0 (siehe ``_mail_lesen``)."""
     name, at, domain = adresse.partition("@")
     return bool(name and at and "@" not in domain and "." in domain.strip(".")
                 and " " not in adresse and "," not in adresse)
@@ -342,7 +349,10 @@ def _mail_lesen(roh: object, pruefen: bool) -> MailEinstellung:
         raise EinstellungsFehler(
             f"[mail] passwort_eintrag = \"{mail.passwort_eintrag}\" muss die Form \"Dienst/Konto\" haben.")
     for adresse in mail.empfaenger + ([mail.absender] if mail.absender else []):
-        if not mailadresse_ok(adresse):
+        # Beim Laden die milde Regel von 2.0.0: Eine Datei, die bisher lesbar war, bleibt es
+        # (sonst wirkte sie „nicht eingerichtet“, und neue Kennungen holten alles noch einmal).
+        # Neue Eingaben in Formular und Terminal prüft mailadresse_ok streng.
+        if "@" not in adresse or "," in adresse or " " in adresse:
             raise EinstellungsFehler(f"[mail] \"{adresse}\" ist keine Mailadresse.")
     if pruefen:
         fehlt = [n for n in ("server", "benutzer", "absender") if not getattr(mail, n)]

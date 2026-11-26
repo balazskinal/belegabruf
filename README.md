@@ -308,9 +308,16 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 
 - **2.0.1** — **Aufgeräumter Ordner:** Oben liegen nur noch die zwei Starter „Belegabruf Mac“ und
   „Belegabruf Windows“; `programm/`, `Fehlersuche/` und `Doku/` (Anleitung, Lizenz) sind Ordner. Sonst
-  unverändert bis auf Kleinigkeiten: Der Hinweis zu „Belege ab“ sagt jetzt, dass beim Erweitern des
-  Zeitraums die nachgeholten Belege auch verschickt werden, wenn Mail an ist; `--konto` im Terminal
-  trifft nie zwei Konten.
+  unverändert bis auf Kleinigkeiten:
+  - Der Hinweis zu „Belege ab“ sagt jetzt, dass beim Erweitern des Zeitraums die nachgeholten Belege
+    auch verschickt werden, wenn Mail an ist.
+  - `--konto` im Terminal trifft je Anbieter nur noch ein Konto.
+  - Die Terminal-Einrichtung (`belege einrichten`) behält beim Ändern der Mail-Angaben die Auswahl
+    „Erster Versand“; bisher sprang sie auf „nicht verschicken“ zurück.
+  - Neu eingegebene Mailadressen (im Fenster und im Terminal) müssen die Form `name@domain.tld` haben.
+    Eine bestehende Einstellungsdatei wird weiter gelesen wie bisher.
+  - Bei Unterordnern nach Monat: Ein Beleg ohne Rechnungsdatum aus einem früheren Jahr kommt in den
+    Jahresordner (nicht in einen geratenen Monat).
 - **2.0.0** — **Bedienung im Fenster statt im Terminal.** Nur noch **ein Starter je System:**
   „Belegabruf“ ersetzt „Einrichten“ und „Belege holen“; er richtet sich selbst ein und öffnet das Fenster
   „Belegabruf“: Einstellungen als Formular (auch Mail-Passwort, direkt in den Passwortspeicher), je
@@ -342,8 +349,8 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 ## Für Neugierige und Entwickler
 
 Warum das Programm so gebaut ist, steht in den **Entscheidungen** unter
-[`docs/entscheidungen/`](docs/entscheidungen/README.md); was als Nächstes kommt, in der
-[Roadmap](docs/roadmap.md).
+[`docs/entscheidungen/`](https://github.com/balazskinal/belegabruf/blob/main/docs/entscheidungen/README.md);
+was als Nächstes kommt, in der [Roadmap](https://github.com/balazskinal/belegabruf/blob/main/docs/roadmap.md).
 
 ### Kommandozeile
 
