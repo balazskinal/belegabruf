@@ -642,3 +642,52 @@ def test_starter_holt_uv_nur_von_fester_adresse():
         text = (WURZEL / name).read_text(encoding="utf-8")
         assert '2>nul || (' in text and 'Der Ordner "programm" fehlt neben' in text
     assert "uv sync --locked --no-dev" in win and "uv sync --locked --no-dev" in mac
+
+
+def test_startpruefung_erkennt_falsche_python_version(tmp_path):
+    """2.2.1: Eine .venv mit anderem Python als .python-version (z. B. halb eingerichtet mit 3.15)
+    gilt als nicht eingerichtet — der Starter ruft dann uv sync, das die .venv neu aufbaut."""
+    from belegabruf import startpruefung
+
+    (tmp_path / "uv.lock").write_text("", encoding="utf-8")
+    (tmp_path / ".python-version").write_text("3.12\n", encoding="utf-8")
+    venv = tmp_path / ".venv"
+    venv.mkdir()
+    (venv / startpruefung.MERKER).write_text("", encoding="utf-8")
+    for cfg, passt in (("version_info = 3.12\n", True), ("version_info = 3.12.13\n", True),
+                       ("version = 3.12.8\n", True), ("version_info = 3.15.0\n", False),
+                       ("version_info = 3.1\n", False), ("", False)):
+        (venv / "pyvenv.cfg").write_text("home = /x\n" + cfg, encoding="utf-8")
+        assert startpruefung.umgebung_aktuell(tmp_path) is passt, cfg
+    (venv / "pyvenv.cfg").unlink()
+    assert not startpruefung.umgebung_aktuell(tmp_path)  # unbekannt: lieber neu einrichten
+    (tmp_path / ".python-version").unlink()
+    assert startpruefung.umgebung_aktuell(tmp_path)  # ohne .python-version wie bisher
+
+
+@pytest.mark.skipif(__import__("sys").platform == "win32", reason="baut das ZIP mit bash und zip")
+def test_python_version_landet_im_zip(tmp_path):
+    """Der Schritt „ZIP bauen“ aus release.yml, genau so ausgeführt: programm/.python-version
+    ist im ZIP (sonst richtet der Starter wieder irgendeine Python-Version ein)."""
+    import re
+    import shutil
+    import subprocess
+    import zipfile
+
+    if not shutil.which("zip"):
+        pytest.skip("zip fehlt")
+    workflow = (WURZEL / ".github/workflows/release.yml").read_text(encoding="utf-8")
+    schritt = re.search(r"- name: ZIP bauen\n\s+run: \|\n((?:\s{10}.*\n|\n)+?)\n\s+- name:", workflow)
+    assert schritt, "Schritt „ZIP bauen“ nicht gefunden"
+    befehle = "\n".join(z[10:] for z in schritt.group(1).splitlines())
+    quelle = tmp_path / "quelle"
+    shutil.copytree(WURZEL, quelle, ignore=shutil.ignore_patterns(".git", ".venv", "__pycache__", "dist",
+                                                                  ".pytest_cache", ".ruff_cache"))
+    lauf = subprocess.run(["bash", "-e", "-c", befehle], cwd=quelle, capture_output=True, text=True,
+                          env={**__import__("os").environ, "GITHUB_REF_NAME": "v9.9.9"}, timeout=120)
+    assert lauf.returncode == 0, lauf.stdout + lauf.stderr
+    with zipfile.ZipFile(quelle / "dist" / "belegabruf.zip") as z:
+        namen = z.namelist()
+    assert "belegabruf-v9.9.9/programm/.python-version" in namen
+    with zipfile.ZipFile(quelle / "dist" / "belegabruf.zip") as z:
+        assert z.read("belegabruf-v9.9.9/programm/.python-version").decode().strip() == "3.12"

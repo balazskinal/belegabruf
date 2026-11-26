@@ -1,10 +1,12 @@
 [project]
 name = "belegabruf"
-version = "2.2.0"
+version = "2.2.1"
 description = "Holt Rechnungen aus eingeloggten Anbieter-Konten per Doppelklick auf den eigenen Rechner."
 license = "MIT"
 authors = [{ name = "Balázs Kinál" }]
-requires-python = ">=3.12"
+# Obergrenze: PyMuPDF zieht onnxruntime nach, das es (Stand 11/2026) nur für Python 3.12–3.14 gibt.
+# Ohne Grenze lud uv auf frischen Rechnern Python 3.15, und die Einrichtung scheiterte.
+requires-python = ">=3.12,<3.15"
 dependencies = [
     "playwright>=1.48",
     "pymupdf>=1.24",
@@ -27,6 +29,11 @@ packages = ["belegabruf"]
 [tool.uv]
 # Eine feste Python-Version, damit Mac und Windows gleich laufen.
 python-preference = "managed"
+
+[tool.bandit]
+# B110 (try/except/pass): bewusst — an diesen Stellen (Fenster schon zu, Aufräumen, optionale
+# Hinweise) darf ein Fehler nichts abbrechen; jede Stelle trägt einen Kommentar, warum.
+skips = ["B110"]
 
 [tool.ruff]
 # Stil des Projekts: 120 Zeichen je Zeile. Prüfen mit: uvx ruff check .

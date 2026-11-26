@@ -1,0 +1,204 @@
+name: Prüfung
+
+# Bei jedem PR gegen main und bei jedem Push auf main. Nur Leserechte, keine Secrets
+# (außer dem schreibgeschützten GITHUB_TOKEN für die Abfrage der neuesten Version), kein
+# pull_request_target — Code aus Forks läuft also nie mit Schreibrechten.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pruefung-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Linux: alle Tests und Werkzeuge — dieselben Schritte wie im Release (tests.yml).
+  tests:
+    name: Tests
+    uses: ./.github/workflows/tests.yml
+
+  # Windows und macOS: pytest, auch die Oberflächentests mit Chromium. Hier zeigen sich Pfad-,
+  # Starter- und Passwortspeicher-Probleme des jeweiligen Systems.
+  tests-system:
+    name: Tests ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+          - name: macOS
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: programm
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
+      - name: Bausteine (genau wie uv.lock)
+        run: uv sync --locked
+      - name: Browser für die Oberflächen-Tests (Chromium, ohne Headless Shell)
+        run: uv run --locked playwright install --no-shell chromium
+      - name: pytest
+        run: uv run --locked pytest -q -rs
+
+  # Die Ein-Zeilen-Einrichtung echt: das Skript aus diesem PR, die neueste veröffentlichte
+  # Version von GitHub; danach Update (zweiter Lauf). Der Starter läuft dann auf dem Stand
+  # dieses PRs (der Ordner wie im ZIP: Starter oben, programm/ daneben) bis „Umgebung
+  # eingerichtet“ — so fällt ein Fehler in Starter, uv.lock oder Python-Version vor dem
+  # Release auf, nicht erst bei Nutzern.
+  einrichtung-mac:
+    name: Einrichtung Mac
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: shellcheck
+        run: |
+          brew list shellcheck >/dev/null 2>&1 || brew install shellcheck
+          shellcheck -e SC1111 installieren.sh "Belegabruf Mac.command" Fehlersuche/*.command
+
+      - name: Einrichten (wie die Zeile, neueste Version)
+        env:
+          BELEGABRUF_NICHT_STARTEN: "1"
+        run: bash installieren.sh | tee "$RUNNER_TEMP/einrichten.log"
+
+      - name: Prüfen (Ordner, Version, keine Quarantäne)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Z="$HOME/Applications/Belegabruf"
+          TAG="$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name)"
+          test -x "$Z/Belegabruf Mac.command"
+          test -d "$Z/programm" && test -d "$Z/Fehlersuche" && test -d "$Z/Doku"
+          test "$(cat "$Z/.belegabruf-version")" = "$TAG"
+          grep -q "ist eingerichtet" "$RUNNER_TEMP/einrichten.log"
+          if xattr -lr "$Z" | grep -q com.apple.quarantine; then echo "Quarantäne gefunden"; exit 1; fi
+          echo "✓ $TAG in $Z"
+
+      - name: Update (zweiter Lauf)
+        env:
+          BELEGABRUF_NICHT_STARTEN: "1"
+        run: |
+          echo "eigene Datei" > "$HOME/Applications/Belegabruf/notiz.txt"
+          bash installieren.sh | tee "$RUNNER_TEMP/update.log"
+          grep -q "aktualisiert" "$RUNNER_TEMP/update.log"
+          test -f "$HOME/Applications/Belegabruf/notiz.txt"
+
+      - name: Starter (Stand dieses PRs) bis „Umgebung eingerichtet“, ohne Fenster abzuwarten
+        run: |
+          Z="$GITHUB_WORKSPACE"
+          PY="$Z/programm/.venv/bin/python"
+          "$Z/Belegabruf Mac.command" < /dev/null > "$RUNNER_TEMP/starter.log" 2>&1 &
+          STARTER=$!
+          fertig=0
+          for _ in $(seq 1 180); do
+            # Die Startprüfung läuft wie im Starter im Ordner programm.
+            if [ -e "$Z/programm/.venv/.belegabruf-sync" ] \
+               && (cd "$Z/programm" && "$PY" -m belegabruf.startpruefung umgebung \
+                   && "$PY" -m belegabruf.startpruefung browser); then
+              fertig=1; break
+            fi
+            kill -0 "$STARTER" 2>/dev/null || break
+            sleep 5
+          done
+          pkill -f "$Z/programm/" || true
+          kill "$STARTER" 2>/dev/null || true
+          cat "$RUNNER_TEMP/starter.log"
+          [ "$fertig" = 1 ] || { echo "Der Starter hat die Umgebung nicht eingerichtet."; exit 1; }
+          echo "✓ Umgebung und Browser eingerichtet"
+
+  einrichtung-windows:
+    name: Einrichtung Windows
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        # Windows PowerShell 5.1 — das, was Nutzer mit „irm … | iex“ haben.
+        shell: powershell
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: PSScriptAnalyzer
+        run: |
+          if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
+            Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.23.0 -Scope CurrentUser -Force
+          }
+          $funde = Invoke-ScriptAnalyzer -Path installieren.ps1 -Settings .github/PSScriptAnalyzerSettings.psd1
+          $funde | Format-Table -AutoSize RuleName, Severity, Line, Message | Out-String -Width 220 | Write-Host
+          if ($funde | Where-Object { $_.Severity -in 'Warning', 'Error', 'ParseError' }) { exit 1 }
+
+      - name: Einrichten (wie die Zeile, neueste Version)
+        run: |
+          $env:BELEGABRUF_NICHT_STARTEN = '1'
+          Get-Content -Raw installieren.ps1 | Invoke-Expression 6>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\einrichten.log"
+
+      - name: Prüfen (Ordner, Version, Startmenü)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $z = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\Belegabruf'
+          $tag = gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name
+          foreach ($p in 'Belegabruf Windows.cmd', 'programm', 'Fehlersuche', 'Doku') {
+            if (-not (Test-Path -LiteralPath (Join-Path $z $p))) { throw "fehlt: $p" }
+          }
+          $version = (Get-Content -LiteralPath (Join-Path $z '.belegabruf-version') -Raw).Trim()
+          if ($version -ne $tag) { throw "Version $version statt $tag" }
+          $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) 'Belegabruf.lnk'
+          if (-not (Test-Path -LiteralPath $lnk)) { throw 'Startmenue-Verknuepfung fehlt' }
+          $ziel = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk).TargetPath
+          if ($ziel -ne (Join-Path $z 'Belegabruf Windows.cmd')) { throw "Verknuepfung zeigt auf $ziel" }
+          if (-not (Select-String -Path "$env:RUNNER_TEMP\einrichten.log" -Pattern 'ist eingerichtet' -Quiet)) { throw 'Meldung fehlt' }
+          Write-Host "OK $tag in $z, Startmenue -> $ziel"
+
+      - name: Update (zweiter Lauf)
+        run: |
+          $z = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\Belegabruf'
+          Set-Content -LiteralPath (Join-Path $z 'notiz.txt') -Value 'eigene Datei'
+          $env:BELEGABRUF_NICHT_STARTEN = '1'
+          $aus = Get-Content -Raw installieren.ps1 | Invoke-Expression 6>&1 | Out-String
+          Write-Host $aus
+          if ($aus -notmatch 'aktualisiert') { throw 'kein Update' }
+          if (-not (Test-Path -LiteralPath (Join-Path $z 'notiz.txt'))) { throw 'eigene Datei weg' }
+
+      - name: Starter (Stand dieses PRs) bis „Umgebung eingerichtet“, ohne Fenster abzuwarten
+        run: |
+          $z = $env:GITHUB_WORKSPACE
+          $py = Join-Path $z 'programm\.venv\Scripts\python.exe'
+          $log = "$env:RUNNER_TEMP\starter.log"
+          $starter = Start-Process -FilePath cmd.exe -ArgumentList '/c', "`"`"$z\Belegabruf Windows.cmd`" > `"$log`" 2>&1`"" -PassThru -WindowStyle Hidden
+          $fertig = $false
+          for ($i = 0; $i -lt 180; $i++) {
+            if ((Test-Path -LiteralPath (Join-Path $z 'programm\.venv\.belegabruf-sync')) -and (Test-Path -LiteralPath $py)) {
+              # Die Startprüfung läuft wie im Starter im Ordner programm.
+              Push-Location (Join-Path $z 'programm')
+              & $py -m belegabruf.startpruefung umgebung; $u = $LASTEXITCODE
+              & $py -m belegabruf.startpruefung browser; $b = $LASTEXITCODE
+              Pop-Location
+              if ($u -eq 0 -and $b -eq 0) { $fertig = $true; break }
+            }
+            if ($starter.HasExited) { break }
+            Start-Sleep -Seconds 5
+          }
+          & taskkill.exe /PID $starter.Id /T /F 2>$null | Out-Null
+          Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf("$z\programm\", [StringComparison]::OrdinalIgnoreCase) -ge 0 } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+          if (Test-Path $log) { Get-Content $log | Write-Host }
+          if (-not $fertig) { throw 'Der Starter hat die Umgebung nicht eingerichtet.' }
+          Write-Host 'OK Umgebung und Browser eingerichtet'
+          $global:LASTEXITCODE = 0

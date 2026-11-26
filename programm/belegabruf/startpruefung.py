@@ -19,10 +19,43 @@ from pathlib import Path
 MERKER = ".belegabruf-sync"
 
 
+def _version(text: str) -> tuple[int, ...]:
+    teile = []
+    for teil in text.strip().split("."):
+        if not teil.isdigit():
+            break
+        teile.append(int(teil))
+    return tuple(teile)
+
+
+def venv_python(programm: Path) -> tuple[int, ...]:
+    """Die Python-Version der .venv laut pyvenv.cfg (leer, wenn unbekannt)."""
+    try:
+        zeilen = (programm / ".venv" / "pyvenv.cfg").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return ()
+    werte = dict(z.split("=", 1) for z in zeilen if "=" in z)
+    werte = {k.strip(): v.strip() for k, v in werte.items()}
+    return _version(werte.get("version_info") or werte.get("version") or "")
+
+
+def python_passt(programm: Path) -> bool:
+    """Passt die Python-Version der .venv zu .python-version (z. B. 3.12)? Ohne .python-version: ja.
+    Wer 2.2.0 auf einem Rechner mit Python 3.15 halb eingerichtet hat, bekommt so eine neue .venv."""
+    datei = programm / ".python-version"
+    if not datei.exists():
+        return True
+    gewollt = _version(datei.read_text(encoding="utf-8"))
+    ist = venv_python(programm)
+    return bool(gewollt) and ist[:len(gewollt)] == gewollt
+
+
 def umgebung_aktuell(programm: Path) -> bool:
-    """Ist die .venv jünger als uv.lock und pyproject.toml (seit dem letzten Sync)?"""
+    """Ist die .venv jünger als uv.lock und pyproject.toml (seit dem letzten Sync) — und hat sie
+    die Python-Version aus .python-version? Sonst richtet der Starter neu ein (uv sync baut die
+    .venv dann mit der richtigen Version neu auf)."""
     merker = programm / ".venv" / MERKER
-    if not merker.exists():
+    if not merker.exists() or not python_passt(programm):
         return False
     stand = merker.stat().st_mtime
     return all(not (programm / d).exists() or (programm / d).stat().st_mtime <= stand

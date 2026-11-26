@@ -49,7 +49,8 @@ def neuere_version(timeout: float = 3.0) -> str | None:
         url, headers={"Accept": "application/vnd.github+json", "User-Agent": "belegabruf"}
     )
     try:
-        with urllib.request.urlopen(anfrage, timeout=timeout) as antwort:
+        # Bandit B310 trifft hier nicht: feste https-Adresse von GitHub (oben gebaut), keine file:-Adresse.
+        with urllib.request.urlopen(anfrage, timeout=timeout) as antwort:  # nosec B310
             daten = json.loads(antwort.read().decode("utf-8"))
     except Exception:  # noqa: BLE001 - offline oder privat: kein Hinweis
         return None

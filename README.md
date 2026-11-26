@@ -1,5 +1,7 @@
 # Belegabruf
 
+[![Prüfung](https://github.com/balazskinal/belegabruf/actions/workflows/pruefung.yml/badge.svg?branch=main)](https://github.com/balazskinal/belegabruf/actions/workflows/pruefung.yml)
+
 Holt Rechnungen, die es nur im eingeloggten Konto eines Anbieters gibt, per Doppelklick auf den
 eigenen Rechner. Es kann:
 
@@ -418,6 +420,11 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 
 ## Was neu ist
 
+- **2.2.1** — **Einrichtung auf Rechnern ohne passendes Python repariert.** Die Starter richten jetzt fest
+  Python 3.12 ein; eine schon angelegte Umgebung mit anderer Python-Version wird beim nächsten Start
+  neu aufgebaut. Bisher konnte uv auf einem neuen Rechner Python 3.15 laden; dafür gibt es einen von PyMuPDF
+  benötigten Baustein (onnxruntime) noch nicht, und die Einrichtung brach mit „Das hat nicht geklappt“ ab.
+  Dazu der Prüf-Workflow für jeden Pull Request (siehe „Prüfungen“).
 - **2.2.0** — **Einrichten und Update mit einer Zeile** im Terminal bzw. in PowerShell (siehe ganz oben):
   lädt die neueste Version, prüft die Prüfsumme, legt sie in den Programme-Ordner des Benutzers (Mac
   `~/Applications/Belegabruf`, Windows `%LOCALAPPDATA%\Programs\Belegabruf` mit Eintrag im Startmenü) und
@@ -546,6 +553,17 @@ eine Buchhaltungssoftware per API) kommen als eigene Datei in `ziele/` dazu, ohn
 Quellen ändern. Zugangsdaten liegen nur im Passwortspeicher (`keyring`).
 
 Tests (im Ordner `programm`): `uv run --group dev pytest`
+
+### Prüfungen
+
+Jeder Pull Request gegen `main` und jeder Push auf `main` durchläuft den Workflow
+[Prüfung](https://github.com/balazskinal/belegabruf/blob/main/.github/workflows/pruefung.yml) (nur Leserechte, keine Secrets):
+
+| Prüfung | was |
+|---|---|
+| **Tests** (Linux) | `uv sync --locked`, pytest mit Oberflächentests in Chromium, ruff, bandit, pip-audit, compileall, shellcheck — dieselben Schritte wie vor jedem Release ([tests.yml](https://github.com/balazskinal/belegabruf/blob/main/.github/workflows/tests.yml)) |
+| **Tests Windows**, **Tests macOS** | pytest auf dem jeweiligen System, mit Oberflächentests |
+| **Einrichtung Mac**, **Einrichtung Windows** | die Ein-Zeilen-Einrichtung aus dem PR echt mit der neuesten Version: Ordner, Version, Startmenü (Windows), Update als zweiter Lauf, Starter bis „Umgebung eingerichtet“; dazu shellcheck bzw. PSScriptAnalyzer |
 
 ### Neue Bausteine beitragen
 

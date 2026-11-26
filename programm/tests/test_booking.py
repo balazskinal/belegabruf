@@ -591,7 +591,7 @@ def test_unterkunft_als_liste_uebersteht_speichern(tmp_path):
 
     datei = pfade.einstellungsdatei()
     datei.parent.mkdir(parents=True, exist_ok=True)
-    datei.write_text(f'belegordner = "{tmp_path / "B"}"\n\n[[konto]]\nquelle = "booking"\nname = ""\n'
+    datei.write_text(f'belegordner = "{(tmp_path / "B").as_posix()}"\n\n[[konto]]\nquelle = "booking"\nname = ""\n'
                      'unterkunft = ["1234567", "7654321"]\nzahl = 3\nschalter = true\n', encoding="utf-8")
     vorher = einstellungen.laden().konten[0].optionen
     neu = einstellungen_aus_eingaben({"belegordner": str(tmp_path / "B"),

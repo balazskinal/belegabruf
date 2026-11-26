@@ -40,7 +40,8 @@ class ProfilBelegt(Exception):
 
 
 def pause(minimum: float = PAUSE_MIN, maximum: float = PAUSE_MAX) -> None:
-    time.sleep(random.uniform(minimum, maximum))
+    # Bandit B311 trifft hier nicht: nur eine Wartezeit im menschlichen Tempo, nichts Kryptografisches.
+    time.sleep(random.uniform(minimum, maximum))  # nosec B311
 
 
 def _betriebssystem_im_useragent() -> str:
