@@ -275,7 +275,7 @@ def laden(datei: Path | None = None) -> Einstellungen:
     Protokoll und Profil wieder, wenn das eindeutig ist (siehe waisen.py)."""
     datei = datei or pfade.einstellungsdatei()
     if not datei.exists():
-        raise EinstellungsFehler(f"Noch nicht eingerichtet (keine Datei {datei}).")
+        raise EinstellungsFehler(f"Noch nicht eingerichtet (keine Datei {pfade.anzeigepfad(datei)}).")
     try:
         einst = aus_text(datei.read_text(encoding="utf-8"), pfade.anzeigepfad(datei))
     except EinstellungNichtLesbar:

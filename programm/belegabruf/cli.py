@@ -71,10 +71,9 @@ def start() -> int:
 
         neuer = aktualisierung.neuere_version()
         if neuer:
-            print(f"\nHinweis: Es gibt eine neuere Version ({neuer}). Herunterladen unter")
-            print(f"  {aktualisierung.NEUESTE_SEITE}")
-            print(f"  (alten Ordner belegabruf-v… löschen, neues ZIP auspacken, \"{pfade.starter()}\" doppelklicken —\n"
-                  "   Einstellungen, Anmeldungen und Protokolle bleiben erhalten.)")
+            print(f"\nHinweis: Es gibt eine neuere Version ({neuer}). Update {aktualisierung.update_hinweis()} mit:")
+            print(f"  {aktualisierung.update_zeile()}")
+            print("  (Einstellungen, Anmeldungen und Protokolle bleiben erhalten.)")
 
         for k in konten:
             if k.quelle != "airbnb":  # nur Airbnb zeigt bloß die letzten 12 Monate
