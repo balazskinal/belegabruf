@@ -29,6 +29,8 @@ from belegabruf.oberflaeche.aktionen import Eingabefehler, Steuerung
 
 KOPF_SCHLUESSEL = "X-Belegabruf-Schluessel"
 HOECHSTENS_BYTES = 256 * 1024
+#: So viel eines zu großen Rumpfs wird noch gelesen (und verworfen), bevor 413 kommt.
+VERWERFEN_HOECHSTENS = 1024 * 1024
 
 
 def _seite(nonce: str) -> bytes:
@@ -107,6 +109,20 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, status: int, daten) -> None:
         self._senden(status, json.dumps(daten, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
 
+    def _verwerfen(self, laenge: int) -> None:
+        """Liest höchstens ``laenge`` Bytes und verwirft sie — mit kurzer Frist, damit ein
+        Absender, der weniger schickt als angekündigt, keinen Faden festhält."""
+        rest = laenge
+        try:
+            self.connection.settimeout(5)
+            while rest > 0:
+                stueck = self.rfile.read(min(rest, 64 * 1024))
+                if not stueck:
+                    break
+                rest -= len(stueck)
+        except OSError:
+            pass  # Absender hat schon abgebrochen
+
     def _verweigern(self, status: int = HTTPStatus.FORBIDDEN) -> None:
         self._senden(status, b"Nicht erlaubt.", "text/plain; charset=utf-8")
 
@@ -152,6 +168,11 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return self._verweigern(HTTPStatus.BAD_REQUEST)
         if laenge < 0 or laenge > HOECHSTENS_BYTES:
+            # Erst den Rumpf (bis zu einer Grenze) lesen und verwerfen, dann antworten und die
+            # Verbindung schließen: Schlösse der Server mit ungelesenen Daten im Puffer, sähe der
+            # Absender (je nach System, z. B. macOS) nur „Connection reset“ statt der Antwort 413.
+            self._verwerfen(min(max(laenge, 0), VERWERFEN_HOECHSTENS))
+            self.close_connection = True
             return self._verweigern(HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
         try:
             daten = json.loads(self.rfile.read(laenge).decode("utf-8") or "{}")

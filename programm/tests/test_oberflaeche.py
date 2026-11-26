@@ -131,8 +131,24 @@ def test_kein_cors_und_sicherheitskoepfe(server):
 
 
 def test_zu_grosse_anfrage(server):
-    antwort, _ = _anfrage(server, "POST", "/api/einstellungen", _mit(server), {"x": "a" * 300_000})
-    assert antwort.status == 413
+    """Immer eine saubere Antwort 413 — nicht „Connection reset“ (so auf macOS im CI gesehen)."""
+    for _ in range(5):
+        antwort, _ = _anfrage(server, "POST", "/api/einstellungen", _mit(server), {"x": "a" * 300_000})
+        assert antwort.status == 413
+
+
+def test_zu_gross_angekuendigt_haelt_keinen_faden_fest(server):
+    """Kündigt ein Absender viel an und schickt wenig, antwortet der Server trotzdem bald."""
+    import socket
+    import time
+
+    with socket.create_connection(("127.0.0.1", server.port), timeout=15) as s:
+        s.sendall((f"POST /api/einstellungen HTTP/1.1\r\nHost: 127.0.0.1:{server.port}\r\n"
+                   f"{KOPF_SCHLUESSEL}: {server.schluessel}\r\nContent-Type: application/json\r\n"
+                   "Content-Length: 50000000\r\n\r\n{}").encode())
+        start = time.monotonic()
+        antwort = s.recv(200)
+    assert antwort.startswith(b"HTTP/1.1 413") and time.monotonic() - start < 12
 
 
 def test_passwort_kommt_nie_zurueck_und_nicht_ins_log(server, umgebung, capfd, tmp_path):
