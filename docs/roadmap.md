@@ -21,11 +21,12 @@ je Vorhaben ein Issue. Die Termine sind Ziele, keine Zusagen.
 
 | Version | Inhalt | Ziel |
 |---|---|---|
-| [2.0.1](https://github.com/balazskinal/belegabruf/milestone/2) | Windows-Test (#11) | 15.12.2026 |
-| [2.1.0](https://github.com/balazskinal/belegabruf/milestone/3) | Ziel sevDesk über die API (#12, PR #3) | 23.12.2026 |
-| [2.2.0](https://github.com/balazskinal/belegabruf/milestone/4) | Quelle Booking.com (#13) | 31.01.2027 |
-| [2.3.0](https://github.com/balazskinal/belegabruf/milestone/5) | Ziel Lexware Office (#14) | 28.02.2027 |
+| [2.0.1](https://github.com/balazskinal/belegabruf/milestone/2) | Ordnerstruktur im ZIP, Aufräumen, Windows-Test (#11) | 15.12.2026 |
+| [2.1.0](https://github.com/balazskinal/belegabruf/milestone/4) | Quelle Booking.com (#13) | 15.01.2027 |
 | [Später](https://github.com/balazskinal/belegabruf/milestone/1) | n8n-Weg mit `--json` (#15) | — |
+
+**Geparkt:** Ziele sevDesk und Lexware Office über die API (#12, #14, PR #3). Der Mailweg erreicht beide
+schon heute über ihre Beleg-Mailadresse, ohne API-Schlüssel (Nachtrag 26.11.2026 in ADR-004).
 
 **Weitere Quellen:** Vorschläge willkommen, als Issue oder Pull Request. Gesucht sind Anbieter, die
 keine Rechnung per Mail schicken.
