@@ -6,6 +6,8 @@ eigenen Rechner. Es kann:
 - **Airbnb:** die Rechnungen über die Airbnb-Servicegebühren für Gastgeber, jede Buchung als eigenes PDF.
 - **Skool:** die Rechnungen für bezahlte Mitgliedschaften in Skool-Communities (siehe [Skool](#skool)).
 - **Xentra:** die Rechnungen für das Xentra-Abonnement und Provisionen (siehe [Xentra](#xentra)).
+- **Booking.com:** die Kommissionsrechnungen aus dem Extranet, dazu Auszahlungsübersichten und
+  Auszahlungen zum Abgleich (siehe [Booking.com](#bookingcom)).
 
 **Seit Version 1.3** verschickt es neue Rechnungen auf Wunsch zusätzlich **per Mail** — z. B. an die
 Belegadresse deines Buchhaltungsprogramms oder an deine Steuerberatung. Verschickt wird über **dein
@@ -93,7 +95,7 @@ Administratorrechte nötig.
    - den **Belegordner** (Vorschlag: `Dokumente/Belege`) und darunter die **Unterordner**: nach Jahr
      (wie bisher) oder nach Jahr und Monat. Das gilt für neue Belege; bereits abgelegte bleiben, wo sie
      sind,
-   - deine **Konten**: den Anbieter (Airbnb, Skool, Xentra). Ein Name ist erst nötig, wenn du beim selben
+   - deine **Konten**: den Anbieter (Airbnb, Skool, Xentra, Booking.com). Ein Name ist erst nötig, wenn du beim selben
      Anbieter mehrere Konten hast (z. B. einen Zugang als Co-Gastgeber) — dann bekommt jedes einen Namen
      nur für dich und seine eigene Anmeldung. Je Konto wählst du **„Belege ab“**: alle (Vorgabe), letzter
      Monat, letzte 3 oder 12 Monate (jeweils ab dem 1. des Monats) oder ab einem Datum. Ältere Belege
@@ -142,6 +144,36 @@ Das Programm **liest nur und lädt herunter**. Angeklickt werden nur der Reiter 
 Knöpfe „PDF herunterladen“ — nichts an Abo, Zahlungsmethode oder Einstellungen. Damit es merkt, was
 schon geholt ist, drückt es bei jedem Lauf alle Download-Knöpfe einmal; geladen und gespeichert wird
 aber nur, was neu ist.
+
+## Booking.com
+
+Booking.com stellt alles im **Extranet** unter *Finanzen* bereit. Angemeldet wird wie überall im eigenen
+Fenster (Benutzername, Passwort, meist Zwei-Faktor). Das Programm holt drei Arten von Dokumenten und legt
+jede in einen eigenen Ordner unter `booking/` — nach Jahr bzw. Jahr und Monat, wie bei „Unterordner“
+eingestellt:
+
+| Ordner | Was | Verschickt? |
+|---|---|---|
+| `Rechnungen (an Booking.com)/` | die **Kommissionsrechnungen** (Reiter „Zahlungen an Booking.com“), je Monat ein PDF: `<Datum>_booking_<Rechnungsnummer>.pdf` | **ja** — das sind die Belege, nur sie gehen per Mail raus |
+| `Auszahlungsübersichten (von Booking.com)/` | je abgeschlossenem Monat die Auszahlungsübersicht als PDF und CSV (Reiter „Zahlungen von Booking.com“): `<JJJJ-MM>_auszahlungsuebersicht.pdf/.csv` | nein, nur abgelegt |
+| `Auszahlungen/` | je Auszahlung PDF und CSV (*Finanzen → Informationen zu Auszahlungen*): `<Auszahlungsdatum>_auszahlung_<Buchungsnummer(n)>_checkin-<Datum>.pdf/.csv` | nein, nur abgelegt |
+
+- Bei einer Auszahlung mit mehreren Buchungen stehen bis zu drei Buchungsnummern im Namen, dann z. B. `+2`;
+  der Check-in ist der früheste.
+- **Gastnamen kommen nie in Dateinamen**, Protokoll oder Ausgaben — wie bei allen Anbietern. Zur Zuordnung
+  reicht die Buchungsnummer; der Name steht in der CSV-Datei selbst, die unverändert abgelegt wird.
+- Der laufende Monat kommt bei den Auszahlungsübersichten erst, wenn er vorbei ist (dann ist er vollständig).
+  Auszahlungen holt das Programm für dieses und das letzte Jahr (ältere bietet Booking.com nur über einen
+  eigenen Zeitraum an), Rechnungen für alle Jahre des Filters. „Belege ab“ gilt für alle drei Arten.
+- **Mehrere Unterkünfte** unter einer Anmeldung: Geholt wird die, auf der das Extranet nach der Anmeldung
+  landet. Für mehrere in der Einstellungsdatei beim Konto `unterkunft = "<ID>, <ID>"` eintragen (die ID
+  steht im Extranet oben neben dem Namen der Unterkunft); jede wird für sich geholt, ihre ID steht dann
+  im Dateinamen.
+
+Das Programm **liest nur und lädt herunter**. Angeklickt werden nur der Reiter „Zahlungen von
+Booking.com“, der Jahresfilter und das Zeitraumfeld bei den Auszahlungen — nichts an Preisen,
+Verfügbarkeit oder Einstellungen. Der Sitzungsschlüssel des Extranets (`ses` in der Adresse) wird nie
+gespeichert oder ausgegeben.
 
 ## Benutzen
 
@@ -306,6 +338,9 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 
 ## Was neu ist
 
+- **2.1.0** — **Booking.com** als neuer Anbieter: Kommissionsrechnungen (werden wie alle Belege abgelegt
+  und auf Wunsch verschickt), dazu Auszahlungsübersichten und Auszahlungen als PDF und CSV, nur abgelegt,
+  je Art in einem eigenen Ordner (siehe [Booking.com](#bookingcom), ADR-006).
 - **2.0.1** — **Aufgeräumter Ordner:** Oben liegen nur noch die zwei Starter „Belegabruf Mac“ und
   „Belegabruf Windows“; `programm/`, `Fehlersuche/` und `Doku/` (Anleitung, Lizenz) sind Ordner. Sonst
   unverändert bis auf Kleinigkeiten:
@@ -394,7 +429,7 @@ programm/
     oberflaeche/      Fenster „Belegabruf“: lokaler Server (server.py), Aktionen (aktionen.py),
                       Bedienseite (seite.html) — ruft dieselben Bausteine wie das CLI
     ablauf.py         Gerüst: prüfen, anmelden lassen, holen, abliefern
-    quellen/          ein Baustein je Anbieter: airbnb.py, skool.py, xentra.py
+    quellen/          ein Baustein je Anbieter: airbnb.py, skool.py, xentra.py, booking.py
       basis.py        die feste Schnittstelle für Bausteine
     ziele/            wohin Belege geliefert werden: ordner.py, mail.py
     protokoll.py      Protokoll je Anbieter und Konto — entscheidet, was schon geholt ist

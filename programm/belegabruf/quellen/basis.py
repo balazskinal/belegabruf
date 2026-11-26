@@ -31,7 +31,10 @@ class Beleg:
 
     quelle: str
     konto: str
-    art: str  # "rechnung" (der eigentliche Beleg) oder "kontrolle" (z. B. Monatsübersicht)
+    # "rechnung" (der eigentliche Beleg, geht an Lieferziele wie Mail), "kontrolle" (z. B.
+    # Monatsübersicht bei Airbnb) oder eine weitere Dokumentart, die nur abgelegt wird
+    # (z. B. "auszahlung" bei Booking.com). Nur "rechnung" wird verschickt.
+    art: str
     schluessel: str  # eindeutig je Quelle und Konto, verhindert Doppelte
     dateiname: str
     inhalt: bytes
@@ -40,6 +43,9 @@ class Beleg:
     rechnungsnummer: str = ""
     buchungscode: str = ""
     betrag: str = ""  # wie im Beleg, z. B. "12,34 EUR" (für später, Upload)
+    # Eigener Ordner unter dem Anbieter, z. B. "Rechnungen" → <quelle>/Rechnungen/<JJJJ>/…
+    # Leer = wie bisher direkt <quelle>/<JJJJ>/…
+    unterordner: str = ""
 
 
 @dataclass
