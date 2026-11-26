@@ -17,7 +17,8 @@ betreibt und nachbauen kann.
 1. **Nachbaubar für alle, kein Dienst.** Niemand betreibt das Werkzeug für andere, niemand hält fremde
    Sitzungen. Jeder betreibt seine eigene Kopie.
 2. **Läuft lokal auf dem eigenen Rechner**, ohne Server. **Mac und Windows mit demselben Code** (Python,
-   Playwright, `uv`); nur die Startdateien (`Start Mac/`, `Start Windows/`) unterscheiden sich.
+   Playwright, `uv`); nur die Startdateien (`Belegabruf Mac.command`, `Belegabruf Windows.cmd`, seit 2.0.1 oben im Ordner)
+   unterscheiden sich.
 3. **Start per Doppelklick, kein Zeitplan.** Ablauf: alle Konten prüfen → **erst alle Anmeldefenster**
    (angemeldet wird immer vom Menschen, kein Passwort im Code) → dann Abruf unbeaufsichtigt und
    nacheinander → Zusammenfassung. Läuft eine Sitzung mittendrin ab, wird das gemeldet und beim nächsten

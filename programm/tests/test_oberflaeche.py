@@ -856,7 +856,7 @@ def test_einrichtung_laedt_keine_headless_shell():
     import re
 
     wurzel = Path(__file__).resolve().parents[2]
-    for datei in (wurzel / "Start Mac" / "Belegabruf.command", wurzel / "Start Windows" / "Belegabruf.cmd"):
+    for datei in (wurzel / "Belegabruf Mac.command", wurzel / "Belegabruf Windows.cmd"):
         text = datei.read_text(encoding="utf-8")
         assert "playwright install --no-shell chromium" in text, datei
     gefunden = 0

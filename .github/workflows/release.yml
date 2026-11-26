@@ -37,12 +37,14 @@ jobs:
       - name: ZIP bauen
         run: |
           NAME="belegabruf-${GITHUB_REF_NAME}"
-          mkdir -p "dist/$NAME/programm"
-          cp README.md LICENSE "dist/$NAME/"
-          cp -r "Start Mac" "Start Windows" "dist/$NAME/"
+          # Oben nur die zwei Starter; alles andere in Ordnern (README und LICENSE nach Doku/).
+          mkdir -p "dist/$NAME/programm" "dist/$NAME/Fehlersuche" "dist/$NAME/Doku"
+          cp "Belegabruf Mac.command" "Belegabruf Windows.cmd" "dist/$NAME/"
+          cp Fehlersuche/* "dist/$NAME/Fehlersuche/"
+          cp README.md LICENSE "dist/$NAME/Doku/"
           cp -r programm/belegabruf programm/pyproject.toml programm/uv.lock "dist/$NAME/programm/"
           find "dist/$NAME" -name "__pycache__" -type d -prune -exec rm -rf {} +
-          chmod +x "dist/$NAME/Start Mac/"*.command "dist/$NAME/Start Mac/Fehlersuche/"*.command
+          chmod +x "dist/$NAME/"*.command "dist/$NAME/Fehlersuche/"*.command
           (cd dist && zip -r -X "$NAME.zip" "$NAME")
 
       - name: Release anlegen
@@ -51,4 +53,4 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" "dist/belegabruf-${GITHUB_REF_NAME}.zip" \
             --title "Belegabruf ${GITHUB_REF_NAME}" \
-            --notes "Herunterladen: belegabruf-${GITHUB_REF_NAME}.zip. Erster Start und Update: ZIP auspacken, Belegabruf doppelklicken (richtet sich selbst ein). Beim Update vorher den alten Programmordner löschen. Einstellungen und Anmeldungen bleiben erhalten."
+            --notes "Herunterladen: belegabruf-${GITHUB_REF_NAME}.zip. Erster Start und Update: ZIP auspacken, im ausgepackten Ordner „Belegabruf Mac“ bzw. „Belegabruf Windows“ doppelklicken (richtet sich selbst ein). Beim Update den alten Programmordner vorher löschen. Einstellungen und Anmeldungen liegen im Datenordner und bleiben erhalten. Anleitung: Doku/README.md."
