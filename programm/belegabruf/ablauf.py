@@ -160,7 +160,7 @@ def liefern(einst: Einstellungen, protokoll: Protokoll, erg: Ergebnis, melden: M
         for ziel in ziele:
             try:
                 ziel.schliessen()
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001 - Aufräumen nach dem Versand, Fehler beim Schließen ändern nichts  # nosec B110
                 pass
     for name in namen:
         erg.lieferungen[name]["offen"] = len(protokoll.offen_fuer(name))

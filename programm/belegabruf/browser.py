@@ -101,7 +101,7 @@ def profil_oeffnen(profil: Path, sichtbar: bool) -> Iterator[BrowserContext]:
         finally:
             try:
                 kontext.close()
-            except Exception:  # noqa: BLE001 - Fenster schon zu
+            except Exception:  # noqa: BLE001 - Fenster schon zu  # nosec B110
                 pass
 
 

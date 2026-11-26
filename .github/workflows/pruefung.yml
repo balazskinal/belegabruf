@@ -66,10 +66,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: shellcheck
+      - name: shellcheck (feste Version, geprüfte Prüfsummen)
         run: |
-          brew list shellcheck >/dev/null 2>&1 || brew install shellcheck
-          shellcheck -e SC1111 installieren.sh "Belegabruf Mac.command" Fehlersuche/*.command
+          python3 -m venv "$RUNNER_TEMP/werkzeuge"
+          "$RUNNER_TEMP/werkzeuge/bin/pip" install -q --require-hashes --only-binary :all: -r .github/werkzeuge/shellcheck.txt
+          "$RUNNER_TEMP/werkzeuge/bin/shellcheck" -e SC1111 installieren.sh "Belegabruf Mac.command" Fehlersuche/*.command
 
       - name: Einrichten (wie die Zeile, neueste Version)
         env:
@@ -134,11 +135,22 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: PSScriptAnalyzer
+      - name: PSScriptAnalyzer (feste Version, Signatur von Microsoft geprüft)
         run: |
-          if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
-            Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.23.0 -Scope CurrentUser -Force
+          $version = '1.23.0'
+          if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer | Where-Object { $_.Version -eq $version })) {
+            Install-Module -Name PSScriptAnalyzer -RequiredVersion $version -Scope CurrentUser -Force -Repository PSGallery
           }
+          $modul = Get-Module -ListAvailable -Name PSScriptAnalyzer | Where-Object { $_.Version -eq $version } | Select-Object -First 1
+          if (-not $modul) { throw "PSScriptAnalyzer $version nicht gefunden" }
+          # Statt einer Prüfsumme: Die Bibliothek muss gültig von Microsoft signiert sein.
+          $dll = Get-ChildItem -LiteralPath $modul.ModuleBase -Filter 'Microsoft.Windows.PowerShell.ScriptAnalyzer.dll' -Recurse | Select-Object -First 1
+          $signatur = Get-AuthenticodeSignature -LiteralPath $dll.FullName
+          if ($signatur.Status -ne 'Valid' -or $signatur.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+            throw "Signatur von $($dll.Name) nicht gueltig: $($signatur.Status) $($signatur.SignerCertificate.Subject)"
+          }
+          Write-Host "PSScriptAnalyzer $version, signiert: $($signatur.SignerCertificate.Subject)"
+          Import-Module -Name $modul.Path -Force
           $funde = Invoke-ScriptAnalyzer -Path installieren.ps1 -Settings .github/PSScriptAnalyzerSettings.psd1
           $funde | Format-Table -AutoSize RuleName, Severity, Line, Message | Out-String -Width 220 | Write-Host
           if ($funde | Where-Object { $_.Severity -in 'Warning', 'Error', 'ParseError' }) { exit 1 }

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from importlib.util import find_spec
 from pathlib import Path
@@ -39,15 +40,34 @@ def venv_python(programm: Path) -> tuple[int, ...]:
     return _version(werte.get("version_info") or werte.get("version") or "")
 
 
+_RE_VERSION = re.compile(r"(?<![\d.])(\d+)\.(\d+)(?:\.\d+)?")
+
+
+def gewollte_python(text: str) -> tuple[int, int] | None:
+    """Haupt- und Nebenversion aus einer .python-version, wie uv sie versteht: die erste Zeile, die
+    kein Kommentar ist — „3.12“, „3.12.7“, „cpython-3.12“, „cpython@3.12.7“ … → (3, 12)."""
+    for zeile in text.splitlines():
+        zeile = zeile.strip()
+        if not zeile or zeile.startswith("#"):
+            continue
+        treffer = _RE_VERSION.search(zeile)
+        return (int(treffer.group(1)), int(treffer.group(2))) if treffer else None
+    return None
+
+
 def python_passt(programm: Path) -> bool:
-    """Passt die Python-Version der .venv zu .python-version (z. B. 3.12)? Ohne .python-version: ja.
+    """Passt die Python-Version der .venv zu .python-version? Verglichen werden nur Haupt- und
+    Nebenversion (3.12): uv trägt in pyvenv.cfg oft nur diese ein — sonst würde z. B. bei „3.12.7“
+    jeder Start neu synchronisieren. Ohne (lesbare) .python-version: ja.
     Wer 2.2.0 auf einem Rechner mit Python 3.15 halb eingerichtet hat, bekommt so eine neue .venv."""
     datei = programm / ".python-version"
-    if not datei.exists():
+    try:
+        gewollt = gewollte_python(datei.read_text(encoding="utf-8")) if datei.exists() else None
+    except (OSError, UnicodeDecodeError):
+        gewollt = None
+    if gewollt is None:
         return True
-    gewollt = _version(datei.read_text(encoding="utf-8"))
-    ist = venv_python(programm)
-    return bool(gewollt) and ist[:len(gewollt)] == gewollt
+    return venv_python(programm)[:2] == gewollt
 
 
 def umgebung_aktuell(programm: Path) -> bool:

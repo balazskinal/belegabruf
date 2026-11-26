@@ -51,5 +51,8 @@ jobs:
       - name: shellcheck (installieren.sh und Mac-Starter)
         working-directory: .
         run: |
+          # Feste Version mit geprüften Prüfsummen (.github/werkzeuge/shellcheck.txt).
+          python3 -m venv "$RUNNER_TEMP/werkzeuge"
+          "$RUNNER_TEMP/werkzeuge/bin/pip" install -q --require-hashes --only-binary :all: -r .github/werkzeuge/shellcheck.txt
           # SC1111: deutsche Anführungszeichen „…“ in Meldungen sind gewollt.
-          shellcheck -e SC1111 installieren.sh "Belegabruf Mac.command" Fehlersuche/*.command
+          "$RUNNER_TEMP/werkzeuge/bin/shellcheck" -e SC1111 installieren.sh "Belegabruf Mac.command" Fehlersuche/*.command

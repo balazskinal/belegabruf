@@ -28,7 +28,7 @@ def _hilfe_weiterreichen(kontext, haupt, wartet: dict) -> None:
         wartet.pop(id(seite), None)
         try:
             seite.close()
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 - Hilfeseite schon zu  # nosec B110
             pass
         if adresse.startswith("https://"):
             webbrowser.open(adresse)
@@ -63,7 +63,7 @@ def _fenster_offen_halten(server: Bedienserver) -> None:
         finally:
             try:
                 kontext.close()
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001 - Fenster schon zu  # nosec B110
                 pass
 
 

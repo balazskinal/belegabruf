@@ -113,6 +113,7 @@ class Handler(BaseHTTPRequestHandler):
         """Liest höchstens ``laenge`` Bytes und verwirft sie — mit kurzer Frist, damit ein
         Absender, der weniger schickt als angekündigt, keinen Faden festhält."""
         rest = laenge
+        vorher = self.connection.gettimeout()
         try:
             self.connection.settimeout(5)
             while rest > 0:
@@ -122,6 +123,11 @@ class Handler(BaseHTTPRequestHandler):
                 rest -= len(stueck)
         except OSError:
             pass  # Absender hat schon abgebrochen
+        finally:
+            try:
+                self.connection.settimeout(vorher)  # die kurze Frist gilt nur hier
+            except OSError:
+                pass  # Verbindung schon zu
 
     def _verweigern(self, status: int = HTTPStatus.FORBIDDEN) -> None:
         self._senden(status, b"Nicht erlaubt.", "text/plain; charset=utf-8")
