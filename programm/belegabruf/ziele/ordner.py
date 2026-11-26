@@ -4,6 +4,7 @@ Aufbau (Einstellung ``ablage``):
     <Belegordner>/<quelle>/<JJJJ>/<Dateiname>.pdf       die Rechnungen, ablage = "jahr" (Standard)
     <Belegordner>/<quelle>/<JJJJ>/<MM>/<Dateiname>.pdf  die Rechnungen, ablage = "monat"
     <Belegordner>/<quelle>/kontrolle/<Dateiname>.pdf    Übersichten zur Kontrolle (immer hier)
+    <Belegordner>/<quelle>/<Unterordner>/<JJJJ>[/<MM>]/  Quellen mit mehreren Dokumentarten (Booking.com)
 
 Maßgeblich für Jahr und Monat ist das Rechnungsdatum. Fehlt es, gilt das Jahr des Belegs;
 der Monatsordner ist dann der heutige, wenn es das laufende Jahr ist, sonst gibt es keinen.
@@ -25,10 +26,13 @@ class Ordner(Ziel):
     name = "ordner"
 
     def lokale_datei(self, beleg_quelle: str, art: str, jahr: int, dateiname: str,
-                     monat: int | None = None) -> Path:
+                     monat: int | None = None, unterordner: str = "") -> Path:
         if art == "kontrolle":
             return self.belegordner / beleg_quelle / "kontrolle" / dateiname
-        ordner = self.belegordner / beleg_quelle / str(jahr)
+        ordner = self.belegordner / beleg_quelle
+        if unterordner:
+            ordner = ordner / unterordner
+        ordner = ordner / str(jahr)
         if self.ablage == "monat":
             if monat is None and jahr == date.today().year:
                 monat = date.today().month  # ohne Datum: die Quellen meinen dann „jetzt“
@@ -39,7 +43,7 @@ class Ordner(Ziel):
     def abliefern(self, beleg: Beleg) -> Path:
         datum = beleg.rechnungsdatum
         ziel = self.lokale_datei(beleg.quelle, beleg.art, datum.year if datum else beleg.jahr, beleg.dateiname,
-                                 monat=datum.month if datum else None)
+                                 monat=datum.month if datum else None, unterordner=beleg.unterordner)
         ziel.parent.mkdir(parents=True, exist_ok=True)
         if beleg.art != "kontrolle":
             # Nie einen anderen Beleg überschreiben: gleicher Name → -2, -3, …

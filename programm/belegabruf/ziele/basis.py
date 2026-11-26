@@ -23,7 +23,7 @@ class Ziel(ABC):
         """Liefert einen Beleg ab. Gibt den lokalen Ablageort zurück (oder None)."""
 
     def lokale_datei(self, beleg_quelle: str, art: str, jahr: int, dateiname: str,
-                     monat: int | None = None) -> Path | None:
+                     monat: int | None = None, unterordner: str = "") -> Path | None:
         """Wo dieses Ziel einen Beleg lokal ablegt (nur Ziele mit lokaler Ablage)."""
         return None
 

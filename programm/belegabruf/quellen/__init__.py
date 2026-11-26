@@ -27,11 +27,18 @@ def _xentra():
     return Xentra
 
 
+def _booking():
+    from belegabruf.quellen.booking import Booking
+
+    return Booking
+
+
 # Kurzname -> (Anzeigename, Lader). Geladen wird erst, wenn gebraucht.
 QUELLEN = {
     "airbnb": ("Airbnb", _airbnb),
     "skool": ("Skool", _skool),
     "xentra": ("Xentra", _xentra),
+    "booking": ("Booking.com", _booking),
 }
 
 

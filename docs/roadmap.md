@@ -13,6 +13,7 @@ Stand: 26.11.2026. Begründungen stehen in den [Entscheidungen](entscheidungen/R
 - **2.0.0** — Bedienoberfläche im Browserfenster (ADR-005): Einrichten, Anmelden und Belege holen
   ohne Terminal; ein Starter je System; Zeitraum „Belege ab“ je Konto; Ablage nach Jahr/Monat;
   Mailanbieter als Auswahl. Auf dem Mac durchgespielt, Windows noch offen (#11).
+- **2.0.1** — Aufgeräumter Ordner im ZIP (nur zwei Starter oben), Aufräumen im Code.
 
 ## Geplant
 
@@ -21,8 +22,8 @@ je Vorhaben ein Issue. Die Termine sind Ziele, keine Zusagen.
 
 | Version | Inhalt | Ziel |
 |---|---|---|
-| [2.0.1](https://github.com/balazskinal/belegabruf/milestone/2) | Ordnerstruktur im ZIP, Aufräumen, Windows-Test (#11) | 15.12.2026 |
-| [2.1.0](https://github.com/balazskinal/belegabruf/milestone/4) | Quelle Booking.com (#13) | 15.01.2027 |
+| [2.1.0](https://github.com/balazskinal/belegabruf/milestone/4) | Quelle Booking.com (#13): **in Arbeit** — Rechnungen, Auszahlungsübersichten, Auszahlungen (ADR-006) | 15.01.2027 |
+| [Windows-Test](https://github.com/balazskinal/belegabruf/milestone/2) | Durchlauf unter Windows (#11) | offen |
 | [Später](https://github.com/balazskinal/belegabruf/milestone/1) | n8n-Weg mit `--json` (#15) | — |
 
 **Geparkt:** Ziele sevDesk und Lexware Office über die API (#12, #14, PR #3). Der Mailweg erreicht beide

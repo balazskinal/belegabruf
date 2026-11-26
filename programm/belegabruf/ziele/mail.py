@@ -26,7 +26,7 @@ from belegabruf.ziele.basis import Abgelehnt, Lieferziel, Sendung, Unklar
 
 ZEITLIMIT = 60
 VERSCHLUESSELUNGEN = ("ssl", "starttls")
-QUELLEN_NAMEN = {"airbnb": "Airbnb"}
+QUELLEN_NAMEN = {"airbnb": "Airbnb", "booking": "Booking.com"}
 
 
 class PasswortFehlt(Exception):
