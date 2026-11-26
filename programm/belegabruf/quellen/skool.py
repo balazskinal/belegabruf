@@ -216,6 +216,10 @@ class Skool(Quelle):
     def _adresse(self) -> str:
         return str(self.konto.optionen.get("adresse") or ADRESSE).rstrip("/")
 
+    def _hosts(self) -> set[str]:
+        """Erlaubter Host für Belegseiten: der der eingestellten Adresse (Vorgabe www.skool.com)."""
+        return {pruefung.host_von(self._adresse())}
+
     # 1. Sitzung prüfen ------------------------------------------------------
     def sitzung_pruefen(self) -> bool:
         with browser.profil_oeffnen(self.profil, sichtbar=False) as kontext:
@@ -312,6 +316,8 @@ class Skool(Quelle):
                     erg.status = "abgelaufen"
                     melden("Die Anmeldung ist abgelaufen. Der nächste Lauf holt den Rest nach.")
                     break
+                except pruefung.FremdeAdresse as fehler:
+                    grund = str(fehler)
                 except Exception as fehler:  # noqa: BLE001 - eine Rechnung darf scheitern
                     grund = _kurz(fehler)
                 if grund:
@@ -326,9 +332,11 @@ class Skool(Quelle):
 
     def _einzelrechnung(self, seite, zahlung: Zahlung, umgebung: Umgebung, erg: Ergebnis) -> str | None:
         """Holt eine Rechnung. Gibt None bei Erfolg zurück, sonst den Grund."""
-        antwort = _aufrufen(seite, self._adresse() + zahlung.pfad)
+        url = pruefung.adresse_pruefen(self._adresse() + zahlung.pfad, self._hosts())
+        antwort = _aufrufen(seite, url)
         if _ist_anmeldeseite(seite.url):
             raise SitzungAbgelaufen()
+        pruefung.adresse_pruefen(seite.url, self._hosts())  # auch nach einer Weiterleitung
         if antwort is not None and antwort.status >= 400:
             return f"Fehlerseite {antwort.status}"
         try:

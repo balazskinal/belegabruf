@@ -215,8 +215,8 @@ FREMDER_LINK = ("https://andere.example/fresa/extranet/finance/invoices/get_docu
                 f"hotel_id={HOTEL}&ses={SES}&invoice_name=1000-2222222222")
 
 
-def _rechnungsseite(jahr: int, ohne_filter: bool = False) -> str:
-    fremd = (f"<tr><td>Kommission</td><td>2222222222</td><td>3. Okt. {jahr}</td>"
+def _rechnungsseite(jahr: int, ohne_filter: bool = False, mit_fremden: bool = False) -> str:
+    fremd = "" if not mit_fremden else (f"<tr><td>Kommission</td><td>2222222222</td><td>3. Okt. {jahr}</td>"
              f"<td><a href='{FREMDER_LINK}'>PDF</a></td></tr>"
              f"<tr><td>Kommission</td><td>3333333333</td><td>3. Okt. {jahr}</td><td><a href='http://admin.booking.com"
              f"/fresa/extranet/finance/invoices/get_document?invoice_name=1000-3333333333'>PDF</a></td></tr>")
@@ -334,7 +334,8 @@ def falsches_booking(monkeypatch):
                                f"<a href='{basis}/x.html?hotel_id=7654321&ses={SES}'>Werbung</a></body></html>")
         if pfad.endswith("finance_invoices.html"):
             return html(route, _rechnungsseite(int(_q(url).get("year") or 2026),
-                                               ohne_filter=zustand["verhalten"] == "ohne_filter"))
+                                               ohne_filter=zustand["verhalten"] == "ohne_filter",
+                                               mit_fremden=zustand["verhalten"] == "fremde_links"))
         if pfad.endswith("payouts.html"):
             if zustand["verhalten"] == "auszahlungen_kaputt":
                 return route.abort()
@@ -487,10 +488,15 @@ def test_links_nur_von_admin_booking_com():
 
 
 def test_fremder_link_wird_nicht_geholt(tmp_path, falsches_booking):
+    falsches_booking["verhalten"] = "fremde_links"
     quelle = booking.Booking(Konto("booking", "standard"), tmp_path / "profil")
     abgeliefert = []
     erg = quelle.belege_holen(_umgebung(set(), abgeliefert, []))
-    assert erg.status == "ok" and erg.neu == 5
+    assert erg.status == "unvollstaendig" and erg.neu == 5
+    assert sorted(a for a in erg.abweichungen if "nicht vom Anbieter" in a) == [
+        "Adresse nicht vom Anbieter (http://admin.booking.com), nicht geholt.",
+        "Adresse nicht vom Anbieter (https://andere.example), nicht geholt."]  # je Host einmal, ohne Pfad
+    assert not any(SES in a or "invoice_name" in a for a in erg.abweichungen)
     assert not any(n in b.dateiname for b in abgeliefert for n in ("2222222222", "3333333333"))
     assert falsches_booking.get("fremd", 0) == 0
 
@@ -518,9 +524,9 @@ def test_laden_prueft_ziel_nach_weiterleitung():
     q = booking.Booking(Konto("booking", "standard"), None)
     pdf = base64.b64encode(b"%PDF-1.4 x").decode()
     assert q._laden(_Seite({"status": 200, "ziel": ADRESSE, "daten": pdf, "typ": "application/pdf"}), ADRESSE, "pdf")
-    with pytest.raises(booking.DateiFehler, match="außerhalb"):
+    with pytest.raises(booking.DateiFehler, match=r"nicht vom Anbieter \(https://andere.example\)"):
         q._laden(_Seite({"status": -1, "ziel": "https://andere.example/x.pdf", "daten": ""}), ADRESSE, "pdf")
-    with pytest.raises(booking.DateiFehler, match="nicht bei admin.booking.com"):
+    with pytest.raises(booking.DateiFehler, match="nicht vom Anbieter"):
         q._laden(_Seite({}), "https://andere.example/get_document", "pdf")
     # N2: Weiterleitung zur Anmeldung = Sitzung abgelaufen, nicht „unvollständig“
     with pytest.raises(booking.SitzungAbgelaufen):
@@ -531,10 +537,10 @@ def test_laden_fetch_scheitert_dann_sitzung_pruefen(monkeypatch):
     """N2: Scheitert fetch (z. B. Weiterleitung auf account.booking.com, fremder Host), wird in
     einem eigenen Tab geprüft, ob die Anmeldung noch gilt."""
     q = booking.Booking(Konto("booking", "standard"), None)
-    monkeypatch.setattr(q, "_noch_angemeldet", lambda seite: False)
+    monkeypatch.setattr(q, "_abgemeldet", lambda seite: True)
     with pytest.raises(booking.SitzungAbgelaufen):
         q._laden(_Seite(RuntimeError(f"TypeError: Failed to fetch {ADRESSE}")), ADRESSE, "pdf")
-    monkeypatch.setattr(q, "_noch_angemeldet", lambda seite: True)
+    monkeypatch.setattr(q, "_abgemeldet", lambda seite: False)  # K2: z. B. Netz weg → „nicht geladen“
     with pytest.raises(booking.DateiFehler) as fehler:
         q._laden(_Seite(RuntimeError(f"TypeError: Failed to fetch {ADRESSE}")), ADRESSE, "pdf")
     assert SES not in str(fehler.value) and "http" not in str(fehler.value)
@@ -572,3 +578,25 @@ def test_ohne_jahresfilter_unvollstaendig_mit_hinweis(tmp_path, falsches_booking
     assert erg.status == "unvollstaendig"
     assert any("Jahresfilter nicht gefunden" in a and "2026, 2025, 2024" in a for a in erg.abweichungen)
     assert sum(1 for b in abgeliefert if b.art == "rechnung") == 5
+
+
+# ── 2.1.1: K1 Listen in der Einstellungsdatei ────────────────────────────────
+
+
+def test_unterkunft_als_liste_uebersteht_speichern(tmp_path):
+    """K1: Eine Liste (und andere Werte) in den Konto-Optionen bleibt nach dem Speichern über
+    die Oberfläche, was sie war — früher wurde daraus der Text "['1', '2']"."""
+    from belegabruf import einstellungen
+    from belegabruf.oberflaeche.aktionen import einstellungen_aus_eingaben
+
+    datei = pfade.einstellungsdatei()
+    datei.parent.mkdir(parents=True, exist_ok=True)
+    datei.write_text(f'belegordner = "{tmp_path / "B"}"\n\n[[konto]]\nquelle = "booking"\nname = ""\n'
+                     'unterkunft = ["1234567", "7654321"]\nzahl = 3\nschalter = true\n', encoding="utf-8")
+    vorher = einstellungen.laden().konten[0].optionen
+    neu = einstellungen_aus_eingaben({"belegordner": str(tmp_path / "B"),
+                                      "konten": [{"quelle": "booking", "name": "", "kennung": "standard"}]})
+    einstellungen.speichern(neu)
+    nachher = einstellungen.laden().konten[0].optionen
+    assert nachher == vorher == {"unterkunft": ["1234567", "7654321"], "zahl": 3, "schalter": True}
+    assert booking.unterkunft_einstellung(nachher["unterkunft"]) == ["1234567", "7654321"]

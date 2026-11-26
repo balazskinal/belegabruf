@@ -208,6 +208,22 @@ class Protokoll:
                 self.schalten(ziel, False)
         return markiert
 
+    # Übernahme eines verwaisten Protokolls (waisen.py)
+
+    UEBERNAHME = "einstellung:uebernahme"
+
+    def uebernahme_vermerken(self, von: str) -> bool:
+        """Vermerkt einmalig, dass dieses Protokoll von einem Konto (bisherige Kennung ``von``)
+        übernommen wurde. True nur beim ersten Mal."""
+        if self.eintrag(self.UEBERNAHME) is not None:
+            return False
+        self._anhaengen([{
+            "zeitpunkt": datetime.now().isoformat(timespec="seconds"),
+            "quelle": self.quelle, "konto": self.konto, "art": "einstellung",
+            "schluessel": self.UEBERNAHME, "ziele": f"von:{von}",
+        }])
+        return True
+
     # Erster Lauf eines neuen Kontos
 
     ERSTLAUF = "einstellung:erstlauf"

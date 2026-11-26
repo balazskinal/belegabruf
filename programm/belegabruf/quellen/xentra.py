@@ -93,6 +93,15 @@ def rechnungs_id_aus_anfrage(rumpf: str | None) -> str:
 
 ADRESS_FELDER = ("download_url", "downloadUrl", "pdf_url", "pdfUrl", "url")
 
+#: Von hier dürfen die PDFs kommen (die befristete Adresse aus der Abrechnung, Chargebee).
+#: Ermittelt beim echten Lauf am 26.11.2026 (nur der Hostname wurde gemeldet): Chargebee
+#: legt die Rechnungs-PDFs der EU-Region als befristete Adresse in seinem S3-Bucket ab —
+#: ein fester Host, deshalb genau dieser und keine Endung wie „amazonaws.com“ (die träfe
+#: jeden S3-Bucket der Welt).
+PDF_HOSTS: set[str] = {"app.myxentra.com", "cb-prod-eu-c1-downloads.s3.eu-central-1.amazonaws.com"}
+#: Eng gefasste Endungen, falls der Anbieter wechselnde Unterdomains nutzt (sonst leer).
+PDF_ENDUNGEN: tuple[str, ...] = ()
+
 
 def pdf_adresse_aus_antwort(rumpf: str | None) -> str:
     """Die (befristete) PDF-Adresse aus der Antwort des Download-Aufrufs — gezielt aus
@@ -135,8 +144,8 @@ class _NurHttps(urllib.request.HTTPRedirectHandler):
     max_redirections = 3
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        if not str(newurl).lower().startswith("https://"):
-            raise urllib.error.HTTPError(req.full_url, code, "Weiterleitung nicht auf https", headers, fp)
+        if not _adresse_erlaubt(str(newurl)):
+            raise pruefung.FremdeAdresse(str(newurl))
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
@@ -156,7 +165,7 @@ _STUECK = 64 * 1024
 
 
 def _adresse_erlaubt(adresse: str) -> bool:
-    return adresse.lower().startswith("https://")
+    return pruefung.adresse_erlaubt(adresse, PDF_HOSTS, PDF_ENDUNGEN)
 
 
 def pdf_herunterladen(adresse: str) -> bytes:
@@ -166,11 +175,13 @@ def pdf_herunterladen(adresse: str) -> bytes:
     PyMuPDF würde ein gekürztes PDF sonst stillschweigend reparieren.
     Fehlermeldungen nennen die Adresse nie (sie enthält ein Zugangstoken)."""
     if not _adresse_erlaubt(adresse):
-        raise RuntimeError("PDF-Adresse ist nicht https")
+        raise pruefung.FremdeAdresse(adresse)
     ende = time.monotonic() + GESAMTFRIST_S
     try:
         anfrage = urllib.request.Request(adresse, headers={"User-Agent": "belegabruf", "Accept": "application/pdf"})
         with _oeffner.open(anfrage, timeout=60) as antwort:
+            if not _adresse_erlaubt(antwort.geturl()):  # Zieladresse nach Weiterleitungen
+                raise pruefung.FremdeAdresse(antwort.geturl())
             angekuendigt = None
             laenge = antwort.headers.get("Content-Length")
             if laenge and str(laenge).strip().isdigit():
@@ -193,7 +204,7 @@ def pdf_herunterladen(adresse: str) -> bytes:
                 if gesamt > pruefung.MAX_PDF_BYTES:
                     raise PdfZuGross()
             inhalt = b"".join(teile)
-    except (PdfZuGross, DownloadUnvollstaendig):
+    except (PdfZuGross, DownloadUnvollstaendig, pruefung.FremdeAdresse):
         raise
     except http.client.IncompleteRead:
         raise DownloadUnvollstaendig("Download abgebrochen") from None
@@ -420,6 +431,10 @@ class Xentra(Quelle):
                     continue
                 try:
                     inhalt = self._pdf_laden(kontext, adresse)
+                except pruefung.FremdeAdresse as fehler:
+                    erg.status = "unvollstaendig"
+                    erg.abweichungen.append(f"{bezeichnung} ({kennung}): {fehler}.")
+                    continue
                 except DownloadUnvollstaendig as fehler:
                     erg.status = "unvollstaendig"
                     erg.abweichungen.append(f"{bezeichnung} ({kennung}): {fehler}, nicht gespeichert — "

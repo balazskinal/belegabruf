@@ -42,6 +42,21 @@ im Belegordner). Den Belegordner darfst du also jederzeit leeren oder an die Buc
 Steuerberater weiterreichen, ohne dass alles wiederkommt. Gastnamen kommen nirgends vor — weder in
 Dateinamen noch im Protokoll.
 
+**Belege nur vom Anbieter selbst.** Gespeichert wird ein Beleg nur, wenn er von der Adresse des
+Anbieters kommt — über `https`, ohne fremden Port:
+
+| Anbieter | erlaubte Adresse |
+|---|---|
+| Airbnb | `www.airbnb.de` (bzw. die eingestellte Länderadresse) |
+| Skool | `www.skool.com` |
+| Xentra | `app.myxentra.com` und der Download-Speicher des Rechnungsdienstes Chargebee (`cb-prod-eu-c1-downloads.s3.eu-central-1.amazonaws.com`) |
+| Booking.com | `admin.booking.com` |
+
+Zeigt ein Link woanders hin, ruft das Programm ihn nicht auf. Führt eine Weiterleitung woandershin, geht
+die Anfrage zwar raus, **gespeichert wird aber nichts**. Die Zusammenfassung sagt dann „Adresse nicht vom
+Anbieter (…), nicht geholt“ — nur mit dem Namen des fremden Rechners, ohne den Rest der Adresse — und der
+Lauf gilt als „nicht alles geholt“.
+
 5. Ist der **Mailversand** eingeschaltet, geht jede neue Rechnung als eigene Mail mit PDF an die
    eingestellten Adressen (siehe [Versand per Mail](#versand-per-mail)). Die Datei bleibt trotzdem im
    Belegordner.
@@ -81,11 +96,18 @@ Administratorrechte nötig.
    Windows“** (beide liegen oben im ausgepackten Ordner). Beim ersten Mal richtet er sich ein, danach
    öffnet er nur noch das Fenster.
 
-   **Beim ersten Mal fragt dein Rechner einmal nach, ob du das wirklich öffnen willst.** Das ist
-   normal bei Programmen, die nicht aus einem App-Store kommen:
-   - **Mac:** Es kommt die Meldung, die Datei könne nicht geöffnet werden. Dann
-     *Systemeinstellungen → Datenschutz & Sicherheit* öffnen, ganz nach unten scrollen und bei
-     „Belegabruf Mac.command wurde blockiert“ auf **„Trotzdem öffnen“** klicken.
+   **Beim ersten Mal fragt dein Rechner nach, ob du das wirklich öffnen willst.** Das ist normal bei
+   Programmen, die nicht aus einem App-Store kommen:
+   - **Mac (macOS 15 und neuer):** Es erscheint die Meldung *„Apple konnte nicht überprüfen, ob
+     ‚Belegabruf Mac.command‘ frei von Schadsoftware ist …“*.
+     1. Dort auf **„Fertig“** klicken — **nicht** auf „In den Papierkorb legen“.
+     2. *Systemeinstellungen → Datenschutz & Sicherheit* öffnen, ganz nach unten scrollen und bei
+        „‚Belegabruf Mac.command‘ wurde blockiert …“ auf **„Trotzdem öffnen“** klicken; mit Passwort
+        bzw. Touch ID bestätigen.
+     3. **„Belegabruf Mac“ noch einmal doppelklicken** und in der nächsten Frage „Öffnen“ wählen.
+
+     Nach jedem **neu geladenen ZIP** (also bei jedem Update) fragt macOS wieder — dann dieselben
+     Schritte.
    - **Windows:** Es erscheint „Der Computer wurde durch Windows geschützt“. Auf **„Weitere
      Informationen“** und dann **„Trotzdem ausführen“** klicken.
 4. Ein schwarzes Fenster geht auf und lädt alles Nötige (ein Hilfsprogramm namens *uv*, Python und
@@ -173,9 +195,10 @@ eingestellt:
 
 Das Programm **liest nur und lädt herunter**. Angeklickt werden nur der Reiter „Zahlungen von
 Booking.com“, der Jahresfilter und das Zeitraumfeld bei den Auszahlungen — nichts an Preisen,
-Verfügbarkeit oder Einstellungen. Geladen wird nur von `https://admin.booking.com` — ein Link auf eine
-andere Adresse wird nie geholt, auch nicht nach einer Weiterleitung. Der Sitzungsschlüssel des Extranets
-(`ses` in der Adresse) wird nie gespeichert oder ausgegeben.
+Verfügbarkeit oder Einstellungen. Gespeichert wird nur, was von `https://admin.booking.com` kommt (siehe
+„Belege nur vom Anbieter selbst“ oben) — ein Link auf eine andere Adresse wird nicht aufgerufen, und nach
+einer Weiterleitung woandershin wird nichts gespeichert. Der Sitzungsschlüssel des Extranets (`ses` in der
+Adresse) wird nie gespeichert oder ausgegeben.
 
 ## Benutzen
 
@@ -340,6 +363,21 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 
 ## Was neu ist
 
+- **2.1.1** — **Belege nur vom Anbieter selbst**, für alle Anbieter gleich geprüft (siehe oben): nur
+  `https`, kein fremder Port, keine Benutzerangaben, Host genau der des Anbieters — vor dem Aufruf und
+  nach einer Weiterleitung. Abgewiesenes steht in der Zusammenfassung. Kleinigkeiten:
+  - Listen in der Einstellungsdatei (z. B. `unterkunft = ["1234567", "7654321"]` bei Booking.com) bleiben
+    nach dem Speichern im Fenster erhalten; bisher wurden sie zu Text.
+  - Booking.com: Ist während eines Downloads das Netz weg, heißt es „nicht geladen“ statt „Anmeldung
+    abgelaufen“ — abgelaufen nur, wenn wirklich die Anmeldeseite kommt.
+  - **Konten ohne Namen finden ihre frühere Anmeldung wieder.** Hat ein Konto ohne Namen seine interne
+    Kennung verloren (z. B. war die Einstellungsdatei beim Einrichten nicht lesbar, oder der Name wurde
+    von Hand gelöscht), übernimmt es Anmeldung und Protokoll von früher — wenn genau eines in Frage kommt.
+    Schon Geholtes kommt dann nicht noch einmal und wird deshalb nicht verschickt. Konten mit Namen und
+    Konten, die du in den Einstellungen entfernt hast, geben nie etwas an ein anderes Konto weiter. Ist es
+    nicht eindeutig, wird das Konto ausgelassen, und die Zusammenfassung sagt, was zu tun ist.
+  - Ist die Einstellungsdatei nicht lesbar, speichert das Fenster nicht mehr darüber, sondern sagt, wie
+    man sie repariert.
 - **2.1.0** — **Booking.com** als neuer Anbieter: Kommissionsrechnungen (werden wie alle Belege abgelegt
   und auf Wunsch verschickt), dazu Auszahlungsübersichten und Auszahlungen als PDF und CSV, nur abgelegt,
   je Art in einem eigenen Ordner (siehe [Booking.com](#bookingcom), ADR-006).

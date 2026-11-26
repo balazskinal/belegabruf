@@ -24,6 +24,8 @@ ERFUNDENER_NAME = "Erika Musterfrau"
 @pytest.fixture(autouse=True)
 def datenordner(tmp_path, monkeypatch):
     monkeypatch.setenv("BELEGABRUF_DATEN", str(tmp_path / "daten"))
+    # Die erfundenen PDF-Hosts dieser Tests gelten hier als „vom Anbieter“.
+    monkeypatch.setattr(xentra, "PDF_HOSTS", xentra.PDF_HOSTS | {"files.example.com", "cdn.example.com"})
     yield tmp_path / "daten"
     assert str(pfade.datenordner()).startswith(str(tmp_path)), "Test lief gegen den echten Datenordner"
 
@@ -65,14 +67,18 @@ def test_pdf_adresse_aus_antwort():
 
 
 class _Antwort:
-    def __init__(self, inhalt: bytes, laenge: str | None = None):
+    def __init__(self, inhalt: bytes, laenge: str | None = None, ziel: str = ""):
         import io
 
+        self.ziel = ziel
         self._strom = io.BytesIO(inhalt)
         self.headers = {"Content-Length": laenge} if laenge else {}
 
     def read(self, n=-1):
         return self._strom.read(n)
+
+    def geturl(self):
+        return self.ziel
 
     def read1(self, n=-1):
         return self._strom.read1(n)
@@ -91,10 +97,11 @@ class FalscherOeffner:
         self.anfragen = []
         self.inhalt = _pdf("Rechnung")
         self.laenge = None
+        self.ziel = None  # Adresse nach Weiterleitungen (None = wie angefragt)
 
     def open(self, anfrage, timeout=None):
         self.anfragen.append(anfrage)
-        return _Antwort(self.inhalt, self.laenge)
+        return _Antwort(self.inhalt, self.laenge, self.ziel or anfrage.full_url)
 
 
 def test_pdf_herunterladen_ohne_cookies_nur_https(monkeypatch):
@@ -103,9 +110,20 @@ def test_pdf_herunterladen_ohne_cookies_nur_https(monkeypatch):
     assert xentra.pdf_herunterladen("https://files.example.com/a.pdf?sig=1").startswith(b"%PDF")
     kopf = {k.lower() for k in o.anfragen[0].header_items() for k in [k[0]]}
     assert "cookie" not in kopf and "authorization" not in kopf
-    with pytest.raises(RuntimeError, match="nicht https"):
-        xentra.pdf_herunterladen("http://files.example.com/a.pdf")
-    assert len(o.anfragen) == 1
+    from belegabruf import pruefung
+
+    for fremd in ("http://files.example.com/a.pdf", "https://andere.example/a.pdf",
+                  "https://files.example.com:8443/a.pdf", "https://files.example.com＠andere.example/a.pdf",
+                  "https://nutzer@files.example.com/a.pdf"):
+        with pytest.raises(pruefung.FremdeAdresse) as info:
+            xentra.pdf_herunterladen(fremd)
+        assert "a.pdf" not in str(info.value)
+    assert len(o.anfragen) == 1  # nichts davon wurde angefragt
+    # Zieladresse nach einer Weiterleitung auf einen fremden Host: nicht gespeichert
+    o.ziel = "https://andere.example/umgeleitet.pdf?sig=geheim"
+    with pytest.raises(pruefung.FremdeAdresse, match=r"https://andere.example\)") as info:
+        xentra.pdf_herunterladen("https://files.example.com/a.pdf?sig=1")
+    assert "geheim" not in str(info.value)
 
 
 def test_oeffner_hat_keinen_cookie_speicher():
@@ -122,9 +140,12 @@ def test_weiterleitung_nur_https():
     h = xentra._NurHttps()
     anfrage = urllib.request.Request("https://files.example.com/a.pdf")
     assert h.max_redirections == 3
+    from belegabruf import pruefung
+
     assert h.redirect_request(anfrage, io.BytesIO(), 302, "Found", {}, "https://cdn.example.com/a.pdf") is not None
-    with pytest.raises(urllib.error.HTTPError):
-        h.redirect_request(anfrage, io.BytesIO(), 302, "Found", {}, "http://cdn.example.com/a.pdf")
+    for ziel in ("http://cdn.example.com/a.pdf", "https://andere.example/a.pdf"):
+        with pytest.raises(pruefung.FremdeAdresse):
+            h.redirect_request(anfrage, io.BytesIO(), 302, "Found", {}, ziel)
 
 
 def test_pdf_hoechstens_20_mb(monkeypatch):
@@ -149,6 +170,7 @@ def test_fehlermeldung_nennt_keine_adresse(monkeypatch):
             raise urllib.error.HTTPError(anfrage.full_url, 403, "Forbidden", {}, None)
 
     monkeypatch.setattr(xentra, "_oeffner", Kaputt())
+    monkeypatch.setattr(xentra, "PDF_HOSTS", xentra.PDF_HOSTS | {"geheim.example.com"})
     with pytest.raises(RuntimeError) as info:
         xentra.pdf_herunterladen("https://geheim.example.com/a.pdf?sig=abc")
     assert "403" in str(info.value) and "geheim" not in str(info.value) and "sig" not in str(info.value)
@@ -494,3 +516,12 @@ def test_zeitraum_filtert_vor_dem_anklicken(tmp_path, falsches_xentra):
     assert "rechnung:INV-0001" not in bekannt
     erg = quelle.belege_holen(_umgebung(bekannt, abgeliefert, meldungen))
     assert erg.neu == 1 and erg.schon_da == 2 and falsches_xentra["downloads"][-1] == "INV-0001"
+
+
+def test_nur_der_echte_chargebee_host():
+    """Der Host aus dem echten Lauf ist erlaubt — aber nicht jeder S3-Bucket."""
+    assert xentra._adresse_erlaubt("https://cb-prod-eu-c1-downloads.s3.eu-central-1.amazonaws.com/inv/1.pdf?X=1")
+    for fremd in ("https://andere-bucket.s3.eu-central-1.amazonaws.com/inv/1.pdf",
+                  "https://s3.eu-central-1.amazonaws.com/cb-prod-eu-c1-downloads/inv/1.pdf",
+                  "http://cb-prod-eu-c1-downloads.s3.eu-central-1.amazonaws.com/inv/1.pdf"):
+        assert not xentra._adresse_erlaubt(fremd)

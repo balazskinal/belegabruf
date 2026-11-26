@@ -50,6 +50,13 @@ def kurzname(text: str) -> str:
     return ersetzt or "konto"
 
 
+def anzeigepfad(pfad: Path | str) -> str:
+    """Ein Pfad für Meldungen: der Benutzerordner als „~“ (kein Benutzername im Bildschirmfoto)."""
+    text = str(pfad)
+    heim = str(Path.home())
+    return "~" + text[len(heim):] if text == heim or text.startswith(heim + os.sep) else text
+
+
 def profilordner(quelle: str, konto: str) -> Path:
     """Eigenes, dauerhaftes Browserprofil je Konto."""
     return datenordner() / "profile" / f"{kurzname(quelle)}-{kurzname(konto)}"

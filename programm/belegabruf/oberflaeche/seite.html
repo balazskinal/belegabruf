@@ -119,6 +119,7 @@
   </header>
 
   <div id="neu" class="meldung warn versteckt"></div>
+  <div id="nicht-lesbar" class="meldung warn versteckt" role="alert"></div>
   <div id="fehler" class="meldung schlecht versteckt" role="alert"></div>
   <div id="ende" class="meldung gut versteckt">Belegabruf ist beendet. Du kannst dieses Fenster schließen.</div>
 
@@ -574,7 +575,10 @@ async function laden(formularAuch) {
     $("neu").textContent = `Es gibt eine neuere Version (${zustand.neuere_version}). Herunterladen unter ${zustand.neueste_seite} — alten Ordner löschen, neues ZIP auspacken, „Belegabruf Mac“ bzw. „Belegabruf Windows“ doppelklicken (richtet sich selbst ein); Einstellungen und Anmeldungen bleiben.`;
     $("neu").classList.remove("versteckt");
   }
-  $("willkommen").classList.toggle("versteckt", zustand.eingerichtet);
+  $("willkommen").classList.toggle("versteckt", zustand.eingerichtet || Boolean(zustand.nicht_lesbar));
+  $("nicht-lesbar").textContent = zustand.nicht_lesbar
+    ? zustand.nicht_lesbar + " Solange das so ist, ist „Einstellungen speichern“ gesperrt." : "";
+  $("nicht-lesbar").classList.toggle("versteckt", !zustand.nicht_lesbar);
   if (!reiterGewaehlt) {
     // Erster Start ohne Konten: gleich zu den Einstellungen, sonst „Belege holen“.
     reiterWaehlen(zustand.konten.length ? "holen" : "einstellungen", false);
@@ -598,7 +602,10 @@ function knoepfeSperren(beschaeftigt) {
   for (const id of ["holen", "fehlende", "alle-pruefen", "speichern"]) {
     if (beschaeftigt) $(id).disabled = true;
   }
-  if (!beschaeftigt) { $("alle-pruefen").disabled = false; $("speichern").disabled = false; }
+  if (!beschaeftigt) {
+    $("alle-pruefen").disabled = false;
+    $("speichern").disabled = Boolean(zustand && zustand.nicht_lesbar);  // nie über eine unlesbare Datei speichern
+  }
   document.querySelectorAll("[data-auftrag]").forEach((b) => { b.disabled = beschaeftigt; });
   holenErlaubt();
 }
