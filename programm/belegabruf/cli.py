@@ -44,6 +44,8 @@ def _warte_enter(text: str = "\nDrück Enter, um das Fenster zu schließen.") ->
 def start() -> int:
     try:
         einst = einstellungen.laden()
+    except einstellungen.EinstellungNichtLesbar as fehler:
+        raise EinstellungsFehler(einstellungen.nicht_lesbar_text(fehler)) from None
     except EinstellungsFehler:
         print("Belegabruf ist noch nicht eingerichtet — das machen wir jetzt.")
         einst = einrichtung.einrichten()

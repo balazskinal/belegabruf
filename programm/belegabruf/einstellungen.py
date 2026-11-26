@@ -18,6 +18,10 @@ class EinstellungsFehler(Exception):
     """Die Einstellungsdatei fehlt oder ist nicht lesbar."""
 
 
+class EinstellungNichtLesbar(EinstellungsFehler):
+    """Die Einstellungsdatei ist da, lässt sich aber nicht lesen (fehlerhaft oder ungültig)."""
+
+
 def _wahrheitswert(wert: object, standard: bool = True) -> bool:
     if isinstance(wert, bool):
         return wert
@@ -50,6 +54,10 @@ class Konto:
     optionen: dict = field(default_factory=dict)
     titel: str | None = None  # None = wie name
     belege_ab: str = "alle"  # Zeitraum, siehe ZEITRAEUME und ab_datum()
+    # Übernahme verwaister Konten (waisen.py), nur im Speicher, nie in der Datei:
+    uebernommen_von: str = field(default="", compare=False)  # Kennung vor der Übernahme
+    auslassen_grund: str = field(default="", compare=False)  # nicht eindeutig → nicht holen
+    hinweis: str = field(default="", compare=False)
 
     def ab(self, heute: date | None = None) -> date | None:
         """Ab welchem Rechnungsdatum geholt wird (None = alle)."""
@@ -253,11 +261,33 @@ def mailadresse_ok(adresse: str) -> bool:
                 and " " not in adresse and "," not in adresse)
 
 
+def nicht_lesbar_text(fehler: Exception) -> str:
+    """Warum mit einer unlesbaren Datei nicht gespeichert (bzw. neu eingerichtet) wird."""
+    return (f"Die bisherige Einstellungsdatei ist nicht lesbar: {fehler} — gespeichert würden sonst Konten mit "
+            "neuen Kennungen (neue Anmeldung, alles noch einmal geholt). Bitte die Datei "
+            f"{pfade.einstellungsdatei()} mit einem Texteditor reparieren, oder sie umbenennen und dann neu "
+            "einrichten. Frühere Anmeldungen und Protokolle werden dann, wo eindeutig, wieder übernommen.")
+
+
 def laden(datei: Path | None = None) -> Einstellungen:
+    """Liest die Einstellungsdatei. Konten, deren Kennung verloren ging, finden dabei ihr altes
+    Protokoll und Profil wieder, wenn das eindeutig ist (siehe waisen.py)."""
     datei = datei or pfade.einstellungsdatei()
     if not datei.exists():
         raise EinstellungsFehler(f"Noch nicht eingerichtet (keine Datei {datei}).")
-    return aus_text(datei.read_text(encoding="utf-8"), str(datei))
+    try:
+        einst = aus_text(datei.read_text(encoding="utf-8"), str(datei))
+    except EinstellungNichtLesbar:
+        raise
+    except EinstellungsFehler as fehler:
+        raise EinstellungNichtLesbar(str(fehler)) from None
+    except (OSError, UnicodeDecodeError) as fehler:
+        raise EinstellungNichtLesbar(
+            f"Die Einstellungsdatei {datei} ist nicht lesbar ({type(fehler).__name__}).") from None
+    from belegabruf import waisen
+
+    waisen.zuordnen(einst)
+    return einst
 
 
 def pruefen(einst: Einstellungen) -> Einstellungen:

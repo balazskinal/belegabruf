@@ -99,8 +99,10 @@ def einrichten() -> Einstellungen:
     print("Ein paar Fragen, dann ist alles eingestellt. Enter übernimmt den Vorschlag in [Klammern].")
     try:
         alt = einstellungen.laden()
+    except einstellungen.EinstellungNichtLesbar as fehler:
+        raise einstellungen.EinstellungsFehler(einstellungen.nicht_lesbar_text(fehler)) from None
     except einstellungen.EinstellungsFehler:
-        alt = None
+        alt = None  # noch keine Datei: erstes Einrichten
 
     verfuegbar = list(quellen.QUELLEN)
     print("\nWelche Anbieter willst du abrufen?")

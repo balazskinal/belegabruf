@@ -363,6 +363,13 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
     nach dem Speichern im Fenster erhalten; bisher wurden sie zu Text.
   - Booking.com: Ist während eines Downloads das Netz weg, heißt es „nicht geladen“ statt „Anmeldung
     abgelaufen“ — abgelaufen nur, wenn wirklich die Anmeldeseite kommt.
+  - **Konten finden ihre frühere Anmeldung wieder.** Hat ein Konto seine interne Kennung verloren (z. B.
+    entfernt und ohne Namen neu angelegt, oder die Einstellungsdatei war beim Einrichten nicht lesbar),
+    übernimmt es Anmeldung und Protokoll von früher — wenn eindeutig ist, welches dazugehört. Schon
+    Geholtes kommt dann nicht noch einmal und wird nicht (noch einmal) verschickt. Ist es nicht
+    eindeutig, wird das Konto ausgelassen, und die Zusammenfassung sagt, was zu tun ist.
+  - Ist die Einstellungsdatei nicht lesbar, speichert das Fenster nicht mehr darüber, sondern sagt, wie
+    man sie repariert.
 - **2.1.0** — **Booking.com** als neuer Anbieter: Kommissionsrechnungen (werden wie alle Belege abgelegt
   und auf Wunsch verschickt), dazu Auszahlungsübersichten und Auszahlungen als PDF und CSV, nur abgelegt,
   je Art in einem eigenen Ordner (siehe [Booking.com](#bookingcom), ADR-006).

@@ -393,8 +393,11 @@ def einstellungen_aus_eingaben(daten: dict) -> Einstellungen:
         raise Eingabefehler("Ungültige Eingabe.")
     try:
         alt = einstellungen.laden()
+    except einstellungen.EinstellungNichtLesbar as fehler:
+        # (c) Nie über eine unlesbare Datei speichern: Die Konten verlören ihre Kennung.
+        raise Eingabefehler(einstellungen.nicht_lesbar_text(fehler)) from None
     except EinstellungsFehler:
-        alt = None
+        alt = None  # noch keine Datei: erstes Einrichten
     sammler = _Sammler()
     ordner = _belegordner_lesen(sammler, daten.get("belegordner"))
     konten = _konten_lesen(sammler, daten.get("konten"), alt)

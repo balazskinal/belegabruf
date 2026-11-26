@@ -177,6 +177,26 @@ def nicht_angemeldet(konto: Konto) -> Ergebnis:
     return Ergebnis(konto.quelle, konto.name, status="anmeldung_noetig", anzeige=konto.anzeige)
 
 
+def ausgelassen(konto: Konto) -> Ergebnis:
+    """Ein Konto, das nicht geholt wird, weil sein früheres Protokoll nicht eindeutig ist."""
+    return Ergebnis(konto.quelle, konto.name, status="fehler", fehler=konto.auslassen_grund, anzeige=konto.anzeige)
+
+
+def _uebernahme_abschliessen(einst: Einstellungen, konto: Konto, protokoll: Protokoll) -> int:
+    """Erster Lauf nach der Übernahme eines verwaisten Protokolls: Was darin steht, gilt als
+    schon verarbeitet — für jedes Lieferziel als „schon geliefert“, der erste Lauf als erledigt.
+    So geht der Altbestand nie wegen der Übernahme per Mail raus. Gibt die Zahl der so
+    markierten Rechnungen zurück (0, wenn schon früher übernommen)."""
+    if not konto.uebernommen_von or not protokoll.uebernahme_vermerken(konto.uebernommen_von):
+        return 0
+    markiert = 0
+    for name in lieferziel_namen(einst):
+        markiert = max(markiert, protokoll.als_schon_markieren(name))
+        protokoll.schalten(name, True)
+    protokoll.erstlauf_setzen("fertig")
+    return markiert
+
+
 def alle_abrufen(einst: Einstellungen, konten: list[Konto], bereit: Callable[[Konto], bool],
                  melden_fuer: Callable[[Konto], Melden], nachholen: bool = False) -> list[Ergebnis]:
     """Holt die Konten nacheinander — die eine Schleife für Terminal-Menü, ``belege holen``
@@ -184,6 +204,9 @@ def alle_abrufen(einst: Einstellungen, konten: list[Konto], bereit: Callable[[Ko
     melden); sonst steht es als „nicht angemeldet“ im Ergebnis."""
     ergebnisse: list[Ergebnis] = []
     for k in konten:
+        if k.auslassen_grund:  # nicht eindeutig zugeordnet: nicht anmelden, nicht holen
+            ergebnisse.append(ausgelassen(k))
+            continue
         if not bereit(k):
             ergebnisse.append(nicht_angemeldet(k))
             continue
@@ -210,7 +233,10 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
     Belegordner fehlt (Menüpunkt „Fehlende Dateien neu holen“).
     """
     uebernahme(einst)
+    if konto.auslassen_grund:
+        return ausgelassen(konto)
     protokoll = protokoll_fuer(einst, konto)
+    uebernommen = _uebernahme_abschliessen(einst, konto, protokoll)
     # Erst die Schalter abgleichen: Beim allerersten Einschalten eines Ziels gilt alles
     # bis jetzt Geholte als geliefert — bevor dieser Lauf Neues holt.
     nur_ablegen = einst.mail.erstversand == "nicht"
@@ -234,6 +260,14 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
     if erstlauf:
         _erstlauf_abschliessen(einst, protokoll, ergebnis, nur_ablegen)
     ergebnis.anzeige = ergebnis.anzeige or konto.anzeige
+    if konto.uebernommen_von:
+        ergebnis.hinweise.append(
+            f"Frühere Anmeldung und Protokoll „{konto.name}“ übernommen (das Konto hatte die Kennung "
+            f"„{konto.uebernommen_von}“ bekommen). Schon Geholtes kommt nicht noch einmal"
+            + (f"; {uebernommen} Rechnung(en) daraus gelten als verschickt" if uebernommen else "")
+            + ". Festgehalten wird das beim nächsten Speichern der Einstellungen.")
+    if konto.hinweis:
+        ergebnis.hinweise.append(konto.hinweis)
     ergebnis.ab = ab.isoformat() if ab else ""
     if ab is not None and ab > date.today():  # z. B. von Hand in die Datei geschrieben
         ergebnis.hinweise.append(f"„Belege ab {ab:%d.%m.%Y}“ liegt in der Zukunft — so wird nichts geholt. "
