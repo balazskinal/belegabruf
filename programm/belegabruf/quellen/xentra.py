@@ -27,9 +27,9 @@ import re
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
-from typing import Callable
 
 from belegabruf import browser, pruefung
 from belegabruf.quellen.basis import Beleg, Ergebnis, Quelle, SitzungAbgelaufen, Umgebung
@@ -392,7 +392,8 @@ class Xentra(Quelle):
             erg.erwartet = len(zeilen)
             erg.vorhanden = 0
             for zeile in zeilen:
-                bezeichnung = f"Rechnung vom {zeile.datum:%d.%m.%Y}" if zeile.datum else f"Rechnung Nr. {zeile.nummer + 1}"
+                bezeichnung = (f"Rechnung vom {zeile.datum:%d.%m.%Y}" if zeile.datum
+                               else f"Rechnung Nr. {zeile.nummer + 1}")
                 browser.pause()
                 try:
                     kennung, adresse = self._klicken(kontext, seite, zeile)

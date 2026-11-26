@@ -8,10 +8,9 @@ from pathlib import Path
 import pymupdf
 import pytest
 
-from belegabruf import aktualisierung, einstellungen, pfade, pruefung, zustand
-from belegabruf.einstellungen import Einstellungen, Konto
-from belegabruf import ablauf, quellen
+from belegabruf import ablauf, aktualisierung, einstellungen, pfade, pruefung, quellen, zustand
 from belegabruf import protokoll as protokoll_modul
+from belegabruf.einstellungen import Einstellungen, Konto
 from belegabruf.protokoll import Protokoll
 from belegabruf.quellen import airbnb
 from belegabruf.quellen.basis import Beleg, Ergebnis, Quelle
@@ -411,14 +410,24 @@ def test_ablauf_gibt_zeitraum_an_die_quelle(monkeypatch, tmp_path):
 WURZEL = Path(__file__).resolve().parents[2]
 
 
+MAC = "Belegabruf Mac.command"
+MAC_TERMINAL = "Fehlersuche/Belegabruf Terminal Mac.command"
+WIN = "Belegabruf Windows.cmd"
+WIN_TERMINAL = "Fehlersuche/Belegabruf Terminal Windows.cmd"
+
+
 def _starter_kopie(tmp_path):
+    """Baut den ausgepackten Ordner nach (wie im ZIP), absichtlich in einem Pfad mit Leerzeichen."""
     import shutil
 
-    shutil.copytree(WURZEL / "Start Mac", tmp_path / "Start Mac")
-    (tmp_path / "programm").mkdir()
-    (tmp_path / "programm" / "uv.lock").write_text("", encoding="utf-8")
+    ziel = tmp_path / "Mein Ordner" / "belegabruf-v2"
+    (ziel / "Fehlersuche").mkdir(parents=True)
+    for name in (MAC, MAC_TERMINAL):
+        shutil.copy2(WURZEL / name, ziel / name)
+    (ziel / "programm").mkdir()
+    (ziel / "programm" / "uv.lock").write_text("", encoding="utf-8")
     (tmp_path / "bin").mkdir()
-    return tmp_path
+    return ziel
 
 
 def _falsches_uv(tmp_path, sync_klappt=True):
@@ -438,18 +447,19 @@ def _falsches_uv(tmp_path, sync_klappt=True):
            "'[ -e .venv/.belegabruf-sync ] && ! [ uv.lock -nt .venv/.belegabruf-sync ]' > .venv/bin/python\n"
            "  chmod +x .venv/bin/python\n")
         + "fi\n"
-        'if [ "$*" = "run --no-dev --quiet playwright install --no-shell chromium" ]; then '
+        'if [ "$*" = "run --locked --no-dev --quiet playwright install --no-shell chromium" ]; then '
         f'touch "{tmp_path}/browser-da"; fi\n'
         "exit 0\n", encoding="utf-8")
     uv.chmod(0o755)
     return log
 
 
-def _starten(tmp_path, datei="Start Mac/Belegabruf.command", mit_uv=True):
+def _starten(tmp_path, ordner=None, datei=MAC, mit_uv=True):
     import subprocess
 
+    ordner = ordner or tmp_path / "Mein Ordner" / "belegabruf-v2"
     pfad = f"{tmp_path / 'bin'}:/usr/bin:/bin" if mit_uv else "/usr/bin:/bin"
-    return subprocess.run(["/bin/bash", str(tmp_path / datei)], input="\n", capture_output=True, text=True,
+    return subprocess.run(["/bin/bash", str(ordner / datei)], input="\n", capture_output=True, text=True,
                           env={"PATH": pfad, "HOME": str(tmp_path / "home")}, timeout=30)
 
 
@@ -466,36 +476,36 @@ pytestmark_mac = pytest.mark.skipif(__import__("sys").platform == "win32", reaso
 def test_starter_erststart_dann_nur_noch_starten(tmp_path):
     import time
 
-    _starter_kopie(tmp_path)
+    ordner = _starter_kopie(tmp_path)
     log = _falsches_uv(tmp_path)
     lauf = _starten(tmp_path)
     assert lauf.returncode == 0, lauf.stdout + lauf.stderr
     assert "Richte die neue Version ein" in lauf.stdout and "Hole den Browser" in lauf.stdout
-    assert _aufrufe(log) == ["uv sync --locked --no-dev --quiet", "uv run --no-dev --quiet playwright install --no-shell chromium",
-                             "uv run --no-dev --quiet belege oberflaeche"]
+    assert _aufrufe(log) == ["uv sync --locked --no-dev --quiet", "uv run --locked --no-dev --quiet playwright install --no-shell chromium",
+                             "uv run --locked --no-dev --quiet belege oberflaeche"]
     # zweiter Start: alles da → nur das Fenster
     lauf = _starten(tmp_path)
     assert "Richte" not in lauf.stdout and "Hole" not in lauf.stdout
-    assert _aufrufe(log) == ["uv run --no-dev --quiet belege oberflaeche"]
+    assert _aufrufe(log) == ["uv run --locked --no-dev --quiet belege oberflaeche"]
     # Update im Arbeitsordner: uv.lock neuer → nur Bausteine, Browser ist schon da
     time.sleep(1.1)
-    (tmp_path / "programm" / "uv.lock").write_text("neu", encoding="utf-8")
+    (ordner / "programm" / "uv.lock").write_text("neu", encoding="utf-8")
     lauf = _starten(tmp_path)
-    assert _aufrufe(log) == ["uv sync --locked --no-dev --quiet", "uv run --no-dev --quiet belege oberflaeche"]
+    assert _aufrufe(log) == ["uv sync --locked --no-dev --quiet", "uv run --locked --no-dev --quiet belege oberflaeche"]
     # Browser weg (z. B. Cache geleert) → nur der Browser
     (tmp_path / "browser-da").unlink()
     _starten(tmp_path)
-    assert _aufrufe(log) == ["uv run --no-dev --quiet playwright install --no-shell chromium",
-                             "uv run --no-dev --quiet belege oberflaeche"]
+    assert _aufrufe(log) == ["uv run --locked --no-dev --quiet playwright install --no-shell chromium",
+                             "uv run --locked --no-dev --quiet belege oberflaeche"]
 
 
 @pytestmark_mac
 def test_starter_halbe_einrichtung_wird_weggeraeumt(tmp_path):
-    _starter_kopie(tmp_path)
+    ordner = _starter_kopie(tmp_path)
     log = _falsches_uv(tmp_path, sync_klappt=False)
     lauf = _starten(tmp_path)
     assert lauf.returncode == 1 and "noch einmal doppelklicken" in lauf.stdout
-    assert not (tmp_path / "programm" / ".venv").exists()
+    assert not (ordner / "programm" / ".venv").exists()
     assert not any("belege" in a for a in _aufrufe(log))
 
 
@@ -517,41 +527,64 @@ def test_starter_holt_uv_wenn_es_fehlt(tmp_path):
     assert lauf.returncode == 0, lauf.stdout + lauf.stderr
     aufrufe = _aufrufe(log)
     assert aufrufe[0] == "curl -LsSf https://astral.sh/uv/install.sh" and "Hole das Hilfsprogramm uv" in lauf.stdout
-    assert aufrufe[-1] == "uv run --no-dev --quiet belege oberflaeche"
+    assert aufrufe[-1] == "uv run --locked --no-dev --quiet belege oberflaeche"
 
 
 @pytestmark_mac
 def test_terminal_starter_liegt_in_fehlersuche(tmp_path):
-    _starter_kopie(tmp_path)
+    ordner = _starter_kopie(tmp_path)
     log = _falsches_uv(tmp_path)
-    lauf = _starten(tmp_path, "Start Mac/Fehlersuche/Belegabruf (Terminal).command")
-    assert lauf.returncode == 1 and "Belegabruf" in lauf.stdout  # erst den Starter
+    lauf = _starten(tmp_path, datei=MAC_TERMINAL)
+    assert lauf.returncode == 1 and "Belegabruf Mac" in lauf.stdout  # erst den Starter
     _starten(tmp_path)
     _aufrufe(log)
-    lauf = _starten(tmp_path, "Start Mac/Fehlersuche/Belegabruf (Terminal).command")
-    assert _aufrufe(log) == ["uv run --no-dev --quiet belege start"]
+    lauf = _starten(tmp_path, datei=MAC_TERMINAL)
+    assert lauf.returncode == 0, lauf.stdout + lauf.stderr
+    assert _aufrufe(log) == ["uv run --locked --no-dev --quiet belege start"]
+    assert (ordner / "programm" / ".venv").exists()
 
 
-def test_oben_liegt_nur_ein_starter():
-    for ordner, endung in (("Start Mac", ".command"), ("Start Windows", ".cmd")):
-        oben = sorted(p.name for p in (WURZEL / ordner).iterdir() if p.is_file())
-        assert oben == [f"Belegabruf{endung}"], oben
-        assert (WURZEL / ordner / "Fehlersuche" / f"Belegabruf (Terminal){endung}").exists()
+def test_oben_liegen_nur_die_zwei_starter():
+    """Im Repo wie im ZIP: oben die zwei Starter, die Terminal-Starter in Fehlersuche/."""
+    oben = sorted(p.name for p in WURZEL.iterdir() if p.suffix in {".command", ".cmd"})
+    assert oben == [MAC, WIN], oben
+    assert sorted(p.name for p in (WURZEL / "Fehlersuche").iterdir()) == [
+        "Belegabruf Terminal Mac.command", "Belegabruf Terminal Windows.cmd"]
+    assert not (WURZEL / "Start Mac").exists() and not (WURZEL / "Start Windows").exists()
+
+
+def test_mac_starter_sind_ausfuehrbar():
+    import os
+
+    for name in (MAC, MAC_TERMINAL):
+        assert os.access(WURZEL / name, os.X_OK), name
 
 
 def test_windows_starter_ablauf_und_crlf():
-    for name in ("Belegabruf.cmd", "Fehlersuche/Belegabruf (Terminal).cmd"):
-        roh = (WURZEL / "Start Windows" / name).read_bytes()
+    for name in (WIN, WIN_TERMINAL):
+        roh = (WURZEL / name).read_bytes()
         assert roh.count(b"\n") == roh.count(b"\r\n"), f"{name}: Zeilenenden müssen CRLF sein"
-    text = (WURZEL / "Start Windows" / "Belegabruf.cmd").read_text(encoding="utf-8")
+    text = (WURZEL / WIN).read_text(encoding="utf-8")
     reihenfolge = ["where uv", "astral.sh/uv/install.ps1", ":uvda", "startpruefung umgebung", ":sync",
                    "uv sync --locked --no-dev --quiet", ".belegabruf-sync", ":browser", "startpruefung browser",
                    "playwright install --no-shell chromium", ":start", "belege oberflaeche", ":syncfehler",
                    "rmdir /s /q .venv"]
     stellen = [text.index(t) for t in reihenfolge]
     assert stellen == sorted(stellen)
-    assert '"%~dp0..\\..\\programm"' in (WURZEL / "Start Windows" / "Fehlersuche" /
-                                         "Belegabruf (Terminal).cmd").read_text(encoding="utf-8")
+    assert 'cd /d "%~dp0programm"' in text
+    assert 'cd /d "%~dp0..\\programm"' in (WURZEL / WIN_TERMINAL).read_text(encoding="utf-8")
+
+
+def test_alle_starter_laufen_mit_locked():
+    """Jeder Aufruf von uv sync/run in den Startern ist --locked (nie eine andere Version als uv.lock)."""
+    import re
+
+    for name in (MAC, MAC_TERMINAL, WIN, WIN_TERMINAL):
+        text = (WURZEL / name).read_text(encoding="utf-8")
+        aufrufe = re.findall(r"^\s*(?:if ! )?uv (?:run|sync)[^\n]*", text, re.M)
+        assert aufrufe, name
+        for aufruf in aufrufe:
+            assert "--locked" in aufruf, f"{name}: {aufruf}"
 
 
 def test_startpruefung_umgebung(tmp_path):
@@ -585,26 +618,27 @@ def test_startpruefung_browser(tmp_path, monkeypatch):
 
 
 @pytestmark_mac
-@pytest.mark.parametrize("datei", ["Start Mac/Belegabruf.command", "Start Mac/Fehlersuche/Belegabruf (Terminal).command"])
+@pytest.mark.parametrize("datei", [MAC, MAC_TERMINAL])
 def test_starter_ohne_programmordner_meldet_sich(tmp_path, datei):
     import shutil
 
-    shutil.copytree(WURZEL / "Start Mac", tmp_path / "Start Mac")  # nur der Start-Ordner ausgepackt
-    lauf = _starten(tmp_path, datei, mit_uv=False)
+    (tmp_path / "Fehlersuche").mkdir()
+    shutil.copy2(WURZEL / datei, tmp_path / datei)  # nur der Starter herausgezogen, ohne „programm“
+    lauf = _starten(tmp_path, ordner=tmp_path, datei=datei, mit_uv=False)
     assert lauf.returncode == 1 and "Ordner „programm“ fehlt" in lauf.stdout and "vollständig auspacken" in lauf.stdout
 
 
 def test_starter_holt_uv_nur_von_fester_adresse():
     import re
 
-    mac = (WURZEL / "Start Mac" / "Belegabruf.command").read_text(encoding="utf-8")
-    win = (WURZEL / "Start Windows" / "Belegabruf.cmd").read_text(encoding="utf-8")
+    mac = (WURZEL / MAC).read_text(encoding="utf-8")
+    win = (WURZEL / WIN).read_text(encoding="utf-8")
     assert re.findall(r"curl [^|]*\|", mac) == ["curl -LsSf https://astral.sh/uv/install.sh |"]
     assert 'irm https://astral.sh/uv/install.ps1 | iex' in win
     for text in (mac, win):
         zeile = next(z for z in text.splitlines() if "astral.sh/uv/install" in z and ("curl" in z or "irm" in z))
         assert "$" not in zeile.split("astral.sh")[0] and "%" not in zeile, zeile  # keine Variablen in der Adresse
-    for name in ("Belegabruf.cmd", "Fehlersuche/Belegabruf (Terminal).cmd"):
-        text = (WURZEL / "Start Windows" / name).read_text(encoding="utf-8")
-        assert '2>nul || (' in text and 'fehlt neben "Start Windows"' in text
+    for name in (WIN, WIN_TERMINAL):
+        text = (WURZEL / name).read_text(encoding="utf-8")
+        assert '2>nul || (' in text and 'Der Ordner "programm" fehlt neben' in text
     assert "uv sync --locked --no-dev" in win and "uv sync --locked --no-dev" in mac

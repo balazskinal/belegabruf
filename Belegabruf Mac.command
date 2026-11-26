@@ -3,8 +3,9 @@
 # Richtet sich beim ersten Mal und nach einem Update selbst ein; jeder Schritt nur, wenn nötig:
 # uv holen → Bausteine (uv sync) → Browser (Chromium) → Fenster „Belegabruf“ öffnen.
 # Das eigentliche Programm liegt im Ordner "programm" daneben.
-if ! cd "$(dirname "$0")/../programm" 2>/dev/null; then
-  echo "Der Ordner „programm“ fehlt neben „Start Mac“. Bitte das ZIP vollständig auspacken (nicht nur den Start-Ordner)."
+if ! cd "$(dirname "$0")/programm" 2>/dev/null; then
+  echo "Der Ordner „programm“ fehlt neben „Belegabruf Mac“. Bitte das ZIP vollständig auspacken und"
+  echo "„Belegabruf Mac“ im ausgepackten Ordner doppelklicken (nicht einzeln herausziehen)."
   read -r -p "Enter zum Schließen"
   exit 1
 fi
@@ -39,10 +40,10 @@ fi
 #    Die Prüfung liest nur eine Datei, sie startet Playwright nicht.
 if ! .venv/bin/python -m belegabruf.startpruefung browser >/dev/null 2>&1; then
   echo "Hole den Browser (Chromium) …"
-  uv run --no-dev --quiet playwright install --no-shell chromium \
+  uv run --locked --no-dev --quiet playwright install --no-shell chromium \
     || abbruch "Der Browser konnte nicht geladen werden. Besteht eine Internetverbindung? Dann einfach noch einmal doppelklicken."
 fi
 
 # d) Fenster „Belegabruf“. Dieses Terminalfenster klein machen; es muss offen bleiben.
 printf '\033[8;12;62t'
-uv run --no-dev --quiet belege oberflaeche
+uv run --locked --no-dev --quiet belege oberflaeche

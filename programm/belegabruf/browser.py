@@ -11,11 +11,13 @@ import random
 import sys
 import threading
 import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Iterator
 
 from playwright.sync_api import BrowserContext, Page, sync_playwright
+
+from belegabruf import pfade
 
 #: Im Terminal: "Enter" beendet das Warten auf die Anmeldung. In der Bedienseite gibt es
 #: kein Terminal zum Tippen — dann nur Fenster schließen bzw. automatisch erkennen.
@@ -86,7 +88,7 @@ def profil_oeffnen(profil: Path, sichtbar: bool) -> Iterator[BrowserContext]:
             text = str(fehler)
             if "Executable doesn't exist" in text or "playwright install" in text:
                 raise BrowserFehlt(
-                    'Der Browser fehlt noch. Bitte "Belegabruf" doppelklicken (lädt ihn nach).'
+                    f'Der Browser fehlt noch. Bitte "{pfade.starter()}" doppelklicken (lädt ihn nach).'
                 ) from fehler
             if "ProcessSingleton" in text or "SingletonLock" in text or "already in use" in text:
                 raise ProfilBelegt(

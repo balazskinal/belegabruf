@@ -151,6 +151,15 @@ vorbelegt, Port springt mit der Verschlüsselung) ändern keine Entscheidung.
     Konto abgelaufen oder noch nie angemeldet, steht dort ein Hinweis mit Sprung in die Einstellungen,
     der das Konto hervorhebt. Während einer Anmeldung sind Holen und Prüfen gesperrt wie jeder Vorgang.
 
+### Nachtrag (Balazs, 26.11.2026): Ordner aufgeräumt (2.0.1)
+
+13. **Oben im ausgepackten Ordner liegen nur die zwei Starter** „Belegabruf Mac.command“ und
+    „Belegabruf Windows.cmd“; daneben `programm/`, `Fehlersuche/` (die beiden Terminal-Starter
+    „Belegabruf Terminal Mac/Windows“) und `Doku/` (README, LICENSE). Im Repo bleiben README und LICENSE
+    oben, weil GitHub sie dort zeigt; erst die Release-Action kopiert sie beim ZIP-Bau nach `Doku/`. Die
+    Ordner `Start Mac/` und `Start Windows/` (Nachtrag 8–10) entfallen. Alle Starter rufen
+    `uv run --locked` auf, damit nie eine andere als die gesperrte Version läuft.
+
 ## Folgen
 
 Windows-Test ist Pflicht, bevor 2.0.0 veröffentlicht wird.

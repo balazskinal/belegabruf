@@ -17,7 +17,6 @@ from __future__ import annotations
 import hashlib
 import re
 import smtplib
-import socket
 import ssl
 from email.message import EmailMessage
 from email.policy import SMTP as SMTP_REGELN
@@ -169,8 +168,8 @@ class Postausgang:
 
 
 def anmeldung_pruefen(einst, passwort: str, smtp_klassen=None) -> str | None:
-    """Nur für „Mail-Anmeldung prüfen“ bzw. die Terminal-Einrichtung: anmelden und wieder abmelden, ohne eine Mail zu schicken.
-    None, wenn es geht, sonst eine verständliche Meldung."""
+    """Nur für „Mail-Anmeldung prüfen“ bzw. die Terminal-Einrichtung: anmelden und wieder
+    abmelden, ohne eine Mail zu schicken. None, wenn es geht, sonst eine verständliche Meldung."""
     postausgang = Postausgang(einst, passwort, smtp_klassen)
     try:
         postausgang.verbindung()
@@ -255,7 +254,7 @@ class MailZiel(Lieferziel):
             self._zuruecksetzen(smtp)
             raise Abgelehnt(f"Der Mailserver nimmt die Mail nicht an: {fehler.smtp_code} "
                             f"{p.sauber(fehler.smtp_error)}") from fehler
-        except (smtplib.SMTPServerDisconnected, OSError, socket.timeout) as fehler:
+        except (TimeoutError, smtplib.SMTPServerDisconnected, OSError) as fehler:
             p.kaputt()
             raise Unklar(f"Nach dem Senden kam vom Mailserver keine Antwort ({type(fehler).__name__}).") from fehler
         if code != 250:

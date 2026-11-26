@@ -23,7 +23,7 @@ Anmeldung oder deine Belege. Es gibt keinen Server, kein Konto bei uns, keinen S
 
 ## Was das Programm macht
 
-1. Du doppelklickst **„Belegabruf“** (im Ordner `Start Mac` bzw. `Start Windows`) und dann im Fenster
+1. Du doppelklickst **„Belegabruf Mac“** bzw. **„Belegabruf Windows“** und dann im Fenster
    **„Belege holen“**.
 2. Es prüft, ob du bei Airbnb noch angemeldet bist. Wenn nicht, öffnet sich ein Browserfenster
    und **du** meldest dich ganz normal an (auch mit Zwei-Faktor). Dein Passwort steht nirgends.
@@ -53,21 +53,18 @@ im Monat laufen lassen. Liegt der letzte Lauf über zwei Monate zurück, warnt d
 
 ```
 belegabruf-v…/
-  Start Mac/          ← nur das hier benutzen, wenn du einen Mac hast
-    Belegabruf.command               ← der Starter: richtet sich ein und öffnet das Fenster „Belegabruf“
-    Fehlersuche/
-      Belegabruf (Terminal).command  ← das bisherige Menü im Terminal
-  Start Windows/      ← nur das hier benutzen, wenn du Windows hast
-    Belegabruf.cmd
-    Fehlersuche/
-      Belegabruf (Terminal).cmd
-  programm/           ← das eigentliche Programm, hier musst du nichts anfassen
-  README.md           ← diese Anleitung
-  LICENSE
+  Belegabruf Mac.command     ← der Starter für den Mac: richtet sich ein und öffnet das Fenster „Belegabruf“
+  Belegabruf Windows.cmd     ← derselbe Starter für Windows
+  programm/                  ← das eigentliche Programm, hier musst du nichts anfassen
+  Fehlersuche/               ← nur, wenn etwas nicht klappt: das bisherige Menü im Terminal
+    Belegabruf Terminal Mac.command
+    Belegabruf Terminal Windows.cmd
+  Doku/                      ← diese Anleitung (README.md) und die Lizenz (LICENSE)
 ```
 
-Du brauchst nur den Start-Ordner für dein System. Den Ordner `programm` nicht verschieben oder
-umbenennen — die Startdateien suchen ihn direkt daneben.
+Oben liegen nur die zwei Starter — du nimmst den für dein System. Den Ordner `programm` nicht
+verschieben oder umbenennen, und die Starter nicht einzeln herausziehen: Sie suchen `programm` direkt
+daneben. Eine Verknüpfung (Mac: Alias) auf dem Schreibtisch geht.
 
 ## Erster Start (einmalig, ca. 5 Minuten)
 
@@ -78,15 +75,15 @@ Administratorrechte nötig.
    die Datei `belegabruf-v….zip` laden.
 2. **Auspacken:** Doppelklick auf die ZIP-Datei. Den entstandenen Ordner `belegabruf-v…` an einen
    Ort legen, wo er bleiben darf (z. B. in deinen Dokumenten-Ordner).
-3. **„Belegabruf“ doppelklicken** — auf dem Mac `Start Mac/Belegabruf.command`, unter Windows
-   `Start Windows/Belegabruf.cmd`. Das ist der einzige Starter: Beim ersten Mal richtet er sich ein,
-   danach öffnet er nur noch das Fenster.
+3. **Den Starter doppelklicken** — auf dem Mac **„Belegabruf Mac“**, unter Windows **„Belegabruf
+   Windows“** (beide liegen oben im ausgepackten Ordner). Beim ersten Mal richtet er sich ein, danach
+   öffnet er nur noch das Fenster.
 
    **Beim ersten Mal fragt dein Rechner einmal nach, ob du das wirklich öffnen willst.** Das ist
    normal bei Programmen, die nicht aus einem App-Store kommen:
    - **Mac:** Es kommt die Meldung, die Datei könne nicht geöffnet werden. Dann
      *Systemeinstellungen → Datenschutz & Sicherheit* öffnen, ganz nach unten scrollen und bei
-     „Belegabruf.command wurde blockiert“ auf **„Trotzdem öffnen“** klicken.
+     „Belegabruf Mac.command wurde blockiert“ auf **„Trotzdem öffnen“** klicken.
    - **Windows:** Es erscheint „Der Computer wurde durch Windows geschützt“. Auf **„Weitere
      Informationen“** und dann **„Trotzdem ausführen“** klicken.
 4. Ein schwarzes Fenster geht auf und lädt alles Nötige (ein Hilfsprogramm namens *uv*, Python und
@@ -101,7 +98,7 @@ Administratorrechte nötig.
      nur für dich und seine eigene Anmeldung. Je Konto wählst du **„Belege ab“**: alle (Vorgabe), letzter
      Monat, letzte 3 oder 12 Monate (jeweils ab dem 1. des Monats) oder ab einem Datum. Ältere Belege
      werden nicht geholt und nicht vermerkt — erweiterst du den Zeitraum später, kommen sie beim nächsten
-     Lauf,
+     Lauf (und werden, wenn der Versand per Mail an ist, auch verschickt),
    - auf Wunsch den **Versand per Mail** (siehe unten),
 
    dann **„Einstellungen speichern“**. Fehlt etwas, steht das direkt am Knopf, und die Felder sind rot
@@ -148,8 +145,8 @@ aber nur, was neu ist.
 
 ## Benutzen
 
-Doppelklick auf **„Belegabruf“**: auf dem Mac `Start Mac/Belegabruf.command`, unter Windows
-`Start Windows/Belegabruf.cmd`. Es öffnet sich das Fenster **„Belegabruf“**:
+Doppelklick auf **„Belegabruf Mac“** bzw. **„Belegabruf Windows“**. Es öffnet sich das Fenster
+**„Belegabruf“**:
 
 - **Konten** — je Konto der Haken „Holen“ und der Zustand der Anmeldung (angemeldet, abgelaufen, noch
   nie angemeldet, unbekannt) mit dem Zeitpunkt der letzten Prüfung. **„Alle Anmeldungen prüfen“**
@@ -173,8 +170,10 @@ geholt wurde. Stattdessen **„Fehlende Dateien neu holen“** wählen (die Zahl
 fehlen). Dann kommt alles wieder, was im Protokoll steht, aber im Belegordner fehlt — soweit der
 Anbieter es noch anbietet (bei Airbnb die letzten 12 Monate).
 
-**Lieber im Terminal?** Das bisherige Menü gibt es weiter: Doppelklick auf **„Belegabruf (Terminal)“**
-im Unterordner `Fehlersuche` (Enter = los, E = Einstellungen, Q = beenden). Einrichten als Fragen im
+**Fehlersuche / lieber im Terminal?** Das bisherige Menü gibt es weiter: im Ordner `Fehlersuche`
+**„Belegabruf Terminal Mac“** bzw. **„Belegabruf Terminal Windows“** doppelklicken (Enter = los,
+E = Einstellungen, Q = beenden). Dort stehen alle Meldungen ausführlich im Terminal. Vorher muss der
+normale Starter einmal gelaufen sein (er richtet alles ein). Einrichten als Fragen im
 Terminal geht mit `uv run belege einrichten` (siehe unten) — dort lässt sich auch der Eintrag im
 Passwortspeicher ändern.
 
@@ -290,24 +289,40 @@ umbenannt (nicht gelöscht). Danach kannst du die alte Datei wegwerfen.
 
 Beim Start steht ein Hinweis, wenn es eine neuere Version gibt. Dann:
 
-1. Den **alten Ordner `belegabruf-v…` komplett löschen** (mit Start-Ordnern und `programm`).
+1. Den **alten Ordner `belegabruf-v…` komplett löschen** (mit allem darin, auch `programm`).
 2. Die neue ZIP-Datei von [Neueste Version](https://github.com/balazskinal/belegabruf/releases/latest) laden und auspacken.
-3. **„Belegabruf“ doppelklicken.** Beim ersten Start richtet sich die neue Version selbst ein („Richte
-   die neue Version ein …“, einmalig, dauert einen Moment).
+3. **„Belegabruf Mac“ bzw. „Belegabruf Windows“ doppelklicken.** Beim ersten Start richtet sich die
+   neue Version selbst ein („Richte die neue Version ein …“, einmalig, dauert einen Moment). Hattest du
+   eine Verknüpfung auf den alten Starter, leg sie neu an.
 
-Kurz: **ZIP auspacken, „Belegabruf“ doppelklicken.**
+Kurz: **ZIP auspacken, Belegabruf doppelklicken.**
 
-Einstellungen, Anmeldungen, Protokolle und Belege bleiben dabei erhalten — sie liegen nicht im
-Programmordner.
+Einstellungen, Anmeldungen, Protokolle und Belege bleiben dabei erhalten — sie liegen im Datenordner
+(siehe [Wo was liegt](#wo-was-liegt)), nicht im Programmordner.
+
+**Von 2.0.0 auf 2.0.1:** Die Starter heißen jetzt „Belegabruf Mac“ und „Belegabruf Windows“ und liegen
+oben im Ordner; die Ordner `Start Mac` und `Start Windows` gibt es nicht mehr.
 Ein automatisches Selbst-Update gibt es bewusst nicht.
 
 ## Was neu ist
 
+- **2.0.1** — **Aufgeräumter Ordner:** Oben liegen nur noch die zwei Starter „Belegabruf Mac“ und
+  „Belegabruf Windows“; `programm/`, `Fehlersuche/` und `Doku/` (Anleitung, Lizenz) sind Ordner. Sonst
+  unverändert bis auf Kleinigkeiten:
+  - Der Hinweis zu „Belege ab“ sagt jetzt, dass beim Erweitern des Zeitraums die nachgeholten Belege
+    auch verschickt werden, wenn Mail an ist.
+  - `--konto` im Terminal trifft je Anbieter nur noch ein Konto.
+  - Die Terminal-Einrichtung (`belege einrichten`) behält beim Ändern der Mail-Angaben die Auswahl
+    „Erster Versand“; bisher sprang sie auf „nicht verschicken“ zurück.
+  - Neu eingegebene Mailadressen (im Fenster und im Terminal) müssen die Form `name@domain.tld` haben.
+    Eine bestehende Einstellungsdatei wird weiter gelesen wie bisher.
+  - Bei Unterordnern nach Monat: Ein Beleg ohne Rechnungsdatum aus einem früheren Jahr kommt in den
+    Jahresordner (nicht in einen geratenen Monat).
 - **2.0.0** — **Bedienung im Fenster statt im Terminal.** Nur noch **ein Starter je System:**
   „Belegabruf“ ersetzt „Einrichten“ und „Belege holen“; er richtet sich selbst ein und öffnet das Fenster
   „Belegabruf“: Einstellungen als Formular (auch Mail-Passwort, direkt in den Passwortspeicher), je
   Konto Anmelden und Prüfen, Belege holen mit Fortschritt und Zusammenfassung. Das bisherige Menü gibt es
-  weiter über „Fehlersuche/Belegabruf (Terminal)“. Ein Kontoname ist nur noch nötig, wenn es beim selben Anbieter
+  weiter über den Ordner „Fehlersuche“. Ein Kontoname ist nur noch nötig, wenn es beim selben Anbieter
   mehrere Konten gibt. Neu: Haken je Konto zum Holen, Zeitraum je Konto („Belege ab“), Unterordner nach
   Jahr und Monat, Mailanbieter als Auswahl. Update ab jetzt: neues ZIP auspacken, „Belegabruf“
   doppelklicken — die neue Version richtet sich selbst ein. **Windows ist noch ungetestet.**
@@ -334,8 +349,8 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 ## Für Neugierige und Entwickler
 
 Warum das Programm so gebaut ist, steht in den **Entscheidungen** unter
-[`docs/entscheidungen/`](docs/entscheidungen/README.md); was als Nächstes kommt, in der
-[Roadmap](docs/roadmap.md).
+[`docs/entscheidungen/`](https://github.com/balazskinal/belegabruf/blob/main/docs/entscheidungen/README.md);
+was als Nächstes kommt, in der [Roadmap](https://github.com/balazskinal/belegabruf/blob/main/docs/roadmap.md).
 
 ### Kommandozeile
 
@@ -343,7 +358,7 @@ Im Ordner `programm` (mit installiertem [uv](https://docs.astral.sh/uv/)):
 
 ```bash
 uv run belege oberflaeche                       # Fenster „Belegabruf“ (wie Doppelklick auf „Belegabruf“)
-uv run belege start                             # Menü im Terminal (wie „Fehlersuche/Belegabruf (Terminal)“)
+uv run belege start                             # Menü im Terminal (wie der Starter in „Fehlersuche“)
 uv run belege einrichten                        # Einrichten als Fragen im Terminal
 uv run belege pruefen --json                    # sind die Konten angemeldet?
 uv run belege anmelden --quelle airbnb --konto privat
@@ -367,7 +382,10 @@ Passwortspeicher), nie heraus. Die Tests dazu stehen in `programm/tests/test_obe
 ### Aufbau
 
 ```
-Start Mac/, Start Windows/   Startdateien (wechseln nach programm/ und rufen "belege" auf)
+Belegabruf Mac.command,      Starter (wechseln nach programm/, richten ein, rufen "belege oberflaeche" auf)
+Belegabruf Windows.cmd
+Fehlersuche/                 Starter für das Menü im Terminal ("belege start")
+README.md, LICENSE           im ZIP unter Doku/ (die Release-Action kopiert sie dorthin)
 programm/
   pyproject.toml, uv.lock    Abhängigkeiten (Python, Playwright, PyMuPDF, keyring)
   tests/

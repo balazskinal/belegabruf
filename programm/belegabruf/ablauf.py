@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
-from typing import Callable
 
 from belegabruf import pfade, quellen, zustand
 from belegabruf import ziele as ziel_verzeichnis
@@ -142,7 +142,8 @@ def liefern(einst: Einstellungen, protokoll: Protokoll, erg: Ergebnis, melden: M
                     ohne_datei.add(schluessel)
                     continue
                 try:
-                    ziel.senden(sendung, lambda: protokoll.als_unklar(schluessel, ziel.name))
+                    # Der Rückruf läuft sofort in senden(), also mit den aktuellen Werten.
+                    ziel.senden(sendung, lambda: protokoll.als_unklar(schluessel, ziel.name))  # noqa: B023
                 except Abgelehnt as fehler:
                     protokoll.als_offen(schluessel, ziel.name)  # sicher nicht angekommen
                     stand["fehler"] = f"Rechnung {sendung.rechnungsnummer}: {fehler}"
@@ -171,6 +172,37 @@ def liefern(einst: Einstellungen, protokoll: Protokoll, erg: Ergebnis, melden: M
         )
 
 
+def nicht_angemeldet(konto: Konto) -> Ergebnis:
+    """Das Ergebnis eines Kontos, das heute nicht geholt wird, weil die Anmeldung fehlt."""
+    return Ergebnis(konto.quelle, konto.name, status="anmeldung_noetig", anzeige=konto.anzeige)
+
+
+def alle_abrufen(einst: Einstellungen, konten: list[Konto], bereit: Callable[[Konto], bool],
+                 melden_fuer: Callable[[Konto], Melden], nachholen: bool = False) -> list[Ergebnis]:
+    """Holt die Konten nacheinander — die eine Schleife für Terminal-Menü, ``belege holen``
+    und Oberfläche. ``bereit(konto)`` sagt, ob das Konto angemeldet ist (und darf dabei
+    melden); sonst steht es als „nicht angemeldet“ im Ergebnis."""
+    ergebnisse: list[Ergebnis] = []
+    for k in konten:
+        if not bereit(k):
+            ergebnisse.append(nicht_angemeldet(k))
+            continue
+        ergebnisse.append(abrufen(einst, k, melden_fuer(k), nachholen=nachholen))
+    return ergebnisse
+
+
+def exit_code(ergebnisse: list[Ergebnis]) -> int:
+    """0 alles gut, 2 Anmeldung nötig/abgelaufen, nicht alles geholt oder verschickt, 1 Fehler."""
+    status = {e.status for e in ergebnisse}
+    if "fehler" in status:
+        return 1
+    if status & {"anmeldung_noetig", "abgelaufen", "unvollstaendig"}:
+        return 2
+    if any(s["fehler"] or s["offen"] or s["unklar"] for e in ergebnisse for s in e.lieferungen.values()):
+        return 2
+    return 0
+
+
 def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool = False) -> Ergebnis:
     """Holt die Belege eines Kontos. Stürzt nie ab, sondern meldet im Ergebnis.
 
@@ -195,6 +227,34 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
         return Ergebnis(konto.quelle, konto.name, status="fehler", fehler=str(fehler).strip("'\""),
                         anzeige=konto.anzeige)
 
+    ab = konto.ab()
+    if ab is not None:
+        melden(f"Zeitraum: Belege ab {ab:%d.%m.%Y} — ältere werden übersprungen.")
+    ergebnis = _holen(quelle, konto, _umgebung(einst, protokoll, ziele, melden, nachholen, ab))
+    if erstlauf:
+        _erstlauf_abschliessen(einst, protokoll, ergebnis, nur_ablegen)
+    ergebnis.anzeige = ergebnis.anzeige or konto.anzeige
+    ergebnis.ab = ab.isoformat() if ab else ""
+    if ab is not None and ab > date.today():  # z. B. von Hand in die Datei geschrieben
+        ergebnis.hinweise.append(f"„Belege ab {ab:%d.%m.%Y}“ liegt in der Zukunft — so wird nichts geholt. "
+                                 "Bitte den Zeitraum in den Einstellungen prüfen.")
+    if ergebnis.status in {"ok", "unvollstaendig"}:
+        zustand.lauf_merken(konto.quelle, konto.name)
+    _liefern_ohne_absturz(einst, protokoll, ergebnis, melden, markiert)
+    fehlen = len(protokoll.fehlende("rechnung"))
+    if fehlen:
+        ergebnis.hinweise.append(
+            f"{fehlen} schon geholte Rechnung(en) liegen nicht mehr im Belegordner. Das ist in Ordnung, "
+            "wenn du sie weitergegeben hast. Sonst holt „Fehlende Dateien neu holen“ sie noch einmal "
+            "(im Terminal-Menü: E)."
+        )
+    return ergebnis
+
+
+def _umgebung(einst: Einstellungen, protokoll: Protokoll, ziele: list, melden: Melden, nachholen: bool,
+              ab: date | None) -> Umgebung:
+    """Was eine Quelle beim Holen braucht: Protokoll fragen, Belege abliefern, melden."""
+
     def bekannt(schluessel: str) -> bool:
         if nachholen and schluessel.startswith("rechnung:") and protokoll.fehlt_lokal(schluessel):
             return False
@@ -216,54 +276,41 @@ def abrufen(einst: Einstellungen, konto: Konto, melden: Melden, nachholen: bool 
                                 + protokoll.bisherige_lieferungen(beleg.schluessel))
         return [str(lokal)] if lokal else []
 
-    ab = konto.ab()
-    if ab is not None:
-        melden(f"Zeitraum: Belege ab {ab:%d.%m.%Y} — ältere werden übersprungen.")
-    zukunft = ab is not None and ab > date.today()
-    umgebung = Umgebung(
-        bekannt=bekannt,
-        abliefern=abliefern,
-        vorhandene_datei=vorhandene_datei,
-        melden=melden,
-        sichtbar=einst.sichtbar,
-        ab=ab,
-    )
+    return Umgebung(bekannt=bekannt, abliefern=abliefern, vorhandene_datei=vorhandene_datei,
+                    melden=melden, sichtbar=einst.sichtbar, ab=ab)
+
+
+def _holen(quelle: Quelle, konto: Konto, umgebung: Umgebung) -> Ergebnis:
+    """Lässt die Quelle holen; jeder Fehler wird zum Ergebnis, nie zum Absturz."""
     try:
-        ergebnis = quelle.belege_holen(umgebung)
+        return quelle.belege_holen(umgebung)
     except SitzungAbgelaufen:
-        ergebnis = Ergebnis(konto.quelle, konto.name, status="abgelaufen")
+        return Ergebnis(konto.quelle, konto.name, status="abgelaufen")
     except (BrowserFehlt, ProfilBelegt) as fehler:
-        ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=str(fehler))
+        return Ergebnis(konto.quelle, konto.name, status="fehler", fehler=str(fehler))
     except Exception as fehler:  # noqa: BLE001 - nie abstürzen, immer melden
-        ergebnis = Ergebnis(konto.quelle, konto.name, status="fehler", fehler=f"{type(fehler).__name__}: {str(fehler).splitlines()[0][:200]}")
-    if erstlauf:
-        if nur_ablegen:
-            # Erster Lauf eines neuen Kontos: alles Geholte nur ablegen, nicht verschicken.
-            gezaehlt = [protokoll.als_schon_markieren(name) for name in lieferziel_namen(einst)]
-            ergebnis.erstlauf_abgelegt = max(gezaehlt, default=0)
-        if ergebnis.status in {"ok", "unvollstaendig"}:  # Liste gelesen: ab jetzt normal
-            protokoll.erstlauf_setzen("fertig")
-    ergebnis.anzeige = ergebnis.anzeige or konto.anzeige
-    ergebnis.ab = ab.isoformat() if ab else ""
-    if zukunft:  # z. B. von Hand in die Datei geschrieben; die Oberfläche lässt das nicht zu
-        ergebnis.hinweise.append(f"„Belege ab {ab:%d.%m.%Y}“ liegt in der Zukunft — so wird nichts geholt. "
-                                 "Bitte den Zeitraum in den Einstellungen prüfen.")
-    if ergebnis.status in {"ok", "unvollstaendig"}:
-        zustand.lauf_merken(konto.quelle, konto.name)
+        return Ergebnis(konto.quelle, konto.name, status="fehler",
+                        fehler=f"{type(fehler).__name__}: {str(fehler).splitlines()[0][:200]}")
+
+
+def _erstlauf_abschliessen(einst: Einstellungen, protokoll: Protokoll, ergebnis: Ergebnis,
+                           nur_ablegen: bool) -> None:
+    if nur_ablegen:
+        # Erster Lauf eines neuen Kontos: alles Geholte nur ablegen, nicht verschicken.
+        gezaehlt = [protokoll.als_schon_markieren(name) for name in lieferziel_namen(einst)]
+        ergebnis.erstlauf_abgelegt = max(gezaehlt, default=0)
+    if ergebnis.status in {"ok", "unvollstaendig"}:  # Liste gelesen: ab jetzt normal
+        protokoll.erstlauf_setzen("fertig")
+
+
+def _liefern_ohne_absturz(einst: Einstellungen, protokoll: Protokoll, ergebnis: Ergebnis, melden: Melden,
+                          markiert: dict[str, int]) -> None:
     try:
         liefern(einst, protokoll, ergebnis, melden, markiert)
     except Exception as fehler:  # noqa: BLE001 - nie abstürzen, immer melden
         for name, stand in ergebnis.lieferungen.items():
             stand["fehler"] = stand["fehler"] or f"Versand abgebrochen ({type(fehler).__name__})."
             stand["offen"] = len(protokoll.offen_fuer(name))
-    fehlen = len(protokoll.fehlende("rechnung"))
-    if fehlen:
-        ergebnis.hinweise.append(
-            f"{fehlen} schon geholte Rechnung(en) liegen nicht mehr im Belegordner. Das ist in Ordnung, "
-            "wenn du sie weitergegeben hast. Sonst holt „Fehlende Dateien neu holen“ sie noch einmal "
-            "(im Terminal-Menü: E)."
-        )
-    return ergebnis
 
 
 STATUS_TEXT = {

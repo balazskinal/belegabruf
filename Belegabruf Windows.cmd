@@ -4,8 +4,9 @@ rem Richtet sich beim ersten Mal und nach einem Update selbst ein; jeder Schritt
 rem uv holen, Bausteine (uv sync), Browser (Chromium), dann das Fenster "Belegabruf" oeffnen.
 chcp 65001 >nul
 rem Das eigentliche Programm liegt im Ordner "programm" daneben.
-cd /d "%~dp0..\programm" 2>nul || (
-  echo Der Ordner "programm" fehlt neben "Start Windows". Bitte das ZIP vollstaendig auspacken ^(nicht nur den Start-Ordner^).
+cd /d "%~dp0programm" 2>nul || (
+  echo Der Ordner "programm" fehlt neben "Belegabruf Windows". Bitte das ZIP vollstaendig auspacken und
+  echo "Belegabruf Windows" im ausgepackten Ordner doppelklicken ^(nicht einzeln herausziehen^).
   pause
   exit /b 1
 )
@@ -43,7 +44,7 @@ rem    Die Pruefung liest nur eine Datei, sie startet Playwright nicht.
 .venv\Scripts\python.exe -m belegabruf.startpruefung browser >nul 2>nul
 if not errorlevel 1 goto start
 echo Hole den Browser ^(Chromium^) ...
-uv run --no-dev --quiet playwright install --no-shell chromium
+uv run --locked --no-dev --quiet playwright install --no-shell chromium
 if errorlevel 1 (
   echo Der Browser konnte nicht geladen werden. Besteht eine Internetverbindung? Dann einfach noch einmal doppelklicken.
   pause
@@ -53,7 +54,7 @@ if errorlevel 1 (
 rem d) Fenster "Belegabruf". Dieses Fenster klein machen; es muss offen bleiben, solange Belegabruf laeuft.
 :start
 mode con: cols=62 lines=12
-uv run --no-dev --quiet belege oberflaeche
+uv run --locked --no-dev --quiet belege oberflaeche
 if errorlevel 1 pause
 exit /b %errorlevel%
 

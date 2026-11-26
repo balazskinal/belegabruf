@@ -63,6 +63,11 @@ class Konto:
         return f"{self.quelle} ({self.name})"
 
     @property
+    def schluessel(self) -> str:
+        """Eindeutig über alle Anbieter: „airbnb/privat“ (Quelle und Kennung)."""
+        return f"{self.quelle}/{self.name}"
+
+    @property
     def anzeige(self) -> str:
         """„Airbnb“ oder „Airbnb (Privat)“."""
         from belegabruf import quellen
@@ -154,12 +159,27 @@ class Einstellungen:
         return "mail" in self.ziele
 
     def aktive_konten(self, quelle: str | None = None, konto: str | None = None) -> list[Konto]:
-        return [
-            k for k in self.konten
-            if k.aktiv
-            and (quelle is None or k.quelle == quelle)
-            and (konto is None or konto in (k.name, k.anzeigetitel))
-        ]
+        """Die eingeschalteten Konten, auf Wunsch nur einer Quelle bzw. nur eines Kontos.
+
+        ``konto`` ist der Name, wie er in der Oberfläche steht; die interne Kennung geht auch
+        (für alte Aufrufe). Je Anbieter trifft es höchstens ein Konto: Passt der Name zu
+        einem Konto, zählt nur das — eine gleichlautende Kennung eines anderen (umbenannten)
+        Kontos wird dann nicht mehr mitgenommen."""
+        auswahl = [k for k in self.konten if k.aktiv and (quelle is None or k.quelle == quelle)]
+        if konto is None:
+            return auswahl
+        quellen_der_auswahl = dict.fromkeys(k.quelle for k in auswahl)
+        treffer = (_eines_je_quelle([k for k in auswahl if k.quelle == q], konto) for q in quellen_der_auswahl)
+        return [k for k in treffer if k is not None]
+
+
+def _eines_je_quelle(konten: list[Konto], konto: str) -> Konto | None:
+    """Das Konto eines Anbieters zu ``konto``: erst nach Name, dann nach Kennung."""
+    for passt in (lambda k: k.anzeigetitel == konto, lambda k: k.name == konto):
+        gefunden = next((k for k in konten if passt(k)), None)
+        if gefunden is not None:
+            return gefunden
+    return None
 
 
 def kollision_text(anbieter: str, a: Konto, b: Konto, kurz: str) -> str:
@@ -180,8 +200,9 @@ def kollision_text(anbieter: str, a: Konto, b: Konto, kurz: str) -> str:
             "deutlich anderen Namen geben.")
 
 
-def konten_unterscheidbar(konten: list[Konto]) -> None:
-    """Regeln für Kontonamen je Anbieter:
+def kontonamen_fehler(konten: list[Konto]) -> list[tuple[int, str]]:
+    """Regeln für Kontonamen je Anbieter — die einzige Stelle dafür (Datei, Oberfläche,
+    Terminal). Gibt je betroffenem Konto (Index in ``konten``) einen Satz zurück:
 
     * Ein einzelnes Konto braucht keinen Namen. Gibt es beim selben Anbieter mehrere,
       braucht jedes einen Namen.
@@ -191,23 +212,44 @@ def konten_unterscheidbar(konten: list[Konto]) -> None:
       das zweite hielte die Rechnungen des ersten für schon geholt."""
     from belegabruf import quellen
 
-    je_quelle: dict[str, list[Konto]] = {}
-    for k in konten:
-        je_quelle.setdefault(k.quelle, []).append(k)
-    for quelle, liste in je_quelle.items():
+    je_quelle: dict[str, list[int]] = {}
+    for nr, k in enumerate(konten):
+        je_quelle.setdefault(k.quelle, []).append(nr)
+    fehler: list[tuple[int, str]] = []
+    for quelle, nummern in je_quelle.items():
         anbieter = quellen.anzeigename(quelle)
-        if len(liste) > 1 and any(not k.anzeigetitel.strip() for k in liste):
-            raise EinstellungsFehler(
-                f"Bei {anbieter} sind mehrere Konten eingetragen — dann braucht jedes einen Namen.")
-        kennungen: dict[str, Konto] = {}
-        titel: dict[str, Konto] = {}
-        for k in liste:
+        ohne_namen = [nr for nr in nummern if not konten[nr].anzeigetitel.strip()]
+        if len(nummern) > 1 and ohne_namen:
+            satz = f"Bei {anbieter} sind mehrere Konten eingetragen — dann braucht jedes einen Namen."
+            fehler += [(nr, satz) for nr in ohne_namen]
+            nummern = [nr for nr in nummern if nr not in ohne_namen]  # die übrigen gleich mitprüfen
+        kennungen: dict[str, int] = {}
+        titel: dict[str, int] = {}
+        for nr in nummern:
+            k = konten[nr]
             for verzeichnis, wert in ((kennungen, k.name), (titel, k.anzeigetitel or k.name)):
                 kurz = pfade.kurzname(wert)
-                anderes = verzeichnis.get(kurz)
-                if anderes is not None and anderes is not k:
-                    raise EinstellungsFehler(kollision_text(anbieter, anderes, k, kurz))
-                verzeichnis[kurz] = k
+                if kurz in verzeichnis:
+                    fehler.append((nr, kollision_text(anbieter, konten[verzeichnis[kurz]], k, kurz)))
+                    break
+                verzeichnis[kurz] = nr
+    return fehler
+
+
+def konten_unterscheidbar(konten: list[Konto]) -> None:
+    """Wirft die erste Verletzung der Namensregeln (siehe ``kontonamen_fehler``)."""
+    fehler = kontonamen_fehler(konten)
+    if fehler:
+        raise EinstellungsFehler(fehler[0][1])
+
+
+def mailadresse_ok(adresse: str) -> bool:
+    """Eine einzelne Mailadresse: etwas@etwas.tld, ohne Leerzeichen und Komma.
+    Die Regel für neue Eingaben (Oberfläche, Terminal-Einrichtung). Beim Laden der Datei
+    gilt bewusst weiter die mildere Regel von 2.0.0 (siehe ``_mail_lesen``)."""
+    name, at, domain = adresse.partition("@")
+    return bool(name and at and "@" not in domain and "." in domain.strip(".")
+                and " " not in adresse and "," not in adresse)
 
 
 def laden(datei: Path | None = None) -> Einstellungen:
@@ -307,6 +349,9 @@ def _mail_lesen(roh: object, pruefen: bool) -> MailEinstellung:
         raise EinstellungsFehler(
             f"[mail] passwort_eintrag = \"{mail.passwort_eintrag}\" muss die Form \"Dienst/Konto\" haben.")
     for adresse in mail.empfaenger + ([mail.absender] if mail.absender else []):
+        # Beim Laden die milde Regel von 2.0.0: Eine Datei, die bisher lesbar war, bleibt es
+        # (sonst wirkte sie „nicht eingerichtet“, und neue Kennungen holten alles noch einmal).
+        # Neue Eingaben in Formular und Terminal prüft mailadresse_ok streng.
         if "@" not in adresse or "," in adresse or " " in adresse:
             raise EinstellungsFehler(f"[mail] \"{adresse}\" ist keine Mailadresse.")
     if pruefen:

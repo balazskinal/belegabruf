@@ -1,6 +1,6 @@
 [project]
 name = "belegabruf"
-version = "2.0.0"
+version = "2.0.1"
 description = "Holt Rechnungen aus eingeloggten Anbieter-Konten per Doppelklick auf den eigenen Rechner."
 license = "MIT"
 authors = [{ name = "Balázs Kinál" }]
@@ -27,3 +27,17 @@ packages = ["belegabruf"]
 [tool.uv]
 # Eine feste Python-Version, damit Mac und Windows gleich laufen.
 python-preference = "managed"
+
+[tool.ruff]
+# Stil des Projekts: 120 Zeichen je Zeile. Prüfen mit: uvx ruff check .
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I", "UP", "SIM"]
+# try/except/pass mit Kommentar warum bleibt lesbarer als contextlib.suppress.
+ignore = ["SIM105"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests enthalten lange Beispielzeilen (Texte, Seiteninhalte).
+"tests/*" = ["E501"]
