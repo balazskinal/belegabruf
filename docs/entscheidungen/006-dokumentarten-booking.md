@@ -38,6 +38,11 @@ Buchhaltung schicken.
    die ID im Dateinamen). Links der Startseite zählen bewusst nicht: Beim echten Lauf stand dort eine
    zweite, fremde ID ohne Rechnungen. Nur eine Gruppen-Startseite ohne `hotel_id` nimmt ihre Links.
 
+7. **Nur von admin.booking.com.** Dateien werden nur von `https://admin.booking.com` geladen — Links mit
+   anderem Host oder ohne https werden verworfen, und nach einer Weiterleitung wird die Zieladresse erneut
+   geprüft. Sonst könnte ein untergeschobener Link als „Rechnung“ abgelegt und verschickt werden
+   (Prüfung zu PR #19, M1).
+
 ## Folgen
 
 - Weitere Anbieter mit mehreren Dokumentarten (z. B. Auszahlungsberichte bei Airbnb) können dasselbe

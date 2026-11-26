@@ -82,7 +82,8 @@ def test_unterkuenfte_und_sauber():
     links = [f"https://admin.booking.com/x?hotel_id=7654321&ses={SES}", f"https://admin.booking.com/y?hotel_id={HOTEL}"]
     assert booking.unterkuenfte(seite, links) == [HOTEL]  # fremde IDs in Links zählen nicht
     assert booking.unterkuenfte(seite, links, "7654321") == ["7654321"]
-    assert booking.unterkuenfte(seite, links, f"{HOTEL}, 7654321, ../x") == [HOTEL, "7654321"]
+    assert booking.unterkuenfte(seite, links, f"{HOTEL}, 7654321") == [HOTEL, "7654321"]
+    assert booking.unterkuenfte(seite, links, [HOTEL, 7654321]) == [HOTEL, "7654321"]  # TOML-Liste
     gruppe = f"https://admin.booking.com/hotel/hoteladmin/groups/home/index.html?ses={SES}"
     assert booking.unterkuenfte(gruppe, links) == ["7654321", HOTEL]
     assert booking.parameter(seite) == {"hotel_id": HOTEL, "ses": SES}
@@ -210,8 +211,16 @@ def _jahrfilter(name: str, jahre: list[int], aktuell: int, beim_klick: str) -> s
             f"<ul id='{name}-menue' style='display:none'>{knoepfe}</ul></div>")
 
 
-def _rechnungsseite(jahr: int) -> str:
-    zeilen = "".join(
+FREMDER_LINK = ("https://andere.example/fresa/extranet/finance/invoices/get_document?"
+                f"hotel_id={HOTEL}&ses={SES}&invoice_name=1000-2222222222")
+
+
+def _rechnungsseite(jahr: int, ohne_filter: bool = False) -> str:
+    fremd = (f"<tr><td>Kommission</td><td>2222222222</td><td>3. Okt. {jahr}</td>"
+             f"<td><a href='{FREMDER_LINK}'>PDF</a></td></tr>"
+             f"<tr><td>Kommission</td><td>3333333333</td><td>3. Okt. {jahr}</td><td><a href='http://admin.booking.com"
+             f"/fresa/extranet/finance/invoices/get_document?invoice_name=1000-3333333333'>PDF</a></td></tr>")
+    zeilen = fremd + "".join(
         f"<tr><td>Kommission</td><td>{n.split('-')[1]}</td><td>{d}</td><td>Zeitraum</td>"
         f"<td><a target='_blank' href='/fresa/extranet/finance/invoices/get_document?hotel_id={HOTEL}"
         f"&lang=de&ses={SES}&invoice_name={n}'>PDF</a> | <a href='/kaputt?x=1'>Übersicht ansehen</a></td>"
@@ -223,7 +232,7 @@ def _rechnungsseite(jahr: int) -> str:
   <button role="tab" id="t-an" onclick="zeige('an')"><span>Zahlungen an Booking.com</span></button>
   <button role="tab" id="t-von" onclick="zeige('von')"><span>Zahlungen von Booking.com</span></button>
 </div>
-<div id="an">{_jahrfilter('an', sorted(RECHNUNGEN, reverse=True), jahr, 'jahrAn')}
+<div id="an">{'' if ohne_filter else _jahrfilter('an', sorted(RECHNUNGEN, reverse=True), jahr, 'jahrAn')}
   <table>{zeilen}</table></div>
 <div id="von" style="display:none">{_jahrfilter('von', von_jahre, von_jahre[0], 'jahrVon')}
   <table id="von-zeilen"></table></div>
@@ -324,10 +333,17 @@ def falsches_booking(monkeypatch):
             return html(route, f"<html><body><a href='{start}'>Start</a>"
                                f"<a href='{basis}/x.html?hotel_id=7654321&ses={SES}'>Werbung</a></body></html>")
         if pfad.endswith("finance_invoices.html"):
-            return html(route, _rechnungsseite(int(_q(url).get("year") or 2026)))
+            return html(route, _rechnungsseite(int(_q(url).get("year") or 2026),
+                                               ohne_filter=zustand["verhalten"] == "ohne_filter"))
         if pfad.endswith("payouts.html"):
+            if zustand["verhalten"] == "auszahlungen_kaputt":
+                return route.abort()
             return html(route, _auszahlungsseite())
         return route.fulfill(status=404, body="404")
+
+    def fremd(route):
+        zustand["fremd"] = zustand.get("fremd", 0) + 1
+        return route.fulfill(content_type="application/pdf", body=_pdf("untergeschoben"))
 
     def konto(route):
         return html(route, "<html><body>Anmelden <input type=password></body></html>")
@@ -337,6 +353,7 @@ def falsches_booking(monkeypatch):
         with original(profil, sichtbar=False) as kontext:
             kontext.route("https://admin.booking.com/**", extranet)
             kontext.route("https://account.booking.com/**", konto)
+            kontext.route("**://andere.example/**", fremd)
             yield kontext
 
     monkeypatch.setattr(browser, "profil_oeffnen", profil_mit_umleitung)
@@ -452,3 +469,106 @@ def test_in_der_oberflaeche_waehlbar(tmp_path):
                                         "konten": [{"quelle": "booking", "name": ""}]})
     assert [k.anzeige for k in einst.konten] == ["Booking.com"]
     assert einstellungen.aus_text(einstellungen.als_text(einst)).konten[0].quelle == "booking"
+
+
+# ── Nachbesserung nach der Prüfung (M1, N1–N4) ───────────────────────────────
+
+
+def test_links_nur_von_admin_booking_com():
+    """M1: Nur https://admin.booking.com wird angenommen — fremde Hosts und http nie."""
+    roh = [{"href": FREMDER_LINK, "datum": "3. Okt. 2026"},
+           {"href": "http://admin.booking.com/fresa/extranet/finance/invoices/get_document?invoice_name=1000-3333333333"},
+           {"href": "https://admin.booking.com.andere.example/get_document?invoice_name=1000-4444444444"},
+           {"href": "https://admin.booking.com/fresa/extranet/finance/invoices/get_document?invoice_name=1000-1111111111"}]
+    assert [r.nummer for r in booking.rechnungen_aus_links(roh)] == ["1111111111"]
+    fremd = [{"href": "https://andere.example/fresa/payment/payout/payoutPDF?payout_uuid=aaaaaaaa-0000-0000-0000-000000000009"},
+             {"href": "https://andere.example/fresa/payment/payout/monthlyStatementPDF?year=2026&month=1"}]
+    assert booking.auszahlungen_aus_links(fremd) == [] and booking.uebersichten_aus_links(fremd) == []
+
+
+def test_fremder_link_wird_nicht_geholt(tmp_path, falsches_booking):
+    quelle = booking.Booking(Konto("booking", "standard"), tmp_path / "profil")
+    abgeliefert = []
+    erg = quelle.belege_holen(_umgebung(set(), abgeliefert, []))
+    assert erg.status == "ok" and erg.neu == 5
+    assert not any(n in b.dateiname for b in abgeliefert for n in ("2222222222", "3333333333"))
+    assert falsches_booking.get("fremd", 0) == 0
+
+
+class _Seite:
+    """Attrappe für _laden: gibt eine vorgegebene fetch-Antwort zurück (oder wirft)."""
+
+    url = f"https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/x.html?ses={SES}"
+
+    def __init__(self, antwort):
+        self.antwort = antwort
+
+    def evaluate(self, js, argumente):
+        if isinstance(self.antwort, Exception):
+            raise self.antwort
+        return self.antwort
+
+
+ADRESSE = f"https://admin.booking.com/fresa/x/get_document?ses={SES}"
+
+
+def test_laden_prueft_ziel_nach_weiterleitung():
+    import base64
+
+    q = booking.Booking(Konto("booking", "standard"), None)
+    pdf = base64.b64encode(b"%PDF-1.4 x").decode()
+    assert q._laden(_Seite({"status": 200, "ziel": ADRESSE, "daten": pdf, "typ": "application/pdf"}), ADRESSE, "pdf")
+    with pytest.raises(booking.DateiFehler, match="außerhalb"):
+        q._laden(_Seite({"status": -1, "ziel": "https://andere.example/x.pdf", "daten": ""}), ADRESSE, "pdf")
+    with pytest.raises(booking.DateiFehler, match="nicht bei admin.booking.com"):
+        q._laden(_Seite({}), "https://andere.example/get_document", "pdf")
+    # N2: Weiterleitung zur Anmeldung = Sitzung abgelaufen, nicht „unvollständig“
+    with pytest.raises(booking.SitzungAbgelaufen):
+        q._laden(_Seite({"status": -1, "ziel": "https://account.booking.com/sign-in", "daten": ""}), ADRESSE, "pdf")
+
+
+def test_laden_fetch_scheitert_dann_sitzung_pruefen(monkeypatch):
+    """N2: Scheitert fetch (z. B. Weiterleitung auf account.booking.com, fremder Host), wird in
+    einem eigenen Tab geprüft, ob die Anmeldung noch gilt."""
+    q = booking.Booking(Konto("booking", "standard"), None)
+    monkeypatch.setattr(q, "_noch_angemeldet", lambda seite: False)
+    with pytest.raises(booking.SitzungAbgelaufen):
+        q._laden(_Seite(RuntimeError(f"TypeError: Failed to fetch {ADRESSE}")), ADRESSE, "pdf")
+    monkeypatch.setattr(q, "_noch_angemeldet", lambda seite: True)
+    with pytest.raises(booking.DateiFehler) as fehler:
+        q._laden(_Seite(RuntimeError(f"TypeError: Failed to fetch {ADRESSE}")), ADRESSE, "pdf")
+    assert SES not in str(fehler.value) and "http" not in str(fehler.value)
+
+
+def test_abschnitt_kaputt_rest_laeuft_weiter(tmp_path, falsches_booking):
+    """N1: Lädt die Auszahlungsseite nicht, sind Rechnungen und Übersichten trotzdem da."""
+    falsches_booking["verhalten"] = "auszahlungen_kaputt"
+    quelle = booking.Booking(Konto("booking", "standard"), tmp_path / "profil")
+    abgeliefert = []
+    erg = quelle.belege_holen(_umgebung(set(), abgeliefert, []))
+    assert erg.status == "unvollstaendig" and erg.neu == 5
+    assert {b.art for b in abgeliefert} == {"rechnung", "auszahlungsuebersicht"}
+    meldung = next(a for a in erg.abweichungen if a.startswith("Auszahlungen: abgebrochen"))
+    assert SES not in meldung and "http" not in meldung
+
+
+@pytest.mark.parametrize("wert", ["12345a", "../x", ["111", "abc"], ","])
+def test_unterkunft_ungueltig_wird_gemeldet(tmp_path, wert):
+    """N3: Eine ungültige Einstellung „unterkunft“ wird nicht still verworfen."""
+    with pytest.raises(booking.UnterkunftUngueltig):
+        booking.unterkunft_einstellung(wert)
+    quelle = booking.Booking(Konto("booking", "standard", optionen={"unterkunft": wert}), tmp_path / "profil")
+    erg = quelle.belege_holen(_umgebung(set(), [], []))
+    assert erg.status == "fehler" and "unterkunft" in erg.fehler and "Ziffern" in erg.fehler
+
+
+def test_ohne_jahresfilter_unvollstaendig_mit_hinweis(tmp_path, falsches_booking):
+    """N4: Ohne Jahresfilter nicht still nur das laufende Jahr: die Jahre kommen über die
+    Adresse, und das Ergebnis sagt, dass ältere fehlen können."""
+    falsches_booking["verhalten"] = "ohne_filter"
+    quelle = booking.Booking(Konto("booking", "standard"), tmp_path / "profil")
+    abgeliefert = []
+    erg = quelle.belege_holen(_umgebung(set(), abgeliefert, []))
+    assert erg.status == "unvollstaendig"
+    assert any("Jahresfilter nicht gefunden" in a and "2026, 2025, 2024" in a for a in erg.abweichungen)
+    assert sum(1 for b in abgeliefert if b.art == "rechnung") == 5

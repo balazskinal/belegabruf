@@ -168,12 +168,14 @@ eingestellt:
 - **Mehrere Unterkünfte** unter einer Anmeldung: Geholt wird die, auf der das Extranet nach der Anmeldung
   landet. Für mehrere in der Einstellungsdatei beim Konto `unterkunft = "<ID>, <ID>"` eintragen (die ID
   steht im Extranet oben neben dem Namen der Unterkunft); jede wird für sich geholt, ihre ID steht dann
-  im Dateinamen.
+  im Dateinamen. Steht dort etwas anderes als Ziffern, holt das Programm nichts und sagt das in der
+  Zusammenfassung.
 
 Das Programm **liest nur und lädt herunter**. Angeklickt werden nur der Reiter „Zahlungen von
 Booking.com“, der Jahresfilter und das Zeitraumfeld bei den Auszahlungen — nichts an Preisen,
-Verfügbarkeit oder Einstellungen. Der Sitzungsschlüssel des Extranets (`ses` in der Adresse) wird nie
-gespeichert oder ausgegeben.
+Verfügbarkeit oder Einstellungen. Geladen wird nur von `https://admin.booking.com` — ein Link auf eine
+andere Adresse wird nie geholt, auch nicht nach einer Weiterleitung. Der Sitzungsschlüssel des Extranets
+(`ses` in der Adresse) wird nie gespeichert oder ausgegeben.
 
 ## Benutzen
 

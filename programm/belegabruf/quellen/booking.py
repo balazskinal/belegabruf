@@ -133,9 +133,10 @@ def sauber(text: str) -> str:
     return RE_ADRESSE.sub("…", str(text or ""))
 
 
-def _kurz(fehler: Exception) -> str:
-    text = sauber(str(fehler).splitlines()[0][:160]) if str(fehler) else ""
-    return f"{type(fehler).__name__}: {text}" if text else type(fehler).__name__
+def ist_eigene_adresse(url: str) -> bool:
+    """Nur https://admin.booking.com — Dateien von anderen Hosts werden nie geladen."""
+    teile = urlsplit(url or "")
+    return teile.scheme == "https" and teile.netloc == "admin.booking.com"
 
 
 def parameter(url: str) -> dict[str, str]:
@@ -148,7 +149,26 @@ def seitenadresse(pfad: str, hotel_id: str, ses: str, **extra: str) -> str:
     return f"{ADRESSE}{pfad}?" + urlencode({"hotel_id": hotel_id, "lang": "de", "ses": ses, **extra})
 
 
-def unterkuenfte(seiten_url: str, links: list[str], einstellung: str = "") -> list[str]:
+class UnterkunftUngueltig(Exception):
+    """Die Einstellung ``unterkunft`` enthält etwas, das keine Unterkunfts-ID ist."""
+
+
+def unterkunft_einstellung(wert: object) -> list[str]:
+    """``unterkunft`` aus dem Konto: "123", "123, 456", 123 oder ["123", "456"]. Leer = [].
+    Wirft UnterkunftUngueltig, wenn ein Teil keine ID ist (nicht still verwerfen)."""
+    if wert is None or wert == "" or wert == []:
+        return []
+    teile = wert if isinstance(wert, list) else str(wert).split(",")
+    ids = [str(t).strip() for t in teile if str(t).strip()]
+    falsch = [i for i in ids if not RE_HOTEL.fullmatch(i)]
+    if falsch or not ids:
+        raise UnterkunftUngueltig(
+            f"Einstellung unterkunft = „{sauber(str(wert))[:60]}“: Erwartet wird die Unterkunfts-ID (nur Ziffern), "
+            "mehrere mit Komma, z. B. unterkunft = \"1234567, 7654321\". Bitte in der Einstellungsdatei korrigieren.")
+    return list(dict.fromkeys(ids))
+
+
+def unterkuenfte(seiten_url: str, links: list[str], einstellung: object = "") -> list[str]:
     """Welche Unterkünfte geholt werden.
 
     * ``einstellung`` (``unterkunft = "<ID>"`` bzw. mehrere mit Komma im Konto): genau diese.
@@ -156,9 +176,9 @@ def unterkuenfte(seiten_url: str, links: list[str], einstellung: str = "") -> li
       Adresse). Links der Startseite zählen nicht — dort stehen auch fremde IDs (beim echten
       Lauf am 26.11.2026 eine zweite ohne Rechnungen).
     * Landet es auf einer Gruppen-Startseite ohne ``hotel_id``: alle IDs aus deren Links."""
-    eigene = [h.strip() for h in einstellung.split(",") if RE_HOTEL.fullmatch(h.strip())]
+    eigene = unterkunft_einstellung(einstellung)
     if eigene:
-        return list(dict.fromkeys(eigene))
+        return eigene
     hier = parameter(seiten_url).get("hotel_id", "")
     if RE_HOTEL.fullmatch(hier):
         return [hier]
@@ -209,7 +229,7 @@ def rechnungen_aus_links(roh: list[dict]) -> list[Rechnung]:
     ergebnis: dict[str, Rechnung] = {}
     for eintrag in roh:
         href = str(eintrag.get("href") or "")
-        if RECHNUNG_LINK not in href:
+        if RECHNUNG_LINK not in href or not ist_eigene_adresse(href):
             continue
         name = parse_qs(urlsplit(href).query).get("invoice_name", [""])[0]
         nummer = name.rsplit("-", 1)[-1]
@@ -223,6 +243,8 @@ def uebersichten_aus_links(roh: list[dict]) -> list[Uebersicht]:
     ergebnis: dict[tuple[int, int], Uebersicht] = {}
     for eintrag in roh:
         href = str(eintrag.get("href") or "")
+        if not ist_eigene_adresse(href):
+            continue
         werte = parse_qs(urlsplit(href).query)
         try:
             jahr, monat = int(werte["year"][0]), int(werte["month"][0])
@@ -242,6 +264,8 @@ def auszahlungen_aus_links(roh: list[dict]) -> list[Auszahlung]:
     ergebnis: dict[str, Auszahlung] = {}
     for eintrag in roh:
         href = str(eintrag.get("href") or "")
+        if not ist_eigene_adresse(href):
+            continue
         kennung = parse_qs(urlsplit(href).query).get("payout_uuid", [""])[0]
         if not RE_UUID.fullmatch(kennung):
             continue
@@ -335,6 +359,7 @@ _LADEN_JS = r"""async ([adresse, hoechstens]) => {
   const antwort = await fetch(adresse, {credentials: 'include'});
   const typ = antwort.headers.get('content-type') || '';
   const ziel = antwort.url || '';
+  if (!ziel.startsWith('https://admin.booking.com/')) return {status: -1, typ, ziel, daten: ''};
   if (!antwort.ok) return {status: antwort.status, typ, ziel, daten: ''};
   const puffer = new Uint8Array(await antwort.arrayBuffer());
   if (puffer.length > hoechstens) return {status: 413, typ, ziel, daten: ''};
@@ -379,6 +404,19 @@ class Booking(Quelle):
         with browser.profil_oeffnen(self.profil, sichtbar=False) as kontext:
             return self._startseite(browser.neue_seite(kontext))
 
+    def _noch_angemeldet(self, seite) -> bool:
+        """Prüft in einem eigenen Tab, ob die Sitzung noch gilt (die aktuelle Seite bleibt, wie sie ist)."""
+        probe = seite.context.new_page()
+        try:
+            return self._startseite(probe)
+        except Exception:  # noqa: BLE001
+            return False
+        finally:
+            try:
+                probe.close()
+            except Exception:  # noqa: BLE001
+                pass
+
     # 2. Anmelden lassen -----------------------------------------------------
     def anmelden_lassen(self, melden: Callable[[str], None]) -> bool:
         with browser.profil_oeffnen(self.profil, sichtbar=True) as kontext:
@@ -403,15 +441,21 @@ class Booking(Quelle):
         return seite.evaluate(_LINKS_JS, muster)
 
     def _laden(self, seite, adresse: str, art: str) -> bytes:
-        """Lädt eine Datei mit der Anmeldung der Seite. Prüft Größe und Typ."""
+        """Lädt eine Datei mit der Anmeldung der Seite — nur von admin.booking.com, auch nach
+        einer Weiterleitung. Prüft Größe und Typ."""
+        if not ist_eigene_adresse(adresse):
+            raise DateiFehler("Adresse liegt nicht bei admin.booking.com")
         try:
             antwort = seite.evaluate(_LADEN_JS, [adresse, pruefung.MAX_PDF_BYTES])
-        except Exception as fehler:  # noqa: BLE001
-            if ist_anmeldeseite(seite.url):
+        except Exception:  # noqa: BLE001 - z. B. Weiterleitung zur Anmeldung (fremder Host, fetch scheitert)
+            if ist_anmeldeseite(seite.url) or not self._noch_angemeldet(seite):
                 raise SitzungAbgelaufen() from None
-            raise DateiFehler(f"nicht geladen ({type(fehler).__name__})") from None
-        if ist_anmeldeseite(antwort.get("ziel", "")) or antwort.get("status") in (401, 403):
+            raise DateiFehler("nicht geladen") from None
+        ziel = str(antwort.get("ziel") or "")
+        if ist_anmeldeseite(ziel) or antwort.get("status") in (401, 403):
             raise SitzungAbgelaufen()
+        if antwort.get("status") == -1 or (ziel and not ist_eigene_adresse(ziel)):
+            raise DateiFehler("Weiterleitung auf eine Adresse außerhalb von admin.booking.com")
         if antwort.get("status") == 413:
             raise DateiFehler(f"größer als {pruefung.MAX_PDF_BYTES // (1024 * 1024)} MB")
         if antwort.get("status") != 200 or not antwort.get("daten"):
@@ -433,11 +477,22 @@ class Booking(Quelle):
             unterordner=UNTERORDNER[art],
         ))
 
+    @staticmethod
+    def _abweichung(erg: Ergebnis, text: str) -> None:
+        erg.status = "unvollstaendig"
+        erg.abweichungen.append(text)
+
     def belege_holen(self, umgebung: Umgebung) -> Ergebnis:
         erg = Ergebnis(self.name, self.konto.name)
         erg.erwartet = 0
         erg.vorhanden = 0
         zaehler = {"auszahlungsuebersicht": 0, "auszahlung": 0}
+        try:
+            einstellung = unterkunft_einstellung(self.konto.optionen.get("unterkunft"))
+        except UnterkunftUngueltig as fehler:
+            erg.status = "fehler"
+            erg.fehler = str(fehler)
+            return erg
         with browser.profil_oeffnen(self.profil, sichtbar=umgebung.sichtbar) as kontext:
             seite = browser.neue_seite(kontext)
             try:
@@ -445,20 +500,14 @@ class Booking(Quelle):
                     erg.status = "abgelaufen"
                     return erg
                 ses = parameter(seite.url)["ses"]
-                links = seite.evaluate(_HOTEL_LINKS_JS)
-                hotels = unterkuenfte(seite.url, links, str(self.konto.optionen.get("unterkunft") or "").strip())
+                hotels = unterkuenfte(seite.url, seite.evaluate(_HOTEL_LINKS_JS), einstellung)
                 if not hotels:
-                    erg.status = "unvollstaendig"
-                    erg.abweichungen.append("Keine Unterkunft gefunden.")
+                    self._abweichung(erg, "Keine Unterkunft gefunden.")
                     return erg
                 mehrere = len(hotels) > 1
                 umgebung.melden(f"{len(hotels)} Unterkunft/Unterkünfte." if mehrere else "Angemeldet.")
                 for hotel in hotels:
-                    vorsilbe = f"Unterkunft {hotel}: " if mehrere else ""
-                    self._rechnungen(seite, hotel, ses, mehrere, umgebung, erg, vorsilbe)
-                    zaehler["auszahlungsuebersicht"] += self._uebersichten(seite, hotel, ses, mehrere, umgebung,
-                                                                           erg, vorsilbe)
-                    zaehler["auszahlung"] += self._auszahlungen(seite, hotel, ses, mehrere, umgebung, erg, vorsilbe)
+                    self._unterkunft_holen(seite, hotel, ses, mehrere, umgebung, erg, zaehler)
             except SitzungAbgelaufen:
                 erg.status = "abgelaufen"
                 umgebung.melden("Die Anmeldung ist abgelaufen. Der nächste Lauf holt den Rest nach.")
@@ -471,15 +520,48 @@ class Booking(Quelle):
             erg.hinweise.append(" und ".join(teile) + " neu abgelegt (nur im Belegordner, werden nicht verschickt).")
         return erg
 
-    # Rechnungen (Belege) -----------------------------------------------------
+    def _unterkunft_holen(self, seite, hotel, ses, mehrere, umgebung: Umgebung, erg: Ergebnis,
+                          zaehler: dict[str, int]) -> None:
+        """Die drei Abschnitte einer Unterkunft. Scheitert einer, laufen die anderen (und weitere
+        Unterkünfte) weiter; das Konto ist dann „unvollständig“. Nur ein Ablauf der Anmeldung bricht ab."""
+        vorsilbe = f"Unterkunft {hotel}: " if mehrere else ""
+        abschnitte = (
+            ("Rechnungen", "rechnung", self._rechnungen),
+            ("Auszahlungsübersichten", "auszahlungsuebersicht", self._uebersichten),
+            ("Auszahlungen", "auszahlung", self._auszahlungen),
+        )
+        for name, art, holen in abschnitte:
+            try:
+                neu = holen(seite, hotel, ses, mehrere, umgebung, erg, vorsilbe)
+            except SitzungAbgelaufen:
+                raise
+            except DateiFehler as fehler:
+                self._abweichung(erg, f"{vorsilbe}{name}: abgebrochen ({fehler}).")
+                continue
+            except Exception as fehler:  # noqa: BLE001 - nur der Typ, nie der Text (könnte Adressen enthalten)
+                self._abweichung(erg, f"{vorsilbe}{name}: abgebrochen ({type(fehler).__name__}).")
+                continue
+            if art in zaehler:
+                zaehler[art] += neu or 0
 
-    def _jahre_im_filter(self, seite) -> list[int]:
-        """Liest die Jahre aus dem sichtbaren Filter „Nach Jahr filtern“ (öffnen, lesen, schließen)."""
-        knopf = seite.locator("button").filter(has_text=re.compile(r"^\s*20\d{2}\s*$")).locator("visible=true").first
+    def _seite_oeffnen(self, seite, pfad: str, hotel: str, ses: str, **extra: str) -> None:
+        _aufrufen(seite, seitenadresse(pfad, hotel, ses, **extra))
+        if ist_anmeldeseite(seite.url):
+            raise SitzungAbgelaufen()
+
+    # Jahresfilter ----------------------------------------------------------
+
+    def _jahresknopf(self, seite):
+        return seite.locator("button").filter(has_text=re.compile(r"^\s*20\d{2}\s*$")).locator("visible=true").first
+
+    def _jahre_im_filter(self, seite) -> list[int] | None:
+        """Die Jahre im sichtbaren Filter „Nach Jahr filtern“ (öffnen, lesen, schließen).
+        None, wenn kein Filter zu finden ist."""
+        knopf = self._jahresknopf(seite)
         try:
             jetzt = int(knopf.inner_text(timeout=10000).strip())
         except Exception:  # noqa: BLE001
-            return [heute().year]
+            return None
         try:
             knopf.click(timeout=10000)
             seite.wait_for_timeout(800)
@@ -493,7 +575,7 @@ class Booking(Quelle):
     def _jahr_waehlen(self, seite, jahr: int) -> bool:
         """Wählt das Jahr im Filter. False, wenn das Menü dieses Jahr (gerade) nicht anbietet —
         dann gibt es dort nichts (beim echten Lauf: 2024 bei den Auszahlungsübersichten)."""
-        knopf = seite.locator("button").filter(has_text=re.compile(r"^\s*20\d{2}\s*$")).locator("visible=true").first
+        knopf = self._jahresknopf(seite)
         if knopf.inner_text(timeout=10000).strip() == str(jahr):
             return True
         knopf.click(timeout=10000)
@@ -506,14 +588,27 @@ class Booking(Quelle):
         seite.wait_for_timeout(3000)
         return True
 
-    def _rechnungen(self, seite, hotel, ses, mehrere, umgebung: Umgebung, erg: Ergebnis, vorsilbe: str) -> None:
-        _aufrufen(seite, seitenadresse(RECHNUNGEN_SEITE, hotel, ses))
-        if ist_anmeldeseite(seite.url):
-            raise SitzungAbgelaufen()
+    def _jahre(self, seite, umgebung: Umgebung, erg: Ergebnis, wo: str, vorlauf: int = 0) -> list[int]:
+        """Welche Jahre abgefragt werden. Ohne Filter: das laufende Jahr und (so weit „Belege ab“
+        es verlangt, sonst zwei weitere) die Jahre davor — und eine Meldung, dass es unvollständig
+        sein kann."""
+        verfuegbar = self._jahre_im_filter(seite)
+        if verfuegbar is None:
+            jetzt = heute().year
+            bis = (umgebung.ab.year - vorlauf) if umgebung.ab else jetzt - 2
+            verfuegbar = list(range(jetzt, min(bis, jetzt) - 1, -1))
+            self._abweichung(erg, f"{wo}: Jahresfilter nicht gefunden — abgefragt wurden nur "
+                                  f"{', '.join(map(str, verfuegbar))}; ältere fehlen womöglich.")
+        return jahre_noetig(verfuegbar, umgebung.ab, vorlauf)
+
+    # Rechnungen (Belege) -----------------------------------------------------
+
+    def _rechnungen(self, seite, hotel, ses, mehrere, umgebung: Umgebung, erg: Ergebnis, vorsilbe: str) -> int:
+        self._seite_oeffnen(seite, RECHNUNGEN_SEITE, hotel, ses)
         self._links(seite, [RECHNUNG_LINK])
         rechnungen: dict[str, Rechnung] = {}
-        for jahr in jahre_noetig(self._jahre_im_filter(seite), umgebung.ab, vorlauf=1):
-            _aufrufen(seite, seitenadresse(RECHNUNGEN_SEITE, hotel, ses, year=str(jahr)))
+        for jahr in self._jahre(seite, umgebung, erg, f"{vorsilbe}Rechnungen", vorlauf=1):
+            self._seite_oeffnen(seite, RECHNUNGEN_SEITE, hotel, ses, year=str(jahr))
             for r in rechnungen_aus_links(self._links(seite, [RECHNUNG_LINK])):
                 rechnungen.setdefault(r.nummer, r)
         liste = [r for r in rechnungen.values() if not umgebung.zu_alt(r.datum)]
@@ -530,20 +625,26 @@ class Booking(Quelle):
             try:
                 inhalt = self._laden(seite, r.url, "pdf")
             except DateiFehler as fehler:
-                erg.status = "unvollstaendig"
-                erg.abweichungen.append(f"{vorsilbe}Rechnung {r.nummer}: nicht gespeichert ({fehler}).")
+                self._abweichung(erg, f"{vorsilbe}Rechnung {r.nummer}: nicht gespeichert ({fehler}).")
                 continue
             self._abliefern(umgebung, "rechnung", schluessel, rechnung_dateiname(r, hotel, mehrere), inhalt,
                             r.datum, nummer=r.nummer)
             erg.neu += 1
             erg.vorhanden += 1
+        return 0  # Rechnungen zählen in erg.neu
 
     # Auszahlungsübersichten (je Monat) --------------------------------------
 
     def _uebersichten(self, seite, hotel, ses, mehrere, umgebung: Umgebung, erg: Ergebnis, vorsilbe: str) -> int:
-        _aufrufen(seite, seitenadresse(RECHNUNGEN_SEITE, hotel, ses))
-        if ist_anmeldeseite(seite.url):
-            raise SitzungAbgelaufen()
+        neu = 0
+        for u in self._uebersichten_lesen(seite, hotel, ses, umgebung, erg, vorsilbe):
+            neu += self._uebersicht_ablegen(seite, hotel, mehrere, u, umgebung, erg, vorsilbe)
+        return neu
+
+    def _uebersichten_lesen(self, seite, hotel, ses, umgebung: Umgebung, erg: Ergebnis,
+                            vorsilbe: str) -> list[Uebersicht]:
+        """Die abgeschlossenen Monate im Zeitraum, aus dem Reiter „Zahlungen von Booking.com“."""
+        self._seite_oeffnen(seite, RECHNUNGEN_SEITE, hotel, ses)
         try:
             # Im Extranet ein Reiter (role=tab); zur Sicherheit auch ein gleich beschrifteter Knopf.
             seite.get_by_role("tab", name=REITER_VON, exact=True).or_(
@@ -551,59 +652,67 @@ class Booking(Quelle):
         except Exception:  # noqa: BLE001
             if ist_anmeldeseite(seite.url):
                 raise SitzungAbgelaufen() from None
-            erg.status = "unvollstaendig"
-            erg.abweichungen.append(f"{vorsilbe}Reiter „{REITER_VON}“ nicht gefunden.")
-            return 0
+            self._abweichung(erg, f"{vorsilbe}Reiter „{REITER_VON}“ nicht gefunden.")
+            return []
         self._links(seite, [UEBERSICHT_PDF])
-        jetzt = heute()
-        uebersichten: dict[tuple[int, int], Uebersicht] = {}
-        for jahr in jahre_noetig(self._jahre_im_filter(seite), umgebung.ab):
+        gefunden: dict[tuple[int, int], Uebersicht] = {}
+        for jahr in self._jahre(seite, umgebung, erg, f"{vorsilbe}Auszahlungsübersichten"):
             try:
                 if not self._jahr_waehlen(seite, jahr):
                     continue
             except Exception:  # noqa: BLE001
-                erg.status = "unvollstaendig"
-                erg.abweichungen.append(f"{vorsilbe}Auszahlungsübersichten {jahr}: Jahr nicht wählbar.")
+                self._abweichung(erg, f"{vorsilbe}Auszahlungsübersichten {jahr}: Jahr nicht wählbar.")
                 continue
             for u in uebersichten_aus_links(self._links(seite, [UEBERSICHT_PDF, UEBERSICHT_CSV])):
                 if u.jahr == jahr:
-                    uebersichten.setdefault((u.jahr, u.monat), u)
-        neu = 0
-        for (jahr, monat), u in sorted(uebersichten.items()):
+                    gefunden.setdefault((u.jahr, u.monat), u)
+        jetzt = heute()
+        liste = []
+        for (jahr, monat), u in sorted(gefunden.items()):
             if (jahr, monat) >= (jetzt.year, jetzt.month):
                 continue  # laufender Monat: erst nach Monatsende (dann vollständig)
             if umgebung.zu_alt(monatsende(jahr, monat)):
                 erg.uebersprungen += 1
                 continue
-            for endung, adresse in (("pdf", u.pdf), ("csv", u.csv)):
-                schluessel = f"auszahlungsuebersicht:{hotel}:{jahr:04d}-{monat:02d}:{endung}"
-                if not adresse or umgebung.bekannt(schluessel):
-                    continue
-                browser.pause(1, 3)
-                try:
-                    inhalt = self._laden(seite, adresse, endung)
-                except DateiFehler as fehler:
-                    erg.status = "unvollstaendig"
-                    erg.abweichungen.append(
-                        f"{vorsilbe}Auszahlungsübersicht {monat:02d}/{jahr} ({endung.upper()}): "
-                        f"nicht gespeichert ({fehler}).")
-                    continue
-                self._abliefern(umgebung, "auszahlungsuebersicht", schluessel,
-                                uebersicht_dateiname(u, endung, hotel, mehrere), inhalt, date(jahr, monat, 1))
-                neu += 1
+            liste.append(u)
+        return liste
+
+    def _uebersicht_ablegen(self, seite, hotel, mehrere, u: Uebersicht, umgebung: Umgebung, erg: Ergebnis,
+                            vorsilbe: str) -> int:
+        neu = 0
+        for endung, adresse in (("pdf", u.pdf), ("csv", u.csv)):
+            schluessel = f"auszahlungsuebersicht:{hotel}:{u.jahr:04d}-{u.monat:02d}:{endung}"
+            if not adresse or umgebung.bekannt(schluessel):
+                continue
+            browser.pause(1, 3)
+            try:
+                inhalt = self._laden(seite, adresse, endung)
+            except DateiFehler as fehler:
+                self._abweichung(erg, f"{vorsilbe}Auszahlungsübersicht {u.monat:02d}/{u.jahr} "
+                                      f"({endung.upper()}): nicht gespeichert ({fehler}).")
+                continue
+            self._abliefern(umgebung, "auszahlungsuebersicht", schluessel,
+                            uebersicht_dateiname(u, endung, hotel, mehrere), inhalt, date(u.jahr, u.monat, 1))
+            neu += 1
         return neu
 
     # Auszahlungen (je Auszahlung) --------------------------------------------
 
     def _auszahlungen(self, seite, hotel, ses, mehrere, umgebung: Umgebung, erg: Ergebnis, vorsilbe: str) -> int:
-        _aufrufen(seite, seitenadresse(AUSZAHLUNGEN_SEITE, hotel, ses))
-        if ist_anmeldeseite(seite.url):
-            raise SitzungAbgelaufen()
+        neu = 0
+        for a in self._auszahlungen_lesen(seite, hotel, ses, umgebung, erg, vorsilbe):
+            neu += self._auszahlung_ablegen(seite, hotel, mehrere, a, umgebung, erg, vorsilbe)
+        return neu
+
+    def _auszahlungen_lesen(self, seite, hotel, ses, umgebung: Umgebung, erg: Ergebnis,
+                            vorsilbe: str) -> list[Auszahlung]:
+        """Die Auszahlungen im Zeitraum: „Dieses Jahr“ und, wenn nötig, „Letztes Jahr“."""
+        self._seite_oeffnen(seite, AUSZAHLUNGEN_SEITE, hotel, ses)
         jetzt = heute()
         zeitraeume = ["THIS_YEAR"]
         if umgebung.ab is None or umgebung.ab.year < jetzt.year:
             zeitraeume.append("LAST_YEAR")  # älter bietet die Seite nur als „Individueller Zeitraum“
-        auszahlungen: dict[str, Auszahlung] = {}
+        gefunden: dict[str, Auszahlung] = {}
         for zeitraum in zeitraeume:
             try:
                 seite.wait_for_selector(ZEITRAUM_FELD, timeout=20000)
@@ -612,37 +721,42 @@ class Booking(Quelle):
             except Exception:  # noqa: BLE001
                 if ist_anmeldeseite(seite.url):
                     raise SitzungAbgelaufen() from None
-                erg.status = "unvollstaendig"
-                erg.abweichungen.append(f"{vorsilbe}Auszahlungen: Zeitraum nicht wählbar.")
+                self._abweichung(erg, f"{vorsilbe}Auszahlungen: Zeitraum nicht wählbar.")
                 continue
             for a in auszahlungen_aus_links(self._links(seite, [AUSZAHLUNG_PDF, AUSZAHLUNG_CSV])):
-                auszahlungen.setdefault(a.kennung, a)
-        neu = 0
-        for a in sorted(auszahlungen.values(), key=lambda a: (a.datum or date.min, a.kennung)):
+                gefunden.setdefault(a.kennung, a)
+        liste = []
+        for a in sorted(gefunden.values(), key=lambda a: (a.datum or date.min, a.kennung)):
             if a.datum is not None and a.datum > jetzt:
                 continue  # noch nicht ausgezahlt
             if umgebung.zu_alt(a.datum):
                 erg.uebersprungen += 1
                 continue
-            schluessel = {e: f"auszahlung:{hotel}:{a.kennung}:{e}" for e in ("pdf", "csv")}
-            if all(umgebung.bekannt(s) for s in schluessel.values()):
+            liste.append(a)
+        return liste
+
+    def _auszahlung_ablegen(self, seite, hotel, mehrere, a: Auszahlung, umgebung: Umgebung, erg: Ergebnis,
+                            vorsilbe: str) -> int:
+        """Erst die CSV (für den Dateinamen), dann das PDF; beide unter demselben Namen."""
+        schluessel = {e: f"auszahlung:{hotel}:{a.kennung}:{e}" for e in ("pdf", "csv")}
+        if all(umgebung.bekannt(s) for s in schluessel.values()):
+            return 0
+        bezeichnung = f"{vorsilbe}Auszahlung vom {a.datum:%d.%m.%Y}" if a.datum else f"{vorsilbe}Auszahlung"
+        browser.pause(1, 3)
+        try:
+            csv_inhalt = self._laden(seite, a.csv, "csv") if a.csv else b""
+            daten = auszahlung_lesen(csv_inhalt) if csv_inhalt else AuszahlungsDaten()
+            pdf_inhalt = self._laden(seite, a.pdf, "pdf") if a.pdf else b""
+        except DateiFehler as fehler:
+            self._abweichung(erg, f"{bezeichnung}: nicht gespeichert ({fehler}).")
+            return 0
+        datum = daten.datum or a.datum
+        neu = 0
+        for endung, inhalt in (("csv", csv_inhalt), ("pdf", pdf_inhalt)):
+            if not inhalt or umgebung.bekannt(schluessel[endung]):
                 continue
-            bezeichnung = f"{vorsilbe}Auszahlung vom {a.datum:%d.%m.%Y}" if a.datum else f"{vorsilbe}Auszahlung"
-            browser.pause(1, 3)
-            try:
-                csv_inhalt = self._laden(seite, a.csv, "csv") if a.csv else b""
-                daten = auszahlung_lesen(csv_inhalt) if csv_inhalt else AuszahlungsDaten()
-                pdf_inhalt = self._laden(seite, a.pdf, "pdf") if a.pdf else b""
-            except DateiFehler as fehler:
-                erg.status = "unvollstaendig"
-                erg.abweichungen.append(f"{bezeichnung}: nicht gespeichert ({fehler}).")
-                continue
-            datum = daten.datum or a.datum
-            for endung, inhalt in (("csv", csv_inhalt), ("pdf", pdf_inhalt)):
-                if not inhalt or umgebung.bekannt(schluessel[endung]):
-                    continue
-                self._abliefern(umgebung, "auszahlung", schluessel[endung],
-                                auszahlung_dateiname(datum, daten, endung, hotel, mehrere), inhalt, datum,
-                                nummer=daten.nummer, buchungen=" ".join(daten.buchungsnummern))
-                neu += 1
+            self._abliefern(umgebung, "auszahlung", schluessel[endung],
+                            auszahlung_dateiname(datum, daten, endung, hotel, mehrere), inhalt, datum,
+                            nummer=daten.nummer, buchungen=" ".join(daten.buchungsnummern))
+            neu += 1
         return neu
