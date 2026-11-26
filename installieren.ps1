@@ -7,7 +7,8 @@
 #   2. das ZIP von github.com/balazskinal/belegabruf laden und seine SHA-256-Pruefsumme pruefen
 #      (aus der Release-Liste von GitHub bzw. der mitveroeffentlichten .sha256) - ohne Pruefsumme
 #      oder bei Abweichung bricht es ab,
-#   3. nach %USERPROFILE%\Documents\Belegabruf auspacken. Bei einem Update werden nur die eigenen
+#   3. nach %LOCALAPPDATA%\Programs\Belegabruf auspacken (Standard fuer Programme je Benutzer,
+#      nicht von OneDrive umgeleitet) und eine Startmenue-Verknuepfung "Belegabruf" anlegen. Bei einem Update werden nur die eigenen
 #      Programmdateien ersetzt; Einstellungen und Anmeldungen (im Datenordner unter %APPDATA%)
 #      bleiben unberuehrt,
 #   4. "Belegabruf Windows" starten und den Ordner im Explorer zeigen.
@@ -17,7 +18,7 @@
 # "Der Computer wurde durch Windows geschuetzt" nicht, die bei einem im Browser geladenen ZIP kommt.
 
 # Der Installationsordner - die einzige Stelle dafuer.
-$BelegabrufInstallationsort = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Belegabruf'
+$BelegabrufInstallationsort = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\Belegabruf'
 
 function Invoke-BelegabrufEinrichtung {
     # Nur in dieser Funktion (mit "irm | iex" liefe es sonst in der Sitzung des Nutzers weiter).
@@ -179,11 +180,30 @@ function Invoke-BelegabrufEinrichtung {
         }
         Remove-Item -Recurse -Force -LiteralPath $alt
 
+        # Startmenue-Verknuepfung "Belegabruf" (je Benutzer, ohne Adminrechte) - bei jedem Lauf neu,
+        # damit sie nach einem Update sicher auf den richtigen Starter zeigt.
+        $startmenue = [Environment]::GetFolderPath('Programs')
+        $verknuepfung = Join-Path $startmenue 'Belegabruf.lnk'
+        try {
+            $shell = New-Object -ComObject WScript.Shell
+            $lnk = $shell.CreateShortcut($verknuepfung)
+            $lnk.TargetPath = Join-Path $ziel 'Belegabruf Windows.cmd'
+            $lnk.WorkingDirectory = $ziel
+            $lnk.Description = 'Belegabruf - Belege holen'
+            $lnk.Save()
+        } catch {
+            Write-Host "Hinweis: Die Startmenue-Verknuepfung liess sich nicht anlegen. Starten geht auch ueber den Ordner $ziel."
+        }
+
         if ($kennzeichen) { Write-Host "OK Belegabruf ist auf $tag aktualisiert: $ziel" }
         else { Write-Host "OK Belegabruf $tag ist eingerichtet: $ziel" }
-        Write-Host "   Ab jetzt startest du Belegabruf mit 'Belegabruf Windows' in diesem Ordner."
+        Write-Host "   Starten kuenftig: Startmenue -> 'Belegabruf' (oder 'Belegabruf Windows' in diesem Ordner)."
         Write-Host '   Hast du Belegabruf bisher aus dem ZIP gestartet (Ordner belegabruf-v...), kannst du den alten'
         Write-Host '   Ordner loeschen. Einstellungen und Anmeldungen liegen im Datenordner (%APPDATA%\belegabruf) und bleiben.'
+        $frueher = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Belegabruf'
+        if (($frueher -ne $ziel) -and (Test-Belegabruf $frueher)) {
+            Write-Host "   Eine fruehere Installation liegt noch in $frueher - die brauchst du nicht mehr und kannst sie loeschen."
+        }
         Write-Host '   Update spaeter: dieselbe Zeile noch einmal in PowerShell.'
 
         # 4. Starten

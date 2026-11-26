@@ -100,7 +100,7 @@ def _starten(tmp_path, netz: Netz, version: str = "", ziel: Path | None = None):
     if ziel is not None:
         umgebung["BELEGABRUF_ZIEL"] = str(ziel)
     lauf = subprocess.run(["/bin/bash", str(SH)], capture_output=True, text=True, env=umgebung, timeout=60)
-    return lauf, heim / "Documents" / "Belegabruf"
+    return lauf, heim / "Applications" / "Belegabruf"
 
 
 @nur_mac
@@ -187,7 +187,7 @@ def test_ungueltige_version(tmp_path, netz, version):
 @nur_mac
 def test_fremder_ordner_wird_nicht_angefasst(tmp_path, netz):
     netz.release("v2.0.1")
-    ziel = tmp_path / "heim" / "Documents" / "Belegabruf"
+    ziel = tmp_path / "heim" / "Applications" / "Belegabruf"
     ziel.mkdir(parents=True)
     (ziel / "Steuer 2025.pdf").write_text("wichtig")
     lauf, _ = _starten(tmp_path, netz, "v2.0.1")
@@ -256,7 +256,7 @@ def test_abgeschnittenes_skript_tut_nichts(tmp_path, netz):
         subprocess.run(["/bin/bash", str(teil)], capture_output=True, text=True, timeout=60,
                        env={"PATH": f"{bin_ordner}:/usr/bin:/bin:/usr/sbin", "HOME": str(heim),
                             "TMPDIR": str(tmp_path), "BELEGABRUF_VERSION": "v2.0.1", "BELEGABRUF_NICHT_STARTEN": "1"})
-        assert not (heim / "Documents" / "Belegabruf").exists(), f"abgeschnitten nach Zeile {schnitt}: lief los"
+        assert not (heim / "Applications" / "Belegabruf").exists(), f"abgeschnitten nach Zeile {schnitt}: lief los"
         assert netz.aufrufe() == []
     lauf, ziel = _starten(tmp_path, netz, "v2.0.1")
     assert lauf.returncode == 0, lauf.stdout + lauf.stderr
@@ -275,7 +275,7 @@ def _alter_stand(ziel: Path, tag: str = "v2.0.1") -> None:
 
 @nur_mac
 def test_reste_eines_abgebrochenen_updates_werden_zurueckgespielt(tmp_path, netz):
-    ziel = tmp_path / "heim" / "Documents" / "Belegabruf"
+    ziel = tmp_path / "heim" / "Applications" / "Belegabruf"
     _alter_stand(ziel)
     netz.release("v2.1.1")
     lauf, ziel = _starten(tmp_path, netz, "v2.1.1")
@@ -355,8 +355,27 @@ def test_installationsort_eine_konstante_je_skript():
 
     sh = SH.read_text(encoding="utf-8")
     ps = PS1.read_text(encoding="utf-8")
-    assert sh.count('INSTALLATIONSORT="$HOME/Documents/Belegabruf"') == 1 and sh.count("Documents/Belegabruf") == 1
-    assert ps.count("'Belegabruf'") == 1 and "$BelegabrufInstallationsort" in ps
+    assert sh.count('INSTALLATIONSORT="$HOME/Applications/Belegabruf"') == 1 and sh.count("$HOME/Applications/Belegabruf") == 1
+    assert ps.count("'Programs\\Belegabruf'") == 1 and "$BelegabrufInstallationsort" in ps
+    assert "GetFolderPath('LocalApplicationData')" in ps and "CreateShortcut" in ps and "'Belegabruf.lnk'" in ps
     assert sh.rstrip().endswith('main "$@"')
     assert "TrimEnd('\\') + '\\'" in ps  # Präfixvergleich mit Trenner
     assert "IndexOf($suche" in ps and not re.search(r"-like\s+\"\*\$ziel", ps)
+
+
+@nur_mac
+def test_programme_ordner_wird_angelegt_und_frueherer_ort_nur_erwaehnt(tmp_path, netz):
+    """N1: Ziel ist ~/Applications/Belegabruf (angelegt, falls es ~/Applications nicht gibt).
+    Eine frühere Installation in ~/Documents/Belegabruf bleibt unangetastet und wird erwähnt."""
+    frueher = tmp_path / "heim" / "Documents" / "Belegabruf"
+    (frueher / "programm").mkdir(parents=True)
+    (frueher / ".belegabruf-version").write_text("v2.1.1\n")
+    (frueher / "Belegabruf Mac.command").write_text("#!/bin/bash\n")
+    vorher = sorted(str(p.relative_to(frueher)) for p in frueher.rglob("*"))
+    netz.release("v2.0.1")
+    lauf, ziel = _starten(tmp_path, netz, "v2.0.1")
+    assert lauf.returncode == 0, lauf.stdout + lauf.stderr
+    assert ziel == tmp_path / "heim" / "Applications" / "Belegabruf" and (ziel / ".belegabruf-version").exists()
+    assert "Spotlight" in lauf.stdout and "Programme" in lauf.stdout
+    assert f"Eine frühere Installation liegt noch in {frueher}" in lauf.stdout
+    assert sorted(str(p.relative_to(frueher)) for p in frueher.rglob("*")) == vorher

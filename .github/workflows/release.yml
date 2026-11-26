@@ -67,9 +67,10 @@ jobs:
 
               irm https://github.com/balazskinal/belegabruf/releases/latest/download/installieren.ps1 | iex
 
-          Das lädt die neueste Version, prüft ihre Prüfsumme, legt sie in den Ordner „Belegabruf“ in deinen
-          Dokumenten und startet sie. Update: dieselbe Zeile noch einmal. Einstellungen und Anmeldungen
-          bleiben erhalten (sie liegen im Datenordner).
+          Das lädt die neueste Version, prüft ihre Prüfsumme, legt sie in den Programme-Ordner deines
+          Benutzerkontos (Mac: ~/Applications/Belegabruf, Windows: %LOCALAPPDATA%\Programs\Belegabruf mit
+          Eintrag im Startmenü) und startet sie. Update: dieselbe Zeile noch einmal. Einstellungen und
+          Anmeldungen bleiben erhalten (sie liegen im Datenordner).
 
           Oder von Hand: `belegabruf.zip` laden, auspacken, „Belegabruf Mac“ bzw. „Belegabruf Windows“
           doppelklicken. Dabei fragt macOS bzw. Windows einmal nach (siehe Doku/README.md).

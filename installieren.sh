@@ -8,7 +8,8 @@
 #   2. das ZIP von github.com/balazskinal/belegabruf laden und seine SHA-256-Prüfsumme prüfen
 #      (aus der Release-Liste von GitHub bzw. der mitveröffentlichten .sha256) — ohne Prüfsumme
 #      oder bei Abweichung bricht es ab,
-#   3. in den Installationsordner (INSTALLATIONSORT unten) auspacken. Bei einem Update werden nur
+#   3. in den Installationsordner (INSTALLATIONSORT unten: ~/Applications/Belegabruf, im Finder
+#      „Programme“ im Benutzerordner — ohne Rückfrage zu „Dokumente“ und ohne iCloud) auspacken. Bei einem Update werden nur
 #      die eigenen Programmdateien ersetzt; was du selbst in den Ordner gelegt hast, bleibt.
 #      Einstellungen, Anmeldungen und Protokolle liegen im Datenordner
 #      (~/Library/Application Support/belegabruf) und werden nicht angefasst,
@@ -23,8 +24,11 @@
 
 set -euo pipefail
 
-# Der Installationsordner — die einzige Stelle dafür.
-INSTALLATIONSORT="$HOME/Documents/Belegabruf"
+# Der Installationsordner — die einzige Stelle dafür. ~/Applications zeigt der Finder als
+# „Programme“ im Benutzerordner; es braucht keinen Zugriff auf „Dokumente“ und liegt nicht in iCloud.
+INSTALLATIONSORT="$HOME/Applications/Belegabruf"
+# Hier lag Belegabruf in frühen Tests von 2.2.0 — wird nie angefasst, nur erwähnt.
+FRUEHERER_ORT="$HOME/Documents/Belegabruf"
 
 REPO="balazskinal/belegabruf"
 API="https://api.github.com/repos/$REPO/releases"
@@ -220,9 +224,14 @@ main() {
   else
     meldung "✓ Belegabruf $tag ist eingerichtet: $ziel"
   fi
-  meldung "  Ab jetzt startest du Belegabruf mit „Belegabruf Mac“ in diesem Ordner."
+  meldung "  Starten künftig: Spotlight (⌘ + Leertaste) „Belegabruf“ — oder im Finder unter"
+  meldung "  Benutzerordner → Programme → Belegabruf → „Belegabruf Mac“."
   meldung "  Hast du Belegabruf bisher aus dem ZIP gestartet (Ordner belegabruf-v…), kannst du den alten"
   meldung "  Ordner löschen. Einstellungen und Anmeldungen liegen im Datenordner und bleiben."
+  if [ "$ziel" != "$FRUEHERER_ORT" ] && ist_belegabruf "$FRUEHERER_ORT"; then
+    meldung "  Eine frühere Installation liegt noch in $FRUEHERER_ORT — die brauchst du nicht mehr"
+    meldung "  und kannst sie löschen (das Skript lässt sie unangetastet)."
+  fi
   meldung "  Update später: dieselbe Zeile noch einmal ins Terminal."
 
   # ── 4. Starten ─────────────────────────────────────────────────────────────

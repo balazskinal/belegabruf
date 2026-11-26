@@ -26,7 +26,7 @@ Anmeldung oder deine Belege. Es gibt keinen Server, kein Konto bei uns, keinen S
 ## Einrichten — mit einer Zeile (empfohlen)
 
 Eine Zeile kopieren, einfügen, Enter. Sie lädt die neueste Version von GitHub, **prüft ihre
-Prüfsumme**, legt sie in den Ordner **„Belegabruf“ in deinen Dokumenten** und startet sie. Dabei
+Prüfsumme**, legt sie in den **Programme-Ordner deines Benutzerkontos** (siehe unten) und startet sie. Dabei
 erscheint **keine Sicherheitsmeldung** (anders als beim ZIP aus dem Browser, siehe unten). Keine
 Administratorrechte nötig; du brauchst eine Internetverbindung.
 
@@ -47,13 +47,19 @@ Administratorrechte nötig; du brauchst eine Internetverbindung.
    irm https://github.com/balazskinal/belegabruf/releases/latest/download/installieren.ps1 | iex
    ```
 
-Danach öffnen sich der Ordner „Belegabruf“ und das Fenster „Belegabruf“. Beim ersten Mal lädt es noch ein
-paar Minuten lang alles Nötige (siehe [Erster Start](#erster-start-einmalig-ca-5-minuten), ab Schritt 4).
-Später reicht ein Doppelklick auf **„Belegabruf Mac“** bzw. **„Belegabruf Windows“** in diesem Ordner.
+Danach öffnet sich das Fenster „Belegabruf“. Beim ersten Mal lädt es noch ein paar Minuten lang alles
+Nötige (siehe [Erster Start](#erster-start-einmalig-ca-5-minuten), ab Schritt 4).
+
+| | wo es liegt | später starten |
+|---|---|---|
+| Mac | `~/Applications/Belegabruf` — im Finder: Benutzerordner → **Programme** → Belegabruf | **Spotlight** (<kbd>⌘</kbd> + <kbd>Leertaste</kbd>) „Belegabruf“, oder im Finder „Belegabruf Mac“ doppelklicken |
+| Windows | `%LOCALAPPDATA%\Programs\Belegabruf` | **Startmenü → „Belegabruf“** (legt die Zeile an), oder „Belegabruf Windows“ im Ordner |
+
+Dieser Ort braucht keine Rückfrage zum Ordner „Dokumente“ und wird nicht über iCloud bzw. OneDrive
+abgeglichen.
 
 **Hast du Belegabruf bisher aus dem ZIP gestartet** (Ordner `belegabruf-v…`), kannst du den alten Ordner
-löschen. Ab jetzt startest du aus dem Ordner „Belegabruf“ in deinen Dokumenten. Einstellungen und
-Anmeldungen bleiben, sie liegen im Datenordner.
+löschen; ab jetzt startest du wie oben. Einstellungen und Anmeldungen bleiben, sie liegen im Datenordner.
 
 **Update:** dieselbe Zeile noch einmal (Belegabruf vorher beenden). Ersetzt werden nur die
 Programmdateien im Ordner „Belegabruf“; Einstellungen, Anmeldungen und Protokolle bleiben, sie liegen im
@@ -390,9 +396,9 @@ Beim Start steht ein Hinweis, wenn es eine neuere Version gibt.
 
 **Mit einer Zeile (empfohlen):** Belegabruf beenden und
 [dieselbe Zeile wie beim Einrichten](#einrichten--mit-einer-zeile-empfohlen) noch einmal ins Terminal bzw. in
-PowerShell — fertig. Wer bisher mit dem ZIP gearbeitet hat: Die Zeile legt den Ordner „Belegabruf“ in den
-Dokumenten neu an; den alten Ordner `belegabruf-v…` kannst du danach löschen (Einstellungen und
-Anmeldungen bleiben).
+PowerShell — fertig. Wer bisher mit dem ZIP gearbeitet hat: Die Zeile legt Belegabruf im Programme-Ordner
+an (siehe [oben](#einrichten--mit-einer-zeile-empfohlen)); den alten Ordner `belegabruf-v…` kannst du danach
+löschen (Einstellungen und Anmeldungen bleiben).
 
 **Von Hand mit dem ZIP:**
 
@@ -414,8 +420,9 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 ## Was neu ist
 
 - **2.2.0** — **Einrichten und Update mit einer Zeile** im Terminal bzw. in PowerShell (siehe ganz oben):
-  lädt die neueste Version, prüft die Prüfsumme, legt sie in „Belegabruf“ in den Dokumenten und startet
-  sie — ohne Sicherheitsmeldung. Der Hinweis „neuere Version“ nennt jetzt diese Zeile. Pfade in Meldungen
+  lädt die neueste Version, prüft die Prüfsumme, legt sie in den Programme-Ordner des Benutzers (Mac
+  `~/Applications/Belegabruf`, Windows `%LOCALAPPDATA%\Programs\Belegabruf` mit Eintrag im Startmenü) und
+  startet sie — ohne Sicherheitsmeldung. Der Hinweis „neuere Version“ nennt jetzt diese Zeile. Pfade in Meldungen
   zeigen den Benutzerordner als `~`.
 - **2.1.1** — **Belege nur vom Anbieter selbst**, für alle Anbieter gleich geprüft (siehe oben): nur
   `https`, kein fremder Port, keine Benutzerangaben, Host genau der des Anbieters — vor dem Aufruf und
