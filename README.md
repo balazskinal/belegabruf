@@ -42,6 +42,21 @@ im Belegordner). Den Belegordner darfst du also jederzeit leeren oder an die Buc
 Steuerberater weiterreichen, ohne dass alles wiederkommt. Gastnamen kommen nirgends vor — weder in
 Dateinamen noch im Protokoll.
 
+**Belege nur vom Anbieter selbst.** Gespeichert wird ein Beleg nur, wenn er von der Adresse des
+Anbieters kommt — über `https`, ohne fremden Port:
+
+| Anbieter | erlaubte Adresse |
+|---|---|
+| Airbnb | `www.airbnb.de` (bzw. die eingestellte Länderadresse) |
+| Skool | `www.skool.com` |
+| Xentra | `app.myxentra.com` und der Download-Speicher des Rechnungsdienstes Chargebee (`cb-prod-eu-c1-downloads.s3.eu-central-1.amazonaws.com`) |
+| Booking.com | `admin.booking.com` |
+
+Zeigt ein Link woanders hin, ruft das Programm ihn nicht auf. Führt eine Weiterleitung woandershin, geht
+die Anfrage zwar raus, **gespeichert wird aber nichts**. Die Zusammenfassung sagt dann „Adresse nicht vom
+Anbieter (…), nicht geholt“ — nur mit dem Namen des fremden Rechners, ohne den Rest der Adresse — und der
+Lauf gilt als „nicht alles geholt“.
+
 5. Ist der **Mailversand** eingeschaltet, geht jede neue Rechnung als eigene Mail mit PDF an die
    eingestellten Adressen (siehe [Versand per Mail](#versand-per-mail)). Die Datei bleibt trotzdem im
    Belegordner.
@@ -173,9 +188,10 @@ eingestellt:
 
 Das Programm **liest nur und lädt herunter**. Angeklickt werden nur der Reiter „Zahlungen von
 Booking.com“, der Jahresfilter und das Zeitraumfeld bei den Auszahlungen — nichts an Preisen,
-Verfügbarkeit oder Einstellungen. Geladen wird nur von `https://admin.booking.com` — ein Link auf eine
-andere Adresse wird nie geholt, auch nicht nach einer Weiterleitung. Der Sitzungsschlüssel des Extranets
-(`ses` in der Adresse) wird nie gespeichert oder ausgegeben.
+Verfügbarkeit oder Einstellungen. Gespeichert wird nur, was von `https://admin.booking.com` kommt (siehe
+„Belege nur vom Anbieter selbst“ oben) — ein Link auf eine andere Adresse wird nicht aufgerufen, und nach
+einer Weiterleitung woandershin wird nichts gespeichert. Der Sitzungsschlüssel des Extranets (`ses` in der
+Adresse) wird nie gespeichert oder ausgegeben.
 
 ## Benutzen
 
@@ -340,6 +356,13 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 
 ## Was neu ist
 
+- **2.1.1** — **Belege nur vom Anbieter selbst**, für alle Anbieter gleich geprüft (siehe oben): nur
+  `https`, kein fremder Port, keine Benutzerangaben, Host genau der des Anbieters — vor dem Aufruf und
+  nach einer Weiterleitung. Abgewiesenes steht in der Zusammenfassung. Kleinigkeiten:
+  - Listen in der Einstellungsdatei (z. B. `unterkunft = ["1234567", "7654321"]` bei Booking.com) bleiben
+    nach dem Speichern im Fenster erhalten; bisher wurden sie zu Text.
+  - Booking.com: Ist während eines Downloads das Netz weg, heißt es „nicht geladen“ statt „Anmeldung
+    abgelaufen“ — abgelaufen nur, wenn wirklich die Anmeldeseite kommt.
 - **2.1.0** — **Booking.com** als neuer Anbieter: Kommissionsrechnungen (werden wie alle Belege abgelegt
   und auf Wunsch verschickt), dazu Auszahlungsübersichten und Auszahlungen als PDF und CSV, nur abgelegt,
   je Art in einem eigenen Ordner (siehe [Booking.com](#bookingcom), ADR-006).

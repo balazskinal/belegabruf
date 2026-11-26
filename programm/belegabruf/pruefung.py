@@ -7,6 +7,8 @@ Ohne diese Prüfung landen Anmeldeseiten, 404-Seiten oder leere Seiten als
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
+from urllib.parse import urlsplit
 
 import pymupdf
 
@@ -56,3 +58,64 @@ def seite_ist_beleg(text: str, pflicht: list[str]) -> str | None:
             return "Anmeldeseite"
         return "erwartete Angaben fehlen"
     return None
+
+
+# ── Adressen: Belege nur vom Anbieter selbst ─────────────────────────────────
+
+
+class FremdeAdresse(Exception):
+    """Eine Belegadresse liegt nicht bei einem erlaubten Host. Die Meldung nennt nur den Host
+    (nie Pfad oder Query — dort stehen Sitzungsschlüssel und befristete Signaturen)."""
+
+    def __init__(self, url: str):
+        self.herkunft = herkunft(url)
+        super().__init__(f"Adresse nicht vom Anbieter ({self.herkunft}), nicht geholt")
+
+
+def host_von(url: str) -> str:
+    """Nur der Hostname einer Adresse, für Meldungen. „?“, wenn keiner zu erkennen ist."""
+    try:
+        return (urlsplit(str(url or "")).hostname or "?")[:80]
+    except ValueError:
+        return "?"
+
+
+def herkunft(url: str) -> str:
+    """Schema, Host und Port einer Adresse für Meldungen („http://admin.booking.com“,
+    „https://andere.example:8443“) — nie Benutzerangaben, Pfad oder Query."""
+    try:
+        teile = urlsplit(str(url or ""))
+        port = f":{teile.port}" if teile.port else ""
+    except ValueError:
+        return "?"
+    return f"{teile.scheme or '?'}://{host_von(url)}{port}"[:100]
+
+
+def adresse_erlaubt(url: str, hosts: Iterable[str], endungen: Iterable[str] = ()) -> bool:
+    """True nur für ``https://<host>/…`` mit ``host`` genau aus ``hosts`` (oder, wenn ein Anbieter
+    wechselnde Unterdomains nutzt, ``<etwas>.<endung>`` mit einer eng gefassten ``endung``).
+
+    Abgelehnt werden: anderes Schema (auch http), Benutzerangaben (``user@host``), ein anderer
+    Port als 443, Hosts mit Zeichen außerhalb von a–z, 0–9, Punkt und Bindestrich (z. B. ein
+    Vollbreiten-„＠“) und alles, was sich nicht sauber lesen lässt."""
+    try:
+        teile = urlsplit(str(url or ""))
+        port = teile.port
+    except ValueError:
+        return False
+    if teile.scheme != "https" or "@" in teile.netloc or "＠" in teile.netloc:
+        return False
+    if teile.username is not None or teile.password is not None or port not in (None, 443):
+        return False
+    host = (teile.hostname or "").lower()
+    if not re.fullmatch(r"[a-z0-9.-]+", host) or host.startswith(".") or host.endswith(".") or ".." in host:
+        return False
+    erlaubt = {h.lower() for h in hosts}
+    return host in erlaubt or any(host.endswith("." + e.lower().lstrip(".")) for e in endungen)
+
+
+def adresse_pruefen(url: str, hosts: Iterable[str], endungen: Iterable[str] = ()) -> str:
+    """Wie ``adresse_erlaubt``, wirft aber ``FremdeAdresse``. Gibt die Adresse zurück."""
+    if not adresse_erlaubt(url, hosts, endungen):
+        raise FremdeAdresse(url)
+    return url

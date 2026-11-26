@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import tomllib
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -368,6 +369,24 @@ def _toml_text(wert: str) -> str:
     return '"' + wert.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+def _toml_schluessel(schluessel: str) -> str:
+    return schluessel if re.fullmatch(r"[A-Za-z0-9_-]+", schluessel) else _toml_text(schluessel)
+
+
+def _toml_wert(wert: object) -> str:
+    """Ein Wert aus der Einstellungsdatei, wieder als TOML: Text, Zahl, ja/nein, Liste, Tabelle.
+    (Früher wurde alles zu Text — eine Liste wie ["1", "2"] kam als "['1', '2']" zurück.)"""
+    if isinstance(wert, bool):
+        return "true" if wert else "false"
+    if isinstance(wert, (int, float)):
+        return repr(wert)
+    if isinstance(wert, list):
+        return "[" + ", ".join(_toml_wert(w) for w in wert) + "]"
+    if isinstance(wert, dict):
+        return "{ " + ", ".join(f"{_toml_schluessel(str(k))} = {_toml_wert(v)}" for k, v in wert.items()) + " }"
+    return _toml_text(str(wert))
+
+
 def als_text(einst: Einstellungen) -> str:
     zeilen = [
         "# Einstellungen für Belegabruf",
@@ -417,7 +436,7 @@ def als_text(einst: Einstellungen) -> str:
         if konto.belege_ab != "alle":
             zeilen.append(f"belege_ab = {_toml_text(konto.belege_ab)}")
         for schluessel, wert in konto.optionen.items():
-            zeilen.append(f"{schluessel} = {_toml_text(str(wert))}")
+            zeilen.append(f"{_toml_schluessel(schluessel)} = {_toml_wert(wert)}")
     m = einst.mail
     zeilen += [
         "",

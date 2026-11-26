@@ -194,6 +194,11 @@ class Airbnb(Quelle):
     def _adresse(self) -> str:
         return str(self.konto.optionen.get("adresse") or ADRESSE).rstrip("/")
 
+    def _hosts(self) -> set[str]:
+        """Erlaubte Hosts für Rechnungsseiten: der Host der eingestellten Adresse (Vorgabe
+        www.airbnb.de). Die Monatsübersichten verlinken ihre Rechnungen genau dorthin."""
+        return {pruefung.host_von(self._adresse())}
+
     # 1. Sitzung prüfen ------------------------------------------------------
     def sitzung_pruefen(self) -> bool:
         with browser.profil_oeffnen(self.profil, sichtbar=False) as kontext:
@@ -401,6 +406,8 @@ class Airbnb(Quelle):
                 erg.status = "abgelaufen"
                 umgebung.melden("Die Anmeldung ist abgelaufen. Der nächste Lauf holt den Rest nach.")
                 break
+            except pruefung.FremdeAdresse as fehler:
+                grund = str(fehler)
             except Exception as fehler:  # noqa: BLE001 - eine Rechnung darf scheitern
                 grund = _kurz(fehler)
             if grund:
@@ -414,9 +421,11 @@ class Airbnb(Quelle):
     def _einzelrechnung(self, seite, zeile: Zeile, umgebung: Umgebung, erg: Ergebnis) -> str | None:
         """Holt eine Einzelrechnung. Gibt None bei Erfolg zurück, sonst den Grund."""
         url = zeile.url if zeile.url.startswith("http") else self._adresse() + zeile.url
+        pruefung.adresse_pruefen(url, self._hosts())  # Link aus dem PDF: nur zu Airbnb selbst
         antwort = _aufrufen(seite, url)
         if _ist_anmeldeseite(seite.url):
             raise SitzungAbgelaufen()
+        pruefung.adresse_pruefen(seite.url, self._hosts())  # auch nach einer Weiterleitung
         if antwort is not None and antwort.status >= 400:
             return f"Fehlerseite {antwort.status}"
         try:

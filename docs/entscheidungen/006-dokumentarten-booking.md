@@ -42,6 +42,10 @@ Buchhaltung schicken.
    anderem Host oder ohne https werden verworfen, und nach einer Weiterleitung wird die Zieladresse erneut
    geprüft. Sonst könnte ein untergeschobener Link als „Rechnung“ abgelegt und verschickt werden
    (Prüfung zu PR #19, M1).
+   **Seit 2.1.1 gilt das für alle Anbieter** über eine gemeinsame Prüfung (`pruefung.adresse_erlaubt`:
+   nur https, kein fremder Port, keine Benutzerangaben, Host genau aus der Liste des Anbieters, vor dem
+   Aufruf und nach einer Weiterleitung). Bei Xentra kommt das PDF von Chargebees S3-Speicher; erlaubt ist
+   genau dieser eine Host, keine Endung wie `amazonaws.com`.
 
 ## Folgen
 

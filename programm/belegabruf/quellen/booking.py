@@ -133,10 +133,13 @@ def sauber(text: str) -> str:
     return RE_ADRESSE.sub("…", str(text or ""))
 
 
+#: Von hier (und nur von hier) lädt die Quelle Dateien.
+HOSTS = {"admin.booking.com"}
+
+
 def ist_eigene_adresse(url: str) -> bool:
-    """Nur https://admin.booking.com — Dateien von anderen Hosts werden nie geladen."""
-    teile = urlsplit(url or "")
-    return teile.scheme == "https" and teile.netloc == "admin.booking.com"
+    """Nur https://admin.booking.com (gemeinsame Prüfung ``pruefung.adresse_erlaubt``)."""
+    return pruefung.adresse_erlaubt(url, HOSTS)
 
 
 def parameter(url: str) -> dict[str, str]:
@@ -404,12 +407,16 @@ class Booking(Quelle):
         with browser.profil_oeffnen(self.profil, sichtbar=False) as kontext:
             return self._startseite(browser.neue_seite(kontext))
 
-    def _noch_angemeldet(self, seite) -> bool:
-        """Prüft in einem eigenen Tab, ob die Sitzung noch gilt (die aktuelle Seite bleibt, wie sie ist)."""
+    def _abgemeldet(self, seite) -> bool:
+        """Prüft in einem eigenen Tab, ob die Sitzung abgelaufen ist (die aktuelle Seite bleibt,
+        wie sie ist). True nur bei einer echten Umleitung auf die Anmeldeseite — ein Netzfehler
+        zählt nicht als Ablauf (dann „nicht geladen“)."""
         probe = seite.context.new_page()
         try:
-            return self._startseite(probe)
-        except Exception:  # noqa: BLE001
+            probe.goto(ADRESSE + "/", wait_until="commit", timeout=60000)
+            probe.wait_for_url(lambda u: ist_extranet(u) or ist_anmeldeseite(u), timeout=30000)
+            return ist_anmeldeseite(probe.url)
+        except Exception:  # noqa: BLE001 - kein Netz o. Ä.: unklar, also nicht „abgelaufen“
             return False
         finally:
             try:
@@ -429,7 +436,10 @@ class Booking(Quelle):
         return self.sitzung_pruefen()
 
     # 3. Belege holen --------------------------------------------------------
-    def _links(self, seite, muster: list[str], warten_ms: int = 20000) -> list[dict]:
+    def _links(self, seite, muster: list[str], warten_ms: int = 20000, erg: Ergebnis | None = None,
+               vorsilbe: str = "") -> list[dict]:
+        """Die Links mit einem der Muster. Links auf andere Hosts werden verworfen und (mit
+        ``erg``) als Abweichung gemeldet — nur mit Host, ohne Pfad und Query."""
         selektor = ", ".join(f'a[href*="{m}"]' for m in muster)
         try:
             seite.wait_for_selector(selektor, timeout=warten_ms)
@@ -438,24 +448,29 @@ class Booking(Quelle):
                 raise SitzungAbgelaufen() from None
             return []
         seite.wait_for_timeout(800)
-        return seite.evaluate(_LINKS_JS, muster)
+        roh = seite.evaluate(_LINKS_JS, muster)
+        fremd = sorted({pruefung.herkunft(e.get("href")) for e in roh if not ist_eigene_adresse(e.get("href", ""))})
+        if erg is not None:
+            for host in fremd:
+                self._abweichung(erg, f"{vorsilbe}Adresse nicht vom Anbieter ({host}), nicht geholt.")
+        return [e for e in roh if ist_eigene_adresse(e.get("href", ""))]
 
     def _laden(self, seite, adresse: str, art: str) -> bytes:
         """Lädt eine Datei mit der Anmeldung der Seite — nur von admin.booking.com, auch nach
         einer Weiterleitung. Prüft Größe und Typ."""
         if not ist_eigene_adresse(adresse):
-            raise DateiFehler("Adresse liegt nicht bei admin.booking.com")
+            raise DateiFehler(str(pruefung.FremdeAdresse(adresse)))
         try:
             antwort = seite.evaluate(_LADEN_JS, [adresse, pruefung.MAX_PDF_BYTES])
         except Exception:  # noqa: BLE001 - z. B. Weiterleitung zur Anmeldung (fremder Host, fetch scheitert)
-            if ist_anmeldeseite(seite.url) or not self._noch_angemeldet(seite):
+            if ist_anmeldeseite(seite.url) or self._abgemeldet(seite):
                 raise SitzungAbgelaufen() from None
             raise DateiFehler("nicht geladen") from None
         ziel = str(antwort.get("ziel") or "")
         if ist_anmeldeseite(ziel) or antwort.get("status") in (401, 403):
             raise SitzungAbgelaufen()
         if antwort.get("status") == -1 or (ziel and not ist_eigene_adresse(ziel)):
-            raise DateiFehler("Weiterleitung auf eine Adresse außerhalb von admin.booking.com")
+            raise DateiFehler(str(pruefung.FremdeAdresse(ziel)))  # nach einer Weiterleitung
         if antwort.get("status") == 413:
             raise DateiFehler(f"größer als {pruefung.MAX_PDF_BYTES // (1024 * 1024)} MB")
         if antwort.get("status") != 200 or not antwort.get("daten"):
@@ -480,7 +495,8 @@ class Booking(Quelle):
     @staticmethod
     def _abweichung(erg: Ergebnis, text: str) -> None:
         erg.status = "unvollstaendig"
-        erg.abweichungen.append(text)
+        if text not in erg.abweichungen:  # z. B. derselbe fremde Host auf jeder Jahresseite
+            erg.abweichungen.append(text)
 
     def belege_holen(self, umgebung: Umgebung) -> Ergebnis:
         erg = Ergebnis(self.name, self.konto.name)
@@ -609,7 +625,7 @@ class Booking(Quelle):
         rechnungen: dict[str, Rechnung] = {}
         for jahr in self._jahre(seite, umgebung, erg, f"{vorsilbe}Rechnungen", vorlauf=1):
             self._seite_oeffnen(seite, RECHNUNGEN_SEITE, hotel, ses, year=str(jahr))
-            for r in rechnungen_aus_links(self._links(seite, [RECHNUNG_LINK])):
+            for r in rechnungen_aus_links(self._links(seite, [RECHNUNG_LINK], erg=erg, vorsilbe=vorsilbe)):
                 rechnungen.setdefault(r.nummer, r)
         liste = [r for r in rechnungen.values() if not umgebung.zu_alt(r.datum)]
         erg.uebersprungen += len(rechnungen) - len(liste)
@@ -663,7 +679,8 @@ class Booking(Quelle):
             except Exception:  # noqa: BLE001
                 self._abweichung(erg, f"{vorsilbe}Auszahlungsübersichten {jahr}: Jahr nicht wählbar.")
                 continue
-            for u in uebersichten_aus_links(self._links(seite, [UEBERSICHT_PDF, UEBERSICHT_CSV])):
+            for u in uebersichten_aus_links(self._links(seite, [UEBERSICHT_PDF, UEBERSICHT_CSV], erg=erg,
+                                                        vorsilbe=vorsilbe)):
                 if u.jahr == jahr:
                     gefunden.setdefault((u.jahr, u.monat), u)
         jetzt = heute()
@@ -723,7 +740,8 @@ class Booking(Quelle):
                     raise SitzungAbgelaufen() from None
                 self._abweichung(erg, f"{vorsilbe}Auszahlungen: Zeitraum nicht wählbar.")
                 continue
-            for a in auszahlungen_aus_links(self._links(seite, [AUSZAHLUNG_PDF, AUSZAHLUNG_CSV])):
+            for a in auszahlungen_aus_links(self._links(seite, [AUSZAHLUNG_PDF, AUSZAHLUNG_CSV], erg=erg,
+                                                        vorsilbe=vorsilbe)):
                 gefunden.setdefault(a.kennung, a)
         liste = []
         for a in sorted(gefunden.values(), key=lambda a: (a.datum or date.min, a.kennung)):
