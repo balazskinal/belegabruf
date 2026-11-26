@@ -508,7 +508,7 @@ def test_fenster_zu_waehrend_abruf_wartet_und_beendet_sauber(monkeypatch, tmp_pa
     assert code == 0 and not _laeuft_noch(server)  # kein verwaister Server
     ausgabe = capsys.readouterr().out
     assert "Warte, bis der laufende Vorgang fertig ist" in ausgabe and "beendet" in ausgabe
-    assert "Doppelklick auf \"Belegabruf\"" in ausgabe  # sagt, wie man es wieder öffnet
+    assert "Doppelklick auf \"Belegabruf Mac\"" in ausgabe  # sagt, wie man es wieder öffnet
 
 
 def test_abgestuerztes_fenster_beendet_sauber(monkeypatch, capsys):
@@ -517,7 +517,7 @@ def test_abgestuerztes_fenster_beendet_sauber(monkeypatch, capsys):
 
     code, server = _starten_mit(monkeypatch, fenster)
     assert code == 1 and not _laeuft_noch(server)
-    assert "Doppelklick auf \"Belegabruf\"" in capsys.readouterr().out
+    assert "Doppelklick auf \"Belegabruf Mac\"" in capsys.readouterr().out
 
 
 def test_eigene_inhalte_warnung_und_sicherung(server, tmp_path):

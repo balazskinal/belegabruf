@@ -196,3 +196,16 @@ def test_belege_ab_sagt_dass_nachgeholtes_verschickt_wird():
     assert "nachgeholten Belege auch verschickt" in info.replace('" + "', "").replace("\n    + \"", "")
     absatz = seite[seite.index("„Belege ab“: ältere Belege"):].split("</p>")[0]
     assert "auch verschickt" in absatz
+
+
+def test_texte_nennen_den_starter_beim_namen(monkeypatch):
+    """Nach dem Umzug heißt der Starter „Belegabruf Mac“ bzw. „Belegabruf Windows“ — so steht
+    es auch in den Hinweisen (wieder öffnen, Browser fehlt, Update)."""
+    monkeypatch.setattr(pfade.sys, "platform", "darwin")
+    assert pfade.starter() == "Belegabruf Mac"
+    monkeypatch.setattr(pfade.sys, "platform", "win32")
+    assert pfade.starter() == "Belegabruf Windows"
+    from importlib import resources
+
+    seite = resources.files("belegabruf.oberflaeche").joinpath("seite.html").read_text(encoding="utf-8")
+    assert "„Belegabruf Mac“ bzw. „Belegabruf Windows“ doppelklicken" in seite

@@ -1,6 +1,6 @@
 """Kommandozeile.
 
-    belege oberflaeche          Bedienseite im Browserfenster (Doppelklick auf „Belegabruf“)
+    belege oberflaeche          Bedienseite im Browserfenster (Doppelklick auf „Belegabruf Mac/Windows“)
     belege start                Menü im Terminal: prüfen, anmelden lassen, holen
     belege einrichten           Fragen beantworten, Einstellungsdatei schreiben
     belege pruefen [--json]     Sind die Konten angemeldet?
@@ -19,7 +19,7 @@ import argparse
 import json
 import sys
 
-from belegabruf import __version__, ablauf, aktualisierung, einrichtung, einstellungen, zustand
+from belegabruf import __version__, ablauf, aktualisierung, einrichtung, einstellungen, pfade, zustand
 from belegabruf.einstellungen import EinstellungsFehler
 
 
@@ -71,7 +71,7 @@ def start() -> int:
         if neuer:
             print(f"\nHinweis: Es gibt eine neuere Version ({neuer}). Herunterladen unter")
             print(f"  {aktualisierung.NEUESTE_SEITE}")
-            print("  (alten Ordner belegabruf-v… löschen, neues ZIP auspacken, \"Belegabruf\" doppelklicken —\n"
+            print(f"  (alten Ordner belegabruf-v… löschen, neues ZIP auspacken, \"{pfade.starter()}\" doppelklicken —\n"
                   "   Einstellungen, Anmeldungen und Protokolle bleiben erhalten.)")
 
         for k in konten:
@@ -267,7 +267,7 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"\nAnmeldung für {anzeige}: Gleich öffnet sich ein Browserfenster.")
                     ok = ablauf.anmelden(k, print)
                     print(f"  {'✓' if ok else '✗'} {anzeige}: {'angemeldet' if ok else 'nicht angemeldet'}")
-            print('\nAb jetzt reicht ein Doppelklick auf "Belegabruf".')
+            print(f'\nAb jetzt reicht ein Doppelklick auf "{pfade.starter()}".')
             return 0
         return {"holen": befehl_holen, "pruefen": befehl_pruefen, "anmelden": befehl_anmelden}[
             args.befehl](args)
@@ -275,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
         if getattr(args, "json", False):
             print(json.dumps({"fehler": str(fehler)}, ensure_ascii=False))
         else:
-            print(f"\n{fehler}\nTipp: \"Belegabruf\" doppelklicken und im Reiter „Einstellungen“ einrichten.")
+            print(f"\n{fehler}\nTipp: \"{pfade.starter()}\" doppelklicken und im Reiter „Einstellungen“ einrichten.")
         return 1
     except KeyboardInterrupt:
         print("\nAbgebrochen.")

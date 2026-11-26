@@ -13,6 +13,11 @@ import sys
 from pathlib import Path
 
 
+def starter() -> str:
+    """Wie der Starter für dieses System heißt (liegt oben im ausgepackten Ordner)."""
+    return "Belegabruf Windows" if sys.platform == "win32" else "Belegabruf Mac"
+
+
 def datenordner() -> Path:
     """Ordner für Einstellungen, Zustand und Browserprofile."""
     ueberschrieben = os.environ.get("BELEGABRUF_DATEN")
