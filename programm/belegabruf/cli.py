@@ -31,17 +31,6 @@ def _konsole_vorbereiten() -> None:
             pass
 
 
-def _exit_code(ergebnisse: list) -> int:
-    status = {e.status for e in ergebnisse}
-    if "fehler" in status:
-        return 1
-    if status & {"anmeldung_noetig", "abgelaufen", "unvollstaendig"}:
-        return 2
-    if any(s["fehler"] or s["offen"] or s["unklar"] for e in ergebnisse for s in e.lieferungen.values()):
-        return 2
-    return 0
-
-
 # ── Start per Doppelklick ────────────────────────────────────────────────────
 
 
@@ -165,26 +154,26 @@ def lauf(einst, konten, nachholen: bool = False) -> int:
             print(f"  ✓ {anzeige}: angemeldet")
         else:
             print(f"  ✗ {anzeige}: Anmeldung nicht erkannt — dieses Konto wird heute ausgelassen.")
-            ausgelassen.add(k.name + "\0" + k.quelle)
+            ausgelassen.add(k.schluessel)
 
     # 3. Abruf unbeaufsichtigt, nacheinander
     if nachholen:
         print("\nFehlende Dateien werden neu geholt (dazu auch alles, was neu ist).")
     print("\nJetzt werden die Belege geholt. Das dauert ein paar Minuten —")
     print("du musst nichts tun und kannst den Rechner nebenbei normal benutzen.")
-    ergebnisse = []
-    for k in konten:
-        if k.name + "\0" + k.quelle in ausgelassen:
-            from belegabruf.quellen.basis import Ergebnis
 
-            ergebnisse.append(Ergebnis(k.quelle, k.name, status="anmeldung_noetig", anzeige=k.anzeige))
-            continue
+    def bereit(k) -> bool:
+        if k.schluessel in ausgelassen:
+            return False
         print(f"\n{k.anzeige}:")
-        ergebnisse.append(ablauf.abrufen(einst, k, lambda t: print("  " + t), nachholen=nachholen))
+        return True
+
+    ergebnisse = ablauf.alle_abrufen(einst, konten, bereit, lambda k: lambda t: print("  " + t),
+                                     nachholen=nachholen)
 
     # 4. Zusammenfassung
     print(ablauf.zusammenfassung(ergebnisse, einst.belegordner))
-    return _exit_code(ergebnisse)
+    return ablauf.exit_code(ergebnisse)
 
 
 # ── Einzelbefehle (auch für Automatisierung) ────────────────────────────────
@@ -202,15 +191,9 @@ def befehl_holen(args) -> int:
     einst, konten = _konten_oder_fehler(args)
     # Bei --json geht der Fortschritt nach stderr, stdout bleibt reines JSON.
     ausgabe = sys.stderr if args.json else sys.stdout
-    ergebnisse = []
-    for k in konten:
-        if ablauf.sitzung_pruefen(k) != "angemeldet":
-            from belegabruf.quellen.basis import Ergebnis
-
-            ergebnisse.append(Ergebnis(k.quelle, k.name, status="anmeldung_noetig", anzeige=k.anzeige))
-            continue
-        ergebnisse.append(ablauf.abrufen(
-            einst, k, lambda t: print(t, file=ausgabe), nachholen=args.fehlende))
+    ergebnisse = ablauf.alle_abrufen(
+        einst, konten, lambda k: ablauf.sitzung_pruefen(k) == "angemeldet",
+        lambda k: lambda t: print(t, file=ausgabe), nachholen=args.fehlende)
     if args.json:
         print(json.dumps(
             {"version": __version__, "belegordner": str(einst.belegordner),
@@ -219,7 +202,7 @@ def befehl_holen(args) -> int:
         ))
     else:
         print(ablauf.zusammenfassung(ergebnisse, einst.belegordner))
-    return _exit_code(ergebnisse)
+    return ablauf.exit_code(ergebnisse)
 
 
 def befehl_pruefen(args) -> int:
@@ -251,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--version", action="version", version=f"belegabruf {__version__}")
     unter = parser.add_subparsers(dest="befehl")
     unter.add_parser("oberflaeche", help="Bedienseite im Browserfenster öffnen")
-    unter.add_parser("start", help="Menü im Terminal (wie 'Fehlersuche/Belegabruf (Terminal)')")
+    unter.add_parser("start", help="Menü im Terminal (wie der Starter in 'Fehlersuche')")
     unter.add_parser("einrichten", help="Einstellungen abfragen und speichern")
     for name, hilfe in (("holen", "unbeaufsichtigt holen"), ("pruefen", "Anmeldungen prüfen"),
                         ("anmelden", "Anmeldefenster öffnen")):

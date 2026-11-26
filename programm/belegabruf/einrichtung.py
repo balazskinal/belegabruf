@@ -174,8 +174,8 @@ def _passwort_eingeben(dienst: str, konto: str) -> bool:
 
 
 def _mail_abfragen(alt: Einstellungen | None) -> tuple[bool, MailEinstellung]:
-    from belegabruf.ziele import mail
-
+    """Fragt nacheinander: Mail ja/nein → Server → Adressen → Passwort-Eintrag → Passwort,
+    dann eine Probe-Anmeldung (ohne Mail)."""
     einst = alt.mail if alt else MailEinstellung()
     vorher_an = bool(alt and alt.mail_an)
     print(
@@ -187,14 +187,31 @@ def _mail_abfragen(alt: Einstellungen | None) -> tuple[bool, MailEinstellung]:
         "  Postfach — dafür fragt es gleich nach dessen Zugangsdaten (Postausgangsserver, Passwort)."
     )
     if not _ja("Per Mail verschicken?", vorher_an):
-        dienst, konto = einst.dienst_und_konto
-        if vorher_an and dienst == "belegabruf" and mail.passwort_vorhanden(dienst, konto):
-            if _ja("  Das Mail-Passwort aus dem Passwortspeicher löschen?", True):
-                mail.passwort_loeschen(dienst, konto)
-                print("  ✓ Gelöscht.")
+        if vorher_an:
+            _passwort_loeschen_anbieten(einst)
         return False, einst
 
     print("\n  Die Angaben findest du bei deinem Mailanbieter unter „SMTP“ oder „Postausgangsserver“.")
+    server, verschluesselung, port = _mailserver_abfragen(einst)
+    benutzer, absender, empfaenger = _adressen_abfragen(einst)
+    neu = MailEinstellung(server=server, port=port, verschluesselung=verschluesselung,
+                          benutzer=benutzer, absender=absender, empfaenger=empfaenger,
+                          passwort_eintrag=_passwort_eintrag_abfragen(einst), erstversand=einst.erstversand)
+    _passwort_und_probe(neu)
+    return True, neu
+
+
+def _passwort_loeschen_anbieten(einst: MailEinstellung) -> None:
+    from belegabruf.ziele import mail
+
+    dienst, konto = einst.dienst_und_konto
+    if dienst == "belegabruf" and mail.passwort_vorhanden(dienst, konto):
+        if _ja("  Das Mail-Passwort aus dem Passwortspeicher löschen?", True):
+            mail.passwort_loeschen(dienst, konto)
+            print("  ✓ Gelöscht.")
+
+
+def _mailserver_abfragen(einst: MailEinstellung) -> tuple[str, str, int]:
     server = ""
     while not server:
         server = _frage("  Postausgangsserver (SMTP), z. B. smtp.example.com", einst.server)
@@ -210,42 +227,50 @@ def _mail_abfragen(alt: Einstellungen | None) -> tuple[bool, MailEinstellung]:
     while True:
         port = _frage("  Port", str(port_vorschlag))
         if port.isdigit():
-            break
+            return server, verschluesselung, int(port)
         print("  Bitte eine Zahl.")
+
+
+def _adressen_abfragen(einst: MailEinstellung) -> tuple[str, str, list[str]]:
+    adresse_ok = einstellungen.mailadresse_ok
     benutzer = ""
     while not benutzer:
         benutzer = _frage("  Benutzername (meist die Mailadresse)", einst.benutzer)
     absender = ""
-    while not einstellungen.mailadresse_ok(absender):
-        absender = _frage("  Absenderadresse", einst.absender or (benutzer if einstellungen.mailadresse_ok(benutzer) else ""))
+    while not adresse_ok(absender):
+        absender = _frage("  Absenderadresse", einst.absender or (benutzer if adresse_ok(benutzer) else ""))
     while True:
         antwort = _frage("  Empfänger (mehrere mit Komma trennen)", ", ".join(einst.empfaenger))
         empfaenger = [a.strip() for a in antwort.split(",") if a.strip()]
-        falsch = [a for a in empfaenger if not einstellungen.mailadresse_ok(a)]
+        falsch = [a for a in empfaenger if not adresse_ok(a)]
         if empfaenger and not falsch:
-            break
+            return benutzer, absender, empfaenger
         print("  Bitte gültige Mailadressen" + (f" (nicht: {', '.join(falsch)})" if falsch else "") + ".")
+
+
+def _passwort_eintrag_abfragen(einst: MailEinstellung) -> str:
     print("\n  Das Passwort liegt im Passwortspeicher deines Rechners (Mac: Schlüsselbund, Windows:\n"
           "  Anmeldeinformationsverwaltung), nie in einer Datei. Unter welchem Eintrag? Enter übernimmt\n"
           "  den Vorschlag.")
     while True:
-        eintrag = _frage("  Eintrag (Dienst/Konto)", einst.passwort_eintrag)
-        dienst, _, konto = eintrag.partition("/")
-        if dienst.strip() and konto.strip():
-            break
+        dienst, konto = einstellungen.dienst_und_konto(_frage("  Eintrag (Dienst/Konto)", einst.passwort_eintrag))
+        if dienst and konto:
+            return f"{dienst}/{konto}"
         print("  Bitte in der Form Dienst/Konto, z. B. belegabruf/mail.")
-    einst = MailEinstellung(server=server, port=int(port), verschluesselung=verschluesselung,
-                            benutzer=benutzer, absender=absender, empfaenger=empfaenger,
-                            passwort_eintrag=f"{dienst.strip()}/{konto.strip()}", erstversand=einst.erstversand)
-    dienst, konto = einst.dienst_und_konto
 
+
+def _passwort_und_probe(einst: MailEinstellung) -> None:
+    """Passwort in den Passwortspeicher (falls nötig), dann Anmeldung am Server prüfen."""
+    from belegabruf.ziele import mail
+
+    dienst, konto = einst.dienst_und_konto
     if mail.passwort_vorhanden(dienst, konto):
         print("  Unter diesem Eintrag liegt schon ein Passwort.")
         if _ja("  Austauschen?", False):
             _passwort_eingeben(dienst, konto)
     elif not _passwort_eingeben(dienst, konto):
         print("  Ohne Passwort wird nichts verschickt. Du kannst es später im Reiter „Einstellungen“ eingeben.")
-        return True, einst
+        return
 
     print("  Prüfe die Anmeldung am Mailserver (es wird keine Mail verschickt) …")
     try:
@@ -256,4 +281,3 @@ def _mail_abfragen(alt: Einstellungen | None) -> tuple[bool, MailEinstellung]:
         print(f"  ✗ {meldung}\n  Bitte die Angaben im Reiter „Einstellungen“ prüfen.")
     else:
         print("  ✓ Anmeldung klappt.")
-    return True, einst

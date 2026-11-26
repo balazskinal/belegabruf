@@ -266,8 +266,9 @@ class Airbnb(Quelle):
         return pfad.read_bytes() if pfad else None
 
     def belege_holen(self, umgebung: Umgebung) -> Ergebnis:
+        """Vier Schritte: Monate auflisten → Monatsübersichten (laden, ablegen, lesen) →
+        neue Einzelrechnungen → Kontrolle, ob die Zahl zu den Übersichten passt."""
         erg = Ergebnis(self.name, self.konto.name)
-        melden = umgebung.melden
         heute = date.today()
         vormonat = (heute.year, heute.month - 1) if heute.month > 1 else (heute.year - 1, 12)
         alle_zeilen: list[Zeile] = []
@@ -281,7 +282,7 @@ class Airbnb(Quelle):
             except SitzungAbgelaufen:
                 erg.status = "abgelaufen"
                 return erg
-            melden(f"{len(monate)} Monate verfügbar.")
+            umgebung.melden(f"{len(monate)} Monate verfügbar.")
 
             # Schritt 1 + 2: Monatsübersichten
             for _, text in monate:
@@ -293,88 +294,22 @@ class Airbnb(Quelle):
                     # Zeitraum: Übersicht nicht laden, nicht vermerken (kommt, wenn er erweitert wird).
                     monate_davor += 1
                     continue
-                kuerzel = f"{jm[0]:04d}-{jm[1]:02d}"
-                schluessel = f"monat:{kuerzel}"
-                lokal = umgebung.vorhandene_datei(schluessel)
-                abgeschlossen = jm < vormonat  # ältere Monate ändern sich nicht mehr
-                if lokal is not None and abgeschlossen:
-                    inhalt = lokal.read_bytes()
-                else:
-                    browser.pause()
-                    try:
-                        try:
-                            inhalt = self._monats_pdf_laden(seite, text)
-                        except SitzungAbgelaufen:
-                            raise
-                        except Exception:  # noqa: BLE001 - einmal in Ruhe wiederholen
-                            browser.pause(5, 10)
-                            inhalt = self._monats_pdf_laden(seite, text)
-                    except SitzungAbgelaufen:
-                        erg.status = "abgelaufen"
-                        break
-                    except Exception as fehler:  # noqa: BLE001 - ein Monat darf scheitern
-                        erg.abweichungen.append(f"{text}: Monatsübersicht nicht geladen ({_kurz(fehler)}).")
-                        erg.status = "unvollstaendig"
-                        continue
-                    if inhalt is None or not pruefung.ist_pdf(inhalt):
-                        erg.abweichungen.append(f"{text}: Monatsübersicht kam nicht an.")
-                        erg.status = "unvollstaendig"
-                        continue
-                    neu = not umgebung.bekannt(schluessel)
-                    umgebung.abliefern(Beleg(
-                        quelle=self.name, konto=self.konto.name, art="kontrolle",
-                        schluessel=schluessel, inhalt=inhalt, jahr=jm[0],
-                        dateiname=f"{kuerzel}_{pfade.kurzname(self.konto.name)}.pdf",
-                    ))
-                    if neu:
-                        erg.kontrolle_neu += 1
                 try:
-                    uebersicht = monats_pdf_lesen(inhalt)
-                except Exception:  # noqa: BLE001
-                    erg.abweichungen.append(f"{text}: Monatsübersicht nicht lesbar.")
+                    inhalt = self._monatsuebersicht(seite, text, jm, jm < vormonat, umgebung, erg)
+                except SitzungAbgelaufen:
+                    erg.status = "abgelaufen"
+                    break
+                if inhalt is None:
                     continue
-                for code in uebersicht.ohne_link:
-                    erg.abweichungen.append(
-                        f"{text}: Rechnung zur Buchung {code} hat in der Monatsübersicht keinen Link "
-                        "(älteres Format) — Airbnb bietet dafür keine Einzelrechnung an. "
-                        "Beleg ist dann die Monatsübersicht im Ordner kontrolle."
-                    )
-                rest = uebersicht.anzahl_zeilen - len(uebersicht.zeilen) - len(uebersicht.ohne_link)
-                if rest:
-                    erg.abweichungen.append(
-                        f"{text}: {uebersicht.anzahl_zeilen} Rechnungszeilen, aber "
-                        f"{len(uebersicht.zeilen)} Links in der Monatsübersicht."
-                    )
-                zu_alt = [z for z in uebersicht.zeilen if umgebung.zu_alt(zeile_datum(z))]
-                erg.uebersprungen += len(zu_alt)
-                melden(f"{text}: {len(uebersicht.zeilen)} Rechnung(en)"
-                       + (f", davon {len(zu_alt)} vor dem Zeitraum" if zu_alt else ""))
-                text_zeilen += uebersicht.anzahl_zeilen - len(zu_alt)
-                alle_zeilen += [z for z in uebersicht.zeilen if z not in zu_alt]
+                zeilen, anzahl = self._zeilen_lesen(text, inhalt, umgebung, erg)
+                alle_zeilen += zeilen
+                text_zeilen += anzahl
 
             # Schritt 3: Einzelrechnungen
             offen = [z for z in alle_zeilen if not umgebung.bekannt(f"rechnung:{z.kennung}")]
             erg.schon_da = len(alle_zeilen) - len(offen)
-            weiter = erg.status != "abgelaufen"
-            if offen and weiter:
-                melden(f"{len(offen)} neue Einzelrechnung(en) werden geholt …")
-            for nr, zeile in enumerate(offen if weiter else [], 1):
-                browser.pause()
-                try:
-                    grund = self._einzelrechnung(seite, zeile, umgebung, erg)
-                except SitzungAbgelaufen:
-                    erg.status = "abgelaufen"
-                    melden("Die Anmeldung ist abgelaufen. Der nächste Lauf holt den Rest nach.")
-                    break
-                except Exception as fehler:  # noqa: BLE001 - eine Rechnung darf scheitern
-                    grund = _kurz(fehler)
-                if grund:
-                    erg.status = "unvollstaendig"
-                    erg.abweichungen.append(
-                        f"Rechnung {zeile.rechnungsnummer or zeile.kennung}: nicht gespeichert ({grund})."
-                    )
-                elif nr % 10 == 0:
-                    melden(f"… {nr} von {len(offen)}")
+            if erg.status != "abgelaufen":
+                self._einzelrechnungen(seite, offen, umgebung, erg)
 
         if monate_davor:
             erg.hinweise.append(f"{monate_davor} Monat(e) vor dem Zeitraum nicht angesehen (Belege ab "
@@ -388,6 +323,93 @@ class Airbnb(Quelle):
             )
         erg.vorhanden = sum(1 for z in alle_zeilen if umgebung.bekannt(f"rechnung:{z.kennung}"))
         return erg
+
+    def _monatsuebersicht(self, seite, text: str, jm: tuple[int, int], abgeschlossen: bool,
+                          umgebung: Umgebung, erg: Ergebnis) -> bytes | None:
+        """Die Monatsübersicht als PDF: abgeschlossene Monate aus dem Belegordner, sonst
+        frisch geladen (ein zweiter Versuch) und abgelegt. None, wenn es nicht klappt —
+        das steht dann in ``erg``. SitzungAbgelaufen geht nach oben."""
+        kuerzel = f"{jm[0]:04d}-{jm[1]:02d}"
+        schluessel = f"monat:{kuerzel}"
+        lokal = umgebung.vorhandene_datei(schluessel)
+        if lokal is not None and abgeschlossen:  # ältere Monate ändern sich nicht mehr
+            return lokal.read_bytes()
+        browser.pause()
+        try:
+            try:
+                inhalt = self._monats_pdf_laden(seite, text)
+            except SitzungAbgelaufen:
+                raise
+            except Exception:  # noqa: BLE001 - einmal in Ruhe wiederholen
+                browser.pause(5, 10)
+                inhalt = self._monats_pdf_laden(seite, text)
+        except SitzungAbgelaufen:
+            raise
+        except Exception as fehler:  # noqa: BLE001 - ein Monat darf scheitern
+            erg.abweichungen.append(f"{text}: Monatsübersicht nicht geladen ({_kurz(fehler)}).")
+            erg.status = "unvollstaendig"
+            return None
+        if inhalt is None or not pruefung.ist_pdf(inhalt):
+            erg.abweichungen.append(f"{text}: Monatsübersicht kam nicht an.")
+            erg.status = "unvollstaendig"
+            return None
+        neu = not umgebung.bekannt(schluessel)
+        umgebung.abliefern(Beleg(
+            quelle=self.name, konto=self.konto.name, art="kontrolle",
+            schluessel=schluessel, inhalt=inhalt, jahr=jm[0],
+            dateiname=f"{kuerzel}_{pfade.kurzname(self.konto.name)}.pdf",
+        ))
+        if neu:
+            erg.kontrolle_neu += 1
+        return inhalt
+
+    @staticmethod
+    def _zeilen_lesen(text: str, inhalt: bytes, umgebung: Umgebung, erg: Ergebnis) -> tuple[list[Zeile], int]:
+        """Liest die Rechnungszeilen einer Monatsübersicht (ohne die vor dem Zeitraum).
+        Gibt die Zeilen mit Link und die Zahl der Textzeilen zurück."""
+        try:
+            uebersicht = monats_pdf_lesen(inhalt)
+        except Exception:  # noqa: BLE001
+            erg.abweichungen.append(f"{text}: Monatsübersicht nicht lesbar.")
+            return [], 0
+        for code in uebersicht.ohne_link:
+            erg.abweichungen.append(
+                f"{text}: Rechnung zur Buchung {code} hat in der Monatsübersicht keinen Link "
+                "(älteres Format) — Airbnb bietet dafür keine Einzelrechnung an. "
+                "Beleg ist dann die Monatsübersicht im Ordner kontrolle."
+            )
+        rest = uebersicht.anzahl_zeilen - len(uebersicht.zeilen) - len(uebersicht.ohne_link)
+        if rest:
+            erg.abweichungen.append(
+                f"{text}: {uebersicht.anzahl_zeilen} Rechnungszeilen, aber "
+                f"{len(uebersicht.zeilen)} Links in der Monatsübersicht."
+            )
+        zu_alt = [z for z in uebersicht.zeilen if umgebung.zu_alt(zeile_datum(z))]
+        erg.uebersprungen += len(zu_alt)
+        umgebung.melden(f"{text}: {len(uebersicht.zeilen)} Rechnung(en)"
+                        + (f", davon {len(zu_alt)} vor dem Zeitraum" if zu_alt else ""))
+        return [z for z in uebersicht.zeilen if z not in zu_alt], uebersicht.anzahl_zeilen - len(zu_alt)
+
+    def _einzelrechnungen(self, seite, offen: list[Zeile], umgebung: Umgebung, erg: Ergebnis) -> None:
+        if offen:
+            umgebung.melden(f"{len(offen)} neue Einzelrechnung(en) werden geholt …")
+        for nr, zeile in enumerate(offen, 1):
+            browser.pause()
+            try:
+                grund = self._einzelrechnung(seite, zeile, umgebung, erg)
+            except SitzungAbgelaufen:
+                erg.status = "abgelaufen"
+                umgebung.melden("Die Anmeldung ist abgelaufen. Der nächste Lauf holt den Rest nach.")
+                break
+            except Exception as fehler:  # noqa: BLE001 - eine Rechnung darf scheitern
+                grund = _kurz(fehler)
+            if grund:
+                erg.status = "unvollstaendig"
+                erg.abweichungen.append(
+                    f"Rechnung {zeile.rechnungsnummer or zeile.kennung}: nicht gespeichert ({grund})."
+                )
+            elif nr % 10 == 0:
+                umgebung.melden(f"… {nr} von {len(offen)}")
 
     def _einzelrechnung(self, seite, zeile: Zeile, umgebung: Umgebung, erg: Ergebnis) -> str | None:
         """Holt eine Einzelrechnung. Gibt None bei Erfolg zurück, sonst den Grund."""

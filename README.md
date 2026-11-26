@@ -98,7 +98,7 @@ Administratorrechte nötig.
      nur für dich und seine eigene Anmeldung. Je Konto wählst du **„Belege ab“**: alle (Vorgabe), letzter
      Monat, letzte 3 oder 12 Monate (jeweils ab dem 1. des Monats) oder ab einem Datum. Ältere Belege
      werden nicht geholt und nicht vermerkt — erweiterst du den Zeitraum später, kommen sie beim nächsten
-     Lauf,
+     Lauf (und werden, wenn der Versand per Mail an ist, auch verschickt),
    - auf Wunsch den **Versand per Mail** (siehe unten),
 
    dann **„Einstellungen speichern“**. Fehlt etwas, steht das direkt am Knopf, und die Felder sind rot

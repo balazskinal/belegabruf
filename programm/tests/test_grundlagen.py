@@ -513,7 +513,7 @@ def test_starter_halbe_einrichtung_wird_weggeraeumt(tmp_path):
 @pytestmark_mac
 def test_starter_holt_uv_wenn_es_fehlt(tmp_path):
     """Ohne uv lädt der Starter es (hier: „curl“ als Attrappe, die ein falsches uv anlegt)."""
-    ordner = _starter_kopie(tmp_path)
+    _starter_kopie(tmp_path)
     log = _falsches_uv(tmp_path)
     versteck = tmp_path / "versteck"
     versteck.mkdir()

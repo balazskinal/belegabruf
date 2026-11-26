@@ -19,7 +19,6 @@ from pathlib import Path
 from belegabruf import __version__, ablauf, aktualisierung, einstellungen, pfade, quellen
 from belegabruf import zustand as merkzettel
 from belegabruf.einstellungen import EinstellungsFehler, Einstellungen, Konto, MailEinstellung
-from belegabruf.quellen.basis import Ergebnis
 from belegabruf.ziele import mail
 
 
@@ -269,29 +268,29 @@ class Steuerung:
             uebernommen = ablauf.uebernahme(einst)
             if uebernommen:
                 a.melden(f"Das Protokoll aus Version 1 ist übernommen ({uebernommen} Einträge).")
-            ergebnisse: list[Ergebnis] = []
-            for k in konten:
-                anzeige = k.anzeige
-                a.melden(f"{anzeige}: prüfe die Anmeldung …")
+
+            def bereit(k: Konto) -> bool:
+                a.melden(f"{k.anzeige}: prüfe die Anmeldung …")
                 status = ablauf.sitzung_pruefen(k)
                 self.anmeldestand_merken(k, status)
                 if status != "angemeldet":
-                    a.melden(f"{anzeige}: nicht angemeldet — bitte im Reiter „Einstellungen“ bei diesem Konto "
+                    a.melden(f"{k.anzeige}: nicht angemeldet — bitte im Reiter „Einstellungen“ bei diesem Konto "
                              "„Anmelden“ wählen.")
-                    ergebnisse.append(Ergebnis(k.quelle, k.name, status="anmeldung_noetig", anzeige=k.anzeige))
-                    continue
+                    return False
                 if nachholen:
-                    a.melden(f"{anzeige}: fehlende Dateien werden neu geholt (dazu alles, was neu ist).")
-                a.melden(f"{anzeige}: hole die Belege — das dauert ein paar Minuten …")
-                ergebnis = ablauf.abrufen(einst, k, lambda t, n=anzeige: a.melden(f"{n}: {t.strip()}"),
-                                          nachholen=nachholen)
+                    a.melden(f"{k.anzeige}: fehlende Dateien werden neu geholt (dazu alles, was neu ist).")
+                a.melden(f"{k.anzeige}: hole die Belege — das dauert ein paar Minuten …")
+                return True
+
+            def melden_fuer(k: Konto):
+                return lambda t: a.melden(f"{k.anzeige}: {t.strip()}")
+
+            ergebnisse = ablauf.alle_abrufen(einst, konten, bereit, melden_fuer, nachholen=nachholen)
+            for k, ergebnis in zip(konten, ergebnisse):
                 if ergebnis.status == "abgelaufen":  # mittendrin abgelaufen
                     self.anmeldestand_merken(k, "abgemeldet")
-                ergebnisse.append(ergebnis)
             a.zusammenfassung = zusammenfassung_als_liste(ablauf.zusammenfassung(ergebnisse, einst.belegordner))
-            from belegabruf.cli import _exit_code
-
-            a.code = _exit_code(ergebnisse)
+            a.code = ablauf.exit_code(ergebnisse)
 
         return self.starten("holen", arbeit)
 

@@ -424,14 +424,12 @@ def test_datei_fehlt_vor_versand(tmp_path, server):
 
 
 def test_exit_code(tmp_path, server):
-    from belegabruf import cli
-
     einst = _einst(tmp_path)
     Falsch.rechnungen = [("a1", "2026-11-03", "AIUC-1")]
     server.verhalten = "anmeldung"
-    assert cli._exit_code([_lauf(einst)]) == 2
+    assert ablauf.exit_code([_lauf(einst)]) == 2
     server.verhalten = "ok"
-    assert cli._exit_code([_lauf(einst)]) == 0
+    assert ablauf.exit_code([_lauf(einst)]) == 0
 
 
 def test_passwort_nie_im_text():
@@ -593,3 +591,29 @@ def test_steuerzeichen_halten_den_versand_nicht_auf(tmp_path, server, monkeypatc
 def test_einzeilig():
     assert mail.einzeilig("a\r\nb\tc\x00d") == "a b c d"
     assert mail.einzeilig(None) == ""
+
+
+def test_zeitraum_erweitert_nachgeholtes_wird_verschickt(tmp_path, server, monkeypatch):
+    """H1: Erweitert man „Belege ab“, kommen die älteren Rechnungen beim nächsten Lauf —
+    und gehen, wenn Mail an ist, auch raus (der erste Lauf liegt da schon hinter dem Konto)."""
+    from dataclasses import replace
+
+    class MitZeitraum(Falsch):
+        def belege_holen(self, umgebung):
+            alle = self.rechnungen
+            self.rechnungen = [r for r in alle if not umgebung.zu_alt(date.fromisoformat(r[1]))]
+            try:
+                return super().belege_holen(umgebung)
+            finally:
+                self.rechnungen = alle
+
+    monkeypatch.setattr(ablauf, "quelle_fuer", lambda konto: MitZeitraum(konto, Path("/gibt-es-nicht")))
+    Falsch.rechnungen = [("a1", "2026-01-10", "AIUC-ALT"), ("a2", "2026-11-03", "AIUC-NEU")]
+    einst = _einst(tmp_path)
+    einst.konten = [replace(einst.konten[0], belege_ab="01.06.2026")]
+    _lauf(einst)
+    assert [m[1] for m in server.mails] == [A] and b"AIUC-NEU" in server.mails[0][2]
+    einst.konten = [replace(einst.konten[0], belege_ab="alle")]
+    erg = _lauf(einst)
+    assert len(server.mails) == 2 and b"AIUC-ALT" in server.mails[1][2]
+    assert _stand(erg)["geliefert"] == 1

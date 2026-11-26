@@ -180,7 +180,8 @@
           Ein Name ist erst nötig, wenn es beim selben Anbieter ein zweites Konto gibt — er ist nur für dich.
           Welche Konten geholt werden, wählst du im Reiter „Belege holen“ mit dem Haken je Konto.
           „Belege ab“: ältere Belege werden nicht geholt und nicht vermerkt — erweiterst du den Zeitraum später,
-          kommen sie beim nächsten Lauf. „Letzter Monat“ heißt ab dem 1. des Vormonats.</p>
+          kommen sie beim nächsten Lauf und werden, wenn der Versand per Mail an ist, auch verschickt.
+          „Letzter Monat“ heißt ab dem 1. des Vormonats.</p>
         <div id="kontenliste"></div>
         <button type="button" id="konto-dazu">Konto hinzufügen</button>
 
@@ -309,7 +310,8 @@ const INFO = {
   holen: "Mit Haken holt „Belege holen“ dieses Konto. Ohne Haken bleibt es eingetragen und angemeldet, "
     + "wird aber übersprungen. Ein Klick speichert die Auswahl.",
   belege_ab: "Ältere Belege werden nicht geholt und nicht vermerkt – erweiterst du den Zeitraum später, kommen sie "
-    + "beim nächsten Lauf. „Letzter Monat“ heißt ab dem 1. des Vormonats.",
+    + "beim nächsten Lauf. Ist der Versand per Mail an, werden diese nachgeholten Belege auch verschickt. "
+    + "„Letzter Monat“ heißt ab dem 1. des Vormonats.",
 };
 let infoNummer = 0;
 

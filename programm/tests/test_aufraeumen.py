@@ -160,3 +160,39 @@ def test_ohne_datum_aus_frueherem_jahr_kein_falscher_monat(tmp_path):
     heute = date.today()
     assert ziel.abliefern(_beleg(None, heute.year)) == (
         tmp_path / "airbnb" / str(heute.year) / f"{heute.month:02d}" / "x.pdf")  # wie bisher
+
+
+# ── eine Abruf-Schleife für Terminal, „belege holen“ und Oberfläche ──────────
+
+
+def test_alle_abrufen_laesst_nicht_angemeldete_aus(monkeypatch):
+    from belegabruf import ablauf
+    from belegabruf.quellen.basis import Ergebnis
+
+    a, b = Konto("airbnb", "a", titel="A"), Konto("airbnb", "b", titel="B")
+    geholt = []
+
+    def abrufen(einst, konto, melden, nachholen=False):
+        geholt.append((konto.name, nachholen))
+        melden("los")
+        return Ergebnis(konto.quelle, konto.name)
+
+    monkeypatch.setattr(ablauf, "abrufen", abrufen)
+    meldungen = []
+    ergebnisse = ablauf.alle_abrufen(_einst(a, b), [a, b], lambda k: k is b,
+                                     lambda k: lambda t: meldungen.append(f"{k.name}: {t}"), nachholen=True)
+    assert [e.status for e in ergebnisse] == ["anmeldung_noetig", "ok"]
+    assert ergebnisse[0].anzeige == "Airbnb (A)"
+    assert geholt == [("b", True)] and meldungen == ["b: los"]
+    assert ablauf.exit_code(ergebnisse) == 2
+
+
+def test_belege_ab_sagt_dass_nachgeholtes_verschickt_wird():
+    """H1: Text und Infobox zu „Belege ab“ nennen den Versand beim Erweitern des Zeitraums."""
+    from importlib import resources
+
+    seite = resources.files("belegabruf.oberflaeche").joinpath("seite.html").read_text(encoding="utf-8")
+    info = seite[seite.index("  belege_ab: "):].split("\n\n")[0]
+    assert "nachgeholten Belege auch verschickt" in info.replace('" + "', "").replace("\n    + \"", "")
+    absatz = seite[seite.index("„Belege ab“: ältere Belege"):].split("</p>")[0]
+    assert "auch verschickt" in absatz
