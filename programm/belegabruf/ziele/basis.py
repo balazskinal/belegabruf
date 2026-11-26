@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Callable
 
 from belegabruf.quellen.basis import Beleg
 
@@ -72,5 +72,5 @@ class Lieferziel(ABC):
         """Schickt eine Rechnung. ``vor_senden`` direkt vor dem Schritt aufrufen, nach
         dem sie angekommen sein könnte. Wirft ``Abgelehnt`` oder ``Unklar``."""
 
-    def schliessen(self) -> None:
+    def schliessen(self) -> None:  # noqa: B027 - bewusst leer: nur Ziele mit Verbindung brauchen es
         """Verbindungen am Ende des Laufs schließen."""

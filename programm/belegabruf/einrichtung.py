@@ -205,10 +205,10 @@ def _passwort_loeschen_anbieten(einst: MailEinstellung) -> None:
     from belegabruf.ziele import mail
 
     dienst, konto = einst.dienst_und_konto
-    if dienst == "belegabruf" and mail.passwort_vorhanden(dienst, konto):
-        if _ja("  Das Mail-Passwort aus dem Passwortspeicher löschen?", True):
-            mail.passwort_loeschen(dienst, konto)
-            print("  ✓ Gelöscht.")
+    if (dienst == "belegabruf" and mail.passwort_vorhanden(dienst, konto)
+            and _ja("  Das Mail-Passwort aus dem Passwortspeicher löschen?", True)):
+        mail.passwort_loeschen(dienst, konto)
+        print("  ✓ Gelöscht.")
 
 
 def _mailserver_abfragen(einst: MailEinstellung) -> tuple[str, str, int]:

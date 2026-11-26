@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
-from typing import Callable
 
 from belegabruf import pfade, quellen, zustand
 from belegabruf import ziele as ziel_verzeichnis
@@ -142,7 +142,8 @@ def liefern(einst: Einstellungen, protokoll: Protokoll, erg: Ergebnis, melden: M
                     ohne_datei.add(schluessel)
                     continue
                 try:
-                    ziel.senden(sendung, lambda: protokoll.als_unklar(schluessel, ziel.name))
+                    # Der Rückruf läuft sofort in senden(), also mit den aktuellen Werten.
+                    ziel.senden(sendung, lambda: protokoll.als_unklar(schluessel, ziel.name))  # noqa: B023
                 except Abgelehnt as fehler:
                     protokoll.als_offen(schluessel, ziel.name)  # sicher nicht angekommen
                     stand["fehler"] = f"Rechnung {sendung.rechnungsnummer}: {fehler}"

@@ -427,9 +427,8 @@ def test_abgebrochener_download_mit_laenge(lokal):
         v.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % len(pdf)
                   + pdf[: int(len(pdf) * 0.9)])  # dann Verbindung zu
 
-    with _lokaler_server(antworten) as adresse:
-        with pytest.raises(xentra.DownloadUnvollstaendig) as info:
-            xentra.pdf_herunterladen(adresse)
+    with _lokaler_server(antworten) as adresse, pytest.raises(xentra.DownloadUnvollstaendig) as info:
+        xentra.pdf_herunterladen(adresse)
     assert "abgebrochen" in str(info.value) and "geheim" not in str(info.value)
 
 
@@ -441,9 +440,8 @@ def test_abgebrochener_download_chunked(lokal):
         v.sendall(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
                   + b"%x\r\n" % len(pdf) + teil)  # Stück kündigt mehr an, als kommt
 
-    with _lokaler_server(antworten) as adresse:
-        with pytest.raises(xentra.DownloadUnvollstaendig):
-            xentra.pdf_herunterladen(adresse)
+    with _lokaler_server(antworten) as adresse, pytest.raises(xentra.DownloadUnvollstaendig):
+        xentra.pdf_herunterladen(adresse)
 
 
 def test_troepfelnder_server_gesamtfrist(lokal, monkeypatch):

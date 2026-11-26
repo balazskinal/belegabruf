@@ -11,9 +11,9 @@ import random
 import sys
 import threading
 import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Iterator
 
 from playwright.sync_api import BrowserContext, Page, sync_playwright
 

@@ -6,8 +6,8 @@ Aufbau (Einstellung ``ablage``):
     <Belegordner>/<quelle>/kontrolle/<Dateiname>.pdf    Übersichten zur Kontrolle (immer hier)
 
 Maßgeblich für Jahr und Monat ist das Rechnungsdatum. Fehlt es, gilt das Jahr des Belegs;
-der Monatsordner ist dann der heutige, wenn es das laufende Jahr ist, sonst gibt es keinen. Ob ein Beleg schon geholt ist,
-entscheidet allein das Protokoll (Schlüssel), nicht der Pfad: Wer die Ablage umstellt,
+der Monatsordner ist dann der heutige, wenn es das laufende Jahr ist, sonst gibt es keinen.
+Ob ein Beleg schon geholt ist, entscheidet allein das Protokoll (Schlüssel), nicht der Pfad: Wer die Ablage umstellt,
 bekommt nichts doppelt, und bereits abgelegte Belege bleiben, wo sie sind.
 """
 

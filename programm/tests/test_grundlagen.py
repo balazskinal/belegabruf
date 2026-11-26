@@ -8,10 +8,9 @@ from pathlib import Path
 import pymupdf
 import pytest
 
-from belegabruf import aktualisierung, einstellungen, pfade, pruefung, zustand
-from belegabruf.einstellungen import Einstellungen, Konto
-from belegabruf import ablauf, quellen
+from belegabruf import ablauf, aktualisierung, einstellungen, pfade, pruefung, quellen, zustand
 from belegabruf import protokoll as protokoll_modul
+from belegabruf.einstellungen import Einstellungen, Konto
 from belegabruf.protokoll import Protokoll
 from belegabruf.quellen import airbnb
 from belegabruf.quellen.basis import Beleg, Ergebnis, Quelle

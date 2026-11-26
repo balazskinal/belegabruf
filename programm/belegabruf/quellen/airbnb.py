@@ -17,9 +17,9 @@ Ablauf:
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Callable
 
 import pymupdf
 
@@ -64,7 +64,7 @@ def _aufrufen(seite, url: str):
     return None
 
 
-def zeile_datum(zeile: "Zeile") -> date | None:
+def zeile_datum(zeile: Zeile) -> date | None:
     try:
         return date.fromisoformat(zeile.datum)
     except ValueError:

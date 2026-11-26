@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import re
 import threading
-from datetime import date, datetime, timedelta
 from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from belegabruf import __version__, ablauf, aktualisierung, einstellungen, pfade, quellen
 from belegabruf import zustand as merkzettel
-from belegabruf.einstellungen import EinstellungsFehler, Einstellungen, Konto, MailEinstellung
+from belegabruf.einstellungen import Einstellungen, EinstellungsFehler, Konto, MailEinstellung
 from belegabruf.ziele import mail
 
 
@@ -104,7 +104,8 @@ class Steuerung:
             try:
                 arbeit(auftrag)
             except Exception as fehler:  # noqa: BLE001 - nie abstürzen, immer melden
-                auftrag.melden(f"Fehler: {type(fehler).__name__}: {str(fehler).splitlines()[0][:200] if str(fehler) else ''}")
+                erste_zeile = str(fehler).splitlines()[0][:200] if str(fehler) else ""
+                auftrag.melden(f"Fehler: {type(fehler).__name__}: {erste_zeile}")
                 auftrag.code = 1
             finally:
                 auftrag.laeuft = False
@@ -286,7 +287,7 @@ class Steuerung:
                 return lambda t: a.melden(f"{k.anzeige}: {t.strip()}")
 
             ergebnisse = ablauf.alle_abrufen(einst, konten, bereit, melden_fuer, nachholen=nachholen)
-            for k, ergebnis in zip(konten, ergebnisse):
+            for k, ergebnis in zip(konten, ergebnisse, strict=True):
                 if ergebnis.status == "abgelaufen":  # mittendrin abgelaufen
                     self.anmeldestand_merken(k, "abgemeldet")
             a.zusammenfassung = zusammenfassung_als_liste(ablauf.zusammenfassung(ergebnisse, einst.belegordner))
