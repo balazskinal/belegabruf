@@ -5,7 +5,8 @@ Aufbau (Einstellung ``ablage``):
     <Belegordner>/<quelle>/<JJJJ>/<MM>/<Dateiname>.pdf  die Rechnungen, ablage = "monat"
     <Belegordner>/<quelle>/kontrolle/<Dateiname>.pdf    Übersichten zur Kontrolle (immer hier)
 
-Maßgeblich für Jahr und Monat ist das Rechnungsdatum. Ob ein Beleg schon geholt ist,
+Maßgeblich für Jahr und Monat ist das Rechnungsdatum. Fehlt es, gilt das Jahr des Belegs;
+der Monatsordner ist dann der heutige, wenn es das laufende Jahr ist, sonst gibt es keinen. Ob ein Beleg schon geholt ist,
 entscheidet allein das Protokoll (Schlüssel), nicht der Pfad: Wer die Ablage umstellt,
 bekommt nichts doppelt, und bereits abgelegte Belege bleiben, wo sie sind.
 """
@@ -13,9 +14,8 @@ bekommt nichts doppelt, und bereits abgelegte Belege bleiben, wo sie sind.
 from __future__ import annotations
 
 import os
-from pathlib import Path
-
 from datetime import date
+from pathlib import Path
 
 from belegabruf.quellen.basis import Beleg
 from belegabruf.ziele.basis import Ziel
@@ -30,7 +30,10 @@ class Ordner(Ziel):
             return self.belegordner / beleg_quelle / "kontrolle" / dateiname
         ordner = self.belegordner / beleg_quelle / str(jahr)
         if self.ablage == "monat":
-            ordner = ordner / f"{monat or date.today().month:02d}"
+            if monat is None and jahr == date.today().year:
+                monat = date.today().month  # ohne Datum: die Quellen meinen dann „jetzt“
+            if monat is not None:  # ohne Datum aus einem früheren Jahr: kein geratener Monat
+                ordner = ordner / f"{monat:02d}"
         return ordner / dateiname
 
     def abliefern(self, beleg: Beleg) -> Path:

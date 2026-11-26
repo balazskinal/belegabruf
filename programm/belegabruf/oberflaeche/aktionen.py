@@ -74,7 +74,7 @@ class Steuerung:
 
     def anmeldestand_merken(self, k: Konto, status: str) -> None:
         """Ergebnis einer Prüfung bzw. Anmeldung: „angemeldet“, „abgemeldet“ oder ein Fehlertext."""
-        schluessel = f"{k.quelle}/{k.name}"
+        schluessel = k.schluessel
         if status == "angemeldet":
             merkzettel.angemeldet_merken(k.quelle, k.name)
             self.kontozustand[schluessel] = "angemeldet"
@@ -85,7 +85,7 @@ class Steuerung:
         self.geprueft[schluessel] = datetime.now()
 
     def anmeldestand(self, k: Konto) -> str:
-        schluessel = f"{k.quelle}/{k.name}"
+        schluessel = k.schluessel
         if schluessel in self.kontozustand:
             return self.kontozustand[schluessel]
         bekannt = merkzettel.je_angemeldet(k.quelle, k.name) or pfade.profilordner(k.quelle, k.name).exists()
@@ -133,7 +133,7 @@ class Steuerung:
             eingerichtet = False
         konten = []
         for k in einst.konten:
-            schluessel = f"{k.quelle}/{k.name}"
+            schluessel = k.schluessel
             geprueft = self.geprueft.get(schluessel)
             try:
                 fehlen = ablauf.fehlende_dateien(einst, k) if eingerichtet else 0
@@ -364,11 +364,6 @@ def _text(wert, feld: str, hoechstens: int = 200, pflicht: bool = False) -> str:
     return wert
 
 
-def _adresse_ok(adresse: str) -> bool:
-    name, at, domain = adresse.partition("@")
-    return bool(name and at and domain and " " not in adresse and "," not in adresse)
-
-
 class _Sammler:
     """Sammelt alle Feldfehler, damit die Seite alle auf einmal markieren kann."""
 
@@ -396,140 +391,22 @@ def einstellungen_aus_eingaben(daten: dict) -> Einstellungen:
     das betroffene Feld (``Eingabefehler.felder``)."""
     if not isinstance(daten, dict):
         raise Eingabefehler("Ungültige Eingabe.")
-    sammler = _Sammler()
-    ordner_text = sammler.text("belegordner", daten.get("belegordner"), "Belegordner", 1000)
-    ordner = Path(ordner_text).expanduser() if ordner_text else None
-    if ordner is None:
-        sammler.feld("belegordner", "Bitte den Belegordner angeben.")
-    elif not ordner.is_absolute():
-        sammler.feld("belegordner", "Belegordner: bitte einen vollständigen Pfad angeben (z. B. /Users/… bzw. C:\\…).")
-    elif ordner.exists() and not ordner.is_dir():
-        sammler.feld("belegordner", "Belegordner: an dieser Stelle liegt eine Datei, kein Ordner.")
-
     try:
         alt = einstellungen.laden()
     except EinstellungsFehler:
         alt = None
-    alte = {(k.quelle, k.name): k for k in (alt.konten if alt else [])}
-
-    konten: list[Konto] = []
-    roh_konten = daten.get("konten") or []
-    if not isinstance(roh_konten, list) or len(roh_konten) > 50:
-        raise Eingabefehler("Konten: ungültige Eingabe.")
-    zeilen: list[tuple[int, Konto]] = []
-    for nr, eintrag in enumerate(roh_konten):
-        if not isinstance(eintrag, dict):
-            raise Eingabefehler("Konten: ungültige Eingabe.")
-        quelle = sammler.text(f"konto-{nr}-quelle", eintrag.get("quelle"), "Anbieter", 40).lower()
-        if quelle not in quellen.QUELLEN:
-            sammler.feld(f"konto-{nr}-quelle", f"Anbieter „{quelle}“ gibt es nicht." if quelle
-                         else "Bitte einen Anbieter wählen.")
-            continue
-        titel = sammler.text(f"konto-{nr}-name", eintrag.get("name"), "Kontoname", 60)
-        # Ein schon eingetragenes Konto behält seine Kennung (Anmeldung, Protokoll), auch
-        # wenn es umbenannt wird. Eine Kennung, die es nicht gibt, wird nicht übernommen.
-        kennung = eintrag.get("kennung")
-        if not (isinstance(kennung, str) and (quelle, kennung) in alte):
-            kennung = einstellungen.kennung_fuer(titel)
-        # Ob ein Konto geholt wird, steuert der Haken im Reiter „Belege holen“ (sofort
-        # gespeichert). Das Formular ändert das nicht: bisherige Konten behalten ihren Stand.
-        if (quelle, kennung) in alte:
-            aktiv = alte[(quelle, kennung)].aktiv
-        else:
-            aktiv = eintrag.get("aktiv") is not False
-        try:
-            belege_ab = einstellungen.zeitraum_normal(eintrag.get("belege_ab"))
-        except EinstellungsFehler:
-            sammler.feld(f"konto-{nr}-ab", "Belege ab: bitte ein Datum als TT.MM.JJJJ, z. B. 01.01.2026.")
-            belege_ab = "alle"
-        ab = einstellungen.ab_datum(belege_ab)
-        if ab is not None and ab > date.today():
-            sammler.feld(f"konto-{nr}-ab", "Belege ab: Das Datum liegt in der Zukunft — dann würde nichts geholt.")
-        zeilen.append((nr, Konto(quelle=quelle, name=kennung, aktiv=aktiv, belege_ab=belege_ab,
-                                 optionen=dict(alte[(quelle, kennung)].optionen) if (quelle, kennung) in alte else {},
-                                 titel=titel)))
-    # Namen je Anbieter: bei mehreren Konten Pflicht, nicht zum Verwechseln ähnlich.
-    for nr, k in zeilen:
-        gleiche = [(n, a) for n, a in zeilen if a.quelle == k.quelle]
-        anbieter = quellen.anzeigename(k.quelle)
-        if len(gleiche) > 1 and not k.anzeigetitel:
-            sammler.feld(f"konto-{nr}-name", f"Bei mehreren {anbieter}-Konten braucht jedes einen Namen.")
-            continue
-        for n, a in gleiche:
-            if n >= nr:
-                continue
-            gleich_kennung = pfade.kurzname(a.name) == pfade.kurzname(k.name)
-            if gleich_kennung or (k.anzeigetitel and pfade.kurzname(a.anzeigetitel) == pfade.kurzname(k.anzeigetitel)):
-                kurz = pfade.kurzname(k.name if gleich_kennung else k.anzeigetitel)
-                sammler.feld(f"konto-{nr}-name", einstellungen.kollision_text(anbieter, a, k, kurz))
-                break
-    konten = [k for _, k in zeilen]
-
+    sammler = _Sammler()
+    ordner = _belegordner_lesen(sammler, daten.get("belegordner"))
+    konten = _konten_lesen(sammler, daten.get("konten"), alt)
     mail_an = daten.get("mail_an") is True
     roh_mail = daten.get("mail") or {}
     if not isinstance(roh_mail, dict):
         raise Eingabefehler("Mail: ungültige Eingabe.")
-    port_roh = roh_mail.get("port")
-    port = 465
-    if port_roh is None or port_roh == "":
-        if mail_an:
-            sammler.feld("port", "Port: bitte ausfüllen (SSL meist 465, STARTTLS meist 587).")
-    elif isinstance(port_roh, bool) or not (isinstance(port_roh, int) or
-                                            (isinstance(port_roh, str) and port_roh.strip().isdigit())):
-        sammler.feld("port", "Port: bitte eine Zahl zwischen 1 und 65535.")
-    elif not 1 <= int(port_roh) <= 65535:
-        sammler.feld("port", "Port: bitte eine Zahl zwischen 1 und 65535.")
-    else:
-        port = int(port_roh)
-    verschluesselung = sammler.text("verschluesselung", roh_mail.get("verschluesselung") or "ssl",
-                                    "Verschlüsselung", 10).lower()
-    if verschluesselung not in {"ssl", "starttls"}:
-        sammler.feld("verschluesselung", "Verschlüsselung: nur SSL oder STARTTLS — ohne gibt es keinen Versand.")
-        verschluesselung = "ssl"
-    empfaenger_roh = roh_mail.get("empfaenger") or []
-    if isinstance(empfaenger_roh, str):
-        empfaenger_roh = empfaenger_roh.split(",")
-    if not isinstance(empfaenger_roh, list) or len(empfaenger_roh) > 20:
-        raise Eingabefehler("Empfänger: ungültige Eingabe.")
-    empfaenger = [e for e in (sammler.text("empfaenger", e, "Empfänger", 254) for e in empfaenger_roh) if e]
-    server = sammler.text("server", roh_mail.get("server"), "Postausgangsserver", 253)
-    benutzer = sammler.text("benutzer", roh_mail.get("benutzer"), "Benutzername", 254)
-    absender = sammler.text("absender", roh_mail.get("absender"), "Absender", 254)
-    if server and not _SERVERNAME.fullmatch(server):
-        sammler.feld("server", "Postausgangsserver: bitte nur den Namen, z. B. smtp.example.com.")
-    if absender and not _adresse_ok(absender):
-        sammler.feld("absender", f"Absender: „{absender}“ ist keine Mailadresse.")
-    falsch = [e for e in empfaenger if not _adresse_ok(e)]
-    if falsch:
-        sammler.feld("empfaenger", f"Empfänger: „{falsch[0]}“ ist keine Mailadresse.")
-    if mail_an:
-        for name, wert, satz in (
-            ("server", server, "Postausgangsserver: bitte ausfüllen, z. B. smtp.example.com."),
-            ("benutzer", benutzer, "Benutzername: bitte ausfüllen (meist die Mailadresse)."),
-            ("absender", absender, "Absender: bitte ausfüllen."),
-            ("empfaenger", empfaenger, "Empfänger: bitte mindestens eine Adresse."),
-        ):
-            if not wert:
-                sammler.feld(name, satz)
-    ablage = daten.get("ablage")
-    if ablage is None or ablage == "":
-        ablage = alt.ablage if alt else "jahr"
-    if ablage not in einstellungen.ABLAGEN:
-        sammler.feld("ablage", "Unterordner: bitte „nach Jahr“ oder „nach Jahr und Monat“ wählen.")
-    erstversand = roh_mail.get("erstversand")
-    if erstversand is None or erstversand == "":
-        erstversand = (alt.mail.erstversand if alt else "nicht")
-    if erstversand not in einstellungen.ERSTVERSAND:
-        sammler.feld("erstversand", "Bitte „nicht verschicken“ oder „auch verschicken“ wählen.")
-        erstversand = "nicht"
+    m = _mail_lesen(sammler, roh_mail, mail_an, alt.mail if alt else MailEinstellung())
+    ablage = _auswahl(sammler, "ablage", daten.get("ablage"), alt.ablage if alt else "jahr",
+                      einstellungen.ABLAGEN, "Unterordner: bitte „nach Jahr“ oder „nach Jahr und Monat“ wählen.")
     sammler.pruefen()
 
-    alte_mail = alt.mail if alt else MailEinstellung()
-    m = MailEinstellung(
-        server=server, port=port, verschluesselung=verschluesselung,
-        benutzer=benutzer, absender=absender, empfaenger=empfaenger,
-        passwort_eintrag=alte_mail.passwort_eintrag, erstversand=erstversand,
-    )
     neu = Einstellungen(
         belegordner=ordner, konten=konten,
         ziele=["ordner", "mail"] if mail_an else ["ordner"],
@@ -541,6 +418,134 @@ def einstellungen_aus_eingaben(daten: dict) -> Einstellungen:
         return einstellungen.pruefen(neu)
     except EinstellungsFehler as fehler:
         raise Eingabefehler(str(fehler).replace("[mail] ", "Mail: ")) from None
+
+
+def _auswahl(sammler: _Sammler, feld: str, wert, bisher: str, erlaubt: tuple[str, ...], satz: str) -> str:
+    """Ein Auswahlfeld: leer = bisheriger Wert; sonst nur einer der erlaubten Werte."""
+    if wert is None or wert == "":
+        wert = bisher
+    if wert not in erlaubt:
+        sammler.feld(feld, satz)
+        return erlaubt[0]
+    return wert
+
+
+def _belegordner_lesen(sammler: _Sammler, wert) -> Path | None:
+    text = sammler.text("belegordner", wert, "Belegordner", 1000)
+    ordner = Path(text).expanduser() if text else None
+    if ordner is None:
+        sammler.feld("belegordner", "Bitte den Belegordner angeben.")
+    elif not ordner.is_absolute():
+        sammler.feld("belegordner", "Belegordner: bitte einen vollständigen Pfad angeben (z. B. /Users/… bzw. C:\\…).")
+    elif ordner.exists() and not ordner.is_dir():
+        sammler.feld("belegordner", "Belegordner: an dieser Stelle liegt eine Datei, kein Ordner.")
+    return ordner
+
+
+def _konten_lesen(sammler: _Sammler, roh_konten, alt: Einstellungen | None) -> list[Konto]:
+    """Die Kontozeilen; Feldfehler heißen konto-<Zeile>-quelle/-name/-ab."""
+    alte = {(k.quelle, k.name): k for k in (alt.konten if alt else [])}
+    roh_konten = roh_konten or []
+    if not isinstance(roh_konten, list) or len(roh_konten) > 50:
+        raise Eingabefehler("Konten: ungültige Eingabe.")
+    zeilen: list[int] = []
+    konten: list[Konto] = []
+    for nr, eintrag in enumerate(roh_konten):
+        if not isinstance(eintrag, dict):
+            raise Eingabefehler("Konten: ungültige Eingabe.")
+        konto = _konto_lesen(sammler, nr, eintrag, alte)
+        if konto is not None:
+            zeilen.append(nr)
+            konten.append(konto)
+    # Namen je Anbieter: dieselben Regeln wie beim Laden der Datei, hier mit Feldbezug.
+    for index, satz in einstellungen.kontonamen_fehler(konten):
+        sammler.feld(f"konto-{zeilen[index]}-name", satz)
+    return konten
+
+
+def _konto_lesen(sammler: _Sammler, nr: int, eintrag: dict, alte: dict) -> Konto | None:
+    quelle = sammler.text(f"konto-{nr}-quelle", eintrag.get("quelle"), "Anbieter", 40).lower()
+    if quelle not in quellen.QUELLEN:
+        sammler.feld(f"konto-{nr}-quelle", f"Anbieter „{quelle}“ gibt es nicht." if quelle
+                     else "Bitte einen Anbieter wählen.")
+        return None
+    titel = sammler.text(f"konto-{nr}-name", eintrag.get("name"), "Kontoname", 60)
+    # Ein schon eingetragenes Konto behält seine Kennung (Anmeldung, Protokoll), auch
+    # wenn es umbenannt wird. Eine Kennung, die es nicht gibt, wird nicht übernommen.
+    kennung = eintrag.get("kennung")
+    if not (isinstance(kennung, str) and (quelle, kennung) in alte):
+        kennung = einstellungen.kennung_fuer(titel)
+    bisher = alte.get((quelle, kennung))
+    try:
+        belege_ab = einstellungen.zeitraum_normal(eintrag.get("belege_ab"))
+    except EinstellungsFehler:
+        sammler.feld(f"konto-{nr}-ab", "Belege ab: bitte ein Datum als TT.MM.JJJJ, z. B. 01.01.2026.")
+        belege_ab = "alle"
+    ab = einstellungen.ab_datum(belege_ab)
+    if ab is not None and ab > date.today():
+        sammler.feld(f"konto-{nr}-ab", "Belege ab: Das Datum liegt in der Zukunft — dann würde nichts geholt.")
+    # Ob ein Konto geholt wird, steuert der Haken im Reiter „Belege holen“ (sofort
+    # gespeichert). Das Formular ändert das nicht: bisherige Konten behalten ihren Stand.
+    return Konto(quelle=quelle, name=kennung, titel=titel, belege_ab=belege_ab,
+                 aktiv=bisher.aktiv if bisher else eintrag.get("aktiv") is not False,
+                 optionen=dict(bisher.optionen) if bisher else {})
+
+
+def _port_lesen(sammler: _Sammler, port_roh, mail_an: bool) -> int:
+    if port_roh is None or port_roh == "":
+        if mail_an:
+            sammler.feld("port", "Port: bitte ausfüllen (SSL meist 465, STARTTLS meist 587).")
+        return 465
+    zahl = isinstance(port_roh, int) or (isinstance(port_roh, str) and port_roh.strip().isdigit())
+    if isinstance(port_roh, bool) or not zahl or not 1 <= int(port_roh) <= 65535:
+        sammler.feld("port", "Port: bitte eine Zahl zwischen 1 und 65535.")
+        return 465
+    return int(port_roh)
+
+
+def _empfaenger_lesen(sammler: _Sammler, roh) -> list[str]:
+    roh = roh or []
+    if isinstance(roh, str):
+        roh = roh.split(",")
+    if not isinstance(roh, list) or len(roh) > 20:
+        raise Eingabefehler("Empfänger: ungültige Eingabe.")
+    empfaenger = [e for e in (sammler.text("empfaenger", e, "Empfänger", 254) for e in roh) if e]
+    falsch = [e for e in empfaenger if not einstellungen.mailadresse_ok(e)]
+    if falsch:
+        sammler.feld("empfaenger", f"Empfänger: „{falsch[0]}“ ist keine Mailadresse.")
+    return empfaenger
+
+
+def _mail_lesen(sammler: _Sammler, roh: dict, mail_an: bool, bisher: MailEinstellung) -> MailEinstellung:
+    port = _port_lesen(sammler, roh.get("port"), mail_an)
+    verschluesselung = sammler.text("verschluesselung", roh.get("verschluesselung") or "ssl",
+                                    "Verschlüsselung", 10).lower()
+    verschluesselung = _auswahl(sammler, "verschluesselung", verschluesselung, "ssl", ("ssl", "starttls"),
+                                "Verschlüsselung: nur SSL oder STARTTLS — ohne gibt es keinen Versand.")
+    empfaenger = _empfaenger_lesen(sammler, roh.get("empfaenger"))
+    server = sammler.text("server", roh.get("server"), "Postausgangsserver", 253)
+    benutzer = sammler.text("benutzer", roh.get("benutzer"), "Benutzername", 254)
+    absender = sammler.text("absender", roh.get("absender"), "Absender", 254)
+    if server and not _SERVERNAME.fullmatch(server):
+        sammler.feld("server", "Postausgangsserver: bitte nur den Namen, z. B. smtp.example.com.")
+    if absender and not einstellungen.mailadresse_ok(absender):
+        sammler.feld("absender", f"Absender: „{absender}“ ist keine Mailadresse.")
+    if mail_an:
+        for name, wert, satz in (
+            ("server", server, "Postausgangsserver: bitte ausfüllen, z. B. smtp.example.com."),
+            ("benutzer", benutzer, "Benutzername: bitte ausfüllen (meist die Mailadresse)."),
+            ("absender", absender, "Absender: bitte ausfüllen."),
+            ("empfaenger", empfaenger, "Empfänger: bitte mindestens eine Adresse."),
+        ):
+            if not wert:
+                sammler.feld(name, satz)
+    erstversand = _auswahl(sammler, "erstversand", roh.get("erstversand"), bisher.erstversand,
+                           einstellungen.ERSTVERSAND, "Bitte „nicht verschicken“ oder „auch verschicken“ wählen.")
+    return MailEinstellung(
+        server=server, port=port, verschluesselung=verschluesselung,
+        benutzer=benutzer, absender=absender, empfaenger=empfaenger,
+        passwort_eintrag=bisher.passwort_eintrag, erstversand=erstversand,
+    )
 
 
 def zusammenfassung_als_liste(text: str) -> list[dict]:

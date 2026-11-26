@@ -152,11 +152,6 @@ def einrichten() -> Einstellungen:
 # ── Mail ─────────────────────────────────────────────────────────────────────
 
 
-def _adresse_ok(adresse: str) -> bool:
-    name, at, domain = adresse.partition("@")
-    return bool(name and at and "." in domain and " " not in adresse and "," not in adresse)
-
-
 def _passwort_eingeben(dienst: str, konto: str) -> bool:
     """Fragt das Passwort verdeckt ab (es erscheint nicht auf dem Bildschirm) und legt
     es in den Passwortspeicher. Es wird nie in eine Datei geschrieben."""
@@ -221,12 +216,12 @@ def _mail_abfragen(alt: Einstellungen | None) -> tuple[bool, MailEinstellung]:
     while not benutzer:
         benutzer = _frage("  Benutzername (meist die Mailadresse)", einst.benutzer)
     absender = ""
-    while not _adresse_ok(absender):
-        absender = _frage("  Absenderadresse", einst.absender or (benutzer if _adresse_ok(benutzer) else ""))
+    while not einstellungen.mailadresse_ok(absender):
+        absender = _frage("  Absenderadresse", einst.absender or (benutzer if einstellungen.mailadresse_ok(benutzer) else ""))
     while True:
         antwort = _frage("  Empfänger (mehrere mit Komma trennen)", ", ".join(einst.empfaenger))
         empfaenger = [a.strip() for a in antwort.split(",") if a.strip()]
-        falsch = [a for a in empfaenger if not _adresse_ok(a)]
+        falsch = [a for a in empfaenger if not einstellungen.mailadresse_ok(a)]
         if empfaenger and not falsch:
             break
         print("  Bitte gültige Mailadressen" + (f" (nicht: {', '.join(falsch)})" if falsch else "") + ".")
@@ -241,7 +236,7 @@ def _mail_abfragen(alt: Einstellungen | None) -> tuple[bool, MailEinstellung]:
         print("  Bitte in der Form Dienst/Konto, z. B. belegabruf/mail.")
     einst = MailEinstellung(server=server, port=int(port), verschluesselung=verschluesselung,
                             benutzer=benutzer, absender=absender, empfaenger=empfaenger,
-                            passwort_eintrag=f"{dienst.strip()}/{konto.strip()}")
+                            passwort_eintrag=f"{dienst.strip()}/{konto.strip()}", erstversand=einst.erstversand)
     dienst, konto = einst.dienst_und_konto
 
     if mail.passwort_vorhanden(dienst, konto):
