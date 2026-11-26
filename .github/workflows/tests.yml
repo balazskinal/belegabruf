@@ -1,0 +1,55 @@
+name: Tests (gemeinsam)
+
+# Die Testschritte an einer Stelle: Der Prüf-Workflow (pruefung.yml, bei jedem PR) und der
+# Release-Workflow (release.yml, bei jedem Tag) rufen beide diesen Workflow auf — so laufen
+# sie nie auseinander. Werkzeuge mit fester Version, damit ein neues ruff/bandit keinen PR
+# plötzlich rot macht.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: programm
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
+
+      - name: Bausteine (genau wie uv.lock)
+        run: uv sync --locked
+
+      - name: Browser für die Oberflächen-Tests (Chromium, ohne Headless Shell)
+        run: uv run --locked playwright install --no-shell --with-deps chromium
+
+      - name: pytest
+        run: uv run --locked pytest -q
+
+      - name: ruff
+        run: uvx ruff@0.17.6 check .
+
+      - name: bandit (Projektkonfiguration in pyproject.toml)
+        run: uvx --from 'bandit[toml]==1.9.4' bandit -c pyproject.toml -q -r belegabruf
+
+      - name: pip-audit (bekannte Sicherheitslücken in den Bausteinen)
+        run: |
+          uv export --frozen --no-dev --no-emit-project --no-hashes -q -o "$RUNNER_TEMP/bausteine.txt"
+          uvx pip-audit@2.10.1 -r "$RUNNER_TEMP/bausteine.txt" --disable-pip --no-deps
+
+      - name: compileall (keine Syntaxwarnungen)
+        run: uv run --locked python -W error::SyntaxWarning -m compileall -q belegabruf
+
+      - name: shellcheck (installieren.sh und Mac-Starter)
+        working-directory: .
+        run: |
+          # SC1111: deutsche Anführungszeichen „…“ in Meldungen sind gewollt.
+          shellcheck -e SC1111 installieren.sh "Belegabruf Mac.command" Fehlersuche/*.command

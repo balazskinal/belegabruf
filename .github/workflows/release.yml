@@ -12,10 +12,20 @@ permissions:
   contents: write
 
 jobs:
+  # Dieselben Prüfungen wie bei jedem PR (tests.yml) — erst danach wird gebaut.
+  tests:
+    name: Tests
+    permissions:
+      contents: read
+    uses: ./.github/workflows/tests.yml
+
   zip:
+    needs: tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Version im Tag und in pyproject.toml vergleichen
         run: |
@@ -24,15 +34,6 @@ jobs:
           if [ "$TAG" != "$VERSION" ]; then
             echo "Tag $TAG passt nicht zu pyproject.toml ($VERSION)"; exit 1
           fi
-
-      - uses: astral-sh/setup-uv@v6
-      - name: Browser für die Oberflächen-Tests
-        working-directory: programm
-        run: uv run --group dev playwright install --no-shell --with-deps chromium
-
-      - name: Tests
-        working-directory: programm
-        run: uv run --group dev pytest -q
 
       - name: ZIP bauen
         run: |

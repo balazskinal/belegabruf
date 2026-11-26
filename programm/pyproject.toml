@@ -28,6 +28,11 @@ packages = ["belegabruf"]
 # Eine feste Python-Version, damit Mac und Windows gleich laufen.
 python-preference = "managed"
 
+[tool.bandit]
+# B110 (try/except/pass): bewusst — an diesen Stellen (Fenster schon zu, Aufräumen, optionale
+# Hinweise) darf ein Fehler nichts abbrechen; jede Stelle trägt einen Kommentar, warum.
+skips = ["B110"]
+
 [tool.ruff]
 # Stil des Projekts: 120 Zeichen je Zeile. Prüfen mit: uvx ruff check .
 line-length = 120
