@@ -82,7 +82,7 @@ def test_neue_eingaben_pruefen_streng(tmp_path):
 
 
 DATEI_2_0_0 = """# Einstellungen für Belegabruf
-belegordner = "{ordner}"
+belegordner = '{ordner}'
 ablage = "jahr"
 
 [[konto]]

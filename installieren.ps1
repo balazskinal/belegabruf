@@ -33,7 +33,7 @@ function Invoke-BelegabrufEinrichtung {
     $version = "$env:BELEGABRUF_VERSION"
     $eigene = @('Belegabruf Mac.command', 'Belegabruf Windows.cmd', 'programm', 'Fehlersuche', 'Doku', '.belegabruf-version')
 
-    function Stop-Einrichtung([string]$text) {
+    function Exit-Einrichtung([string]$text) {
         Write-Host ""
         Write-Host "X $text" -ForegroundColor Red
         Write-Host "Es wurde nichts geaendert. Bei Fragen: https://github.com/$repo"
@@ -45,12 +45,12 @@ function Invoke-BelegabrufEinrichtung {
     }
 
     if ($version -and $version -notmatch '^v\d+\.\d+\.\d+$') {
-        Stop-Einrichtung "BELEGABRUF_VERSION='$version' ist keine Versionsnummer wie v2.1.1."
+        Exit-Einrichtung "BELEGABRUF_VERSION='$version' ist keine Versionsnummer wie v2.1.1."
     }
     # Mit Trenner vergleichen, damit C:\Users\Bob nicht auf C:\Users\Bobby passt.
     $profil = [Environment]::GetFolderPath('UserProfile').TrimEnd('\') + '\'
     if (-not $ziel.StartsWith($profil, [StringComparison]::OrdinalIgnoreCase)) {
-        Stop-Einrichtung "Der Installationsordner muss in deinem Benutzerordner liegen (nicht: $ziel)."
+        Exit-Einrichtung "Der Installationsordner muss in deinem Benutzerordner liegen (nicht: $ziel)."
     }
     $altName = '.belegabruf-alt'
 
@@ -74,7 +74,7 @@ function Invoke-BelegabrufEinrichtung {
             }
         }
         if (Get-ChildItem -Force -LiteralPath $alt | Select-Object -First 1) {
-            Stop-Einrichtung "Im Ordner $alt liegen unerwartete Dateien - bitte nachsehen."
+            Exit-Einrichtung "Im Ordner $alt liegen unerwartete Dateien - bitte nachsehen."
         }
         Remove-Item -Force -LiteralPath $alt
     }
@@ -93,7 +93,7 @@ function Invoke-BelegabrufEinrichtung {
         }
         if ($release) {
             $tag = "$($release.tag_name)"
-            if (-not $tag) { Stop-Einrichtung 'GitHub hat keine Version geliefert.' }
+            if (-not $tag) { Exit-Einrichtung 'GitHub hat keine Version geliefert.' }
             foreach ($gesucht in @('belegabruf.zip', "belegabruf-$tag.zip")) {
                 $asset = $release.assets | Where-Object { $_.name -eq $gesucht } | Select-Object -First 1
                 if ($asset) {
@@ -102,13 +102,13 @@ function Invoke-BelegabrufEinrichtung {
                     break
                 }
             }
-            if (-not $zipUrl) { Stop-Einrichtung "In der Version $tag gibt es kein ZIP zum Herunterladen." }
+            if (-not $zipUrl) { Exit-Einrichtung "In der Version $tag gibt es kein ZIP zum Herunterladen." }
         } elseif (-not $version) {
             $zipUrl = "${downloads}latest/download/belegabruf.zip"
         } else {
-            Stop-Einrichtung "Die Version $version gibt es bei GitHub nicht (oder GitHub ist nicht erreichbar)."
+            Exit-Einrichtung "Die Version $version gibt es bei GitHub nicht (oder GitHub ist nicht erreichbar)."
         }
-        if (-not (Test-Adresse $zipUrl)) { Stop-Einrichtung 'Unerwartete Download-Adresse - aus Sicherheitsgruenden abgebrochen.' }
+        if (-not (Test-Adresse $zipUrl)) { Exit-Einrichtung 'Unerwartete Download-Adresse - aus Sicherheitsgruenden abgebrochen.' }
 
         if (-not $erwartet -and ($zipUrl -like '*/belegabruf.zip')) {
             try {
@@ -118,7 +118,7 @@ function Invoke-BelegabrufEinrichtung {
             } catch { $erwartet = '' }
         }
         if ($erwartet -notmatch '^[0-9a-f]{64}$') {
-            Stop-Einrichtung 'Fuer diese Version gibt es keine Pruefsumme - ungeprueft wird nichts installiert.'
+            Exit-Einrichtung 'Fuer diese Version gibt es keine Pruefsumme - ungeprueft wird nichts installiert.'
         }
 
         # 2. Laden und pruefen
@@ -127,11 +127,11 @@ function Invoke-BelegabrufEinrichtung {
         try {
             Invoke-WebRequest -Uri $zipUrl -OutFile $zip -UseBasicParsing
         } catch {
-            Stop-Einrichtung 'Das Herunterladen hat nicht geklappt. Besteht eine Internetverbindung?'
+            Exit-Einrichtung 'Das Herunterladen hat nicht geklappt. Besteht eine Internetverbindung?'
         }
         $ist = (Get-FileHash -Algorithm SHA256 -Path $zip).Hash.ToLowerInvariant()
         if ($ist -ne $erwartet) {
-            Stop-Einrichtung 'Die Pruefsumme des ZIPs stimmt nicht. Die Datei ist beschaedigt oder nicht die echte - nicht installiert.'
+            Exit-Einrichtung 'Die Pruefsumme des ZIPs stimmt nicht. Die Datei ist beschaedigt oder nicht die echte - nicht installiert.'
         }
         Write-Host 'OK Pruefsumme stimmt.'
 
@@ -140,24 +140,24 @@ function Invoke-BelegabrufEinrichtung {
         $quelle = Get-ChildItem -Path $aus -Directory -Filter 'belegabruf-v*' | Select-Object -First 1
         if (-not $quelle -or -not (Test-Path (Join-Path $quelle.FullName 'Belegabruf Windows.cmd')) -or
             -not (Test-Path (Join-Path $quelle.FullName 'programm'))) {
-            Stop-Einrichtung 'Das ZIP hat nicht den erwarteten Inhalt.'
+            Exit-Einrichtung 'Das ZIP hat nicht den erwarteten Inhalt.'
         }
         if (-not $tag) { $tag = $quelle.Name -replace '^belegabruf-', '' }
 
         # 3. Einspielen: nur die eigenen Eintraege ersetzen
         if ((Test-Path $ziel) -and -not (Test-Path $ziel -PathType Container)) {
-            Stop-Einrichtung "'$ziel' ist eine Datei, kein Ordner."
+            Exit-Einrichtung "'$ziel' ist eine Datei, kein Ordner."
         }
         $kennzeichen = Test-Belegabruf $ziel
         if ((Test-Path -LiteralPath $ziel) -and (Get-ChildItem -Force -LiteralPath $ziel | Select-Object -First 1) -and -not $kennzeichen) {
-            Stop-Einrichtung "Im Ordner '$ziel' liegen schon andere Dateien, aber kein Belegabruf. Bitte den Ordner umbenennen."
+            Exit-Einrichtung "Im Ordner '$ziel' liegen schon andere Dateien, aber kein Belegabruf. Bitte den Ordner umbenennen."
         }
         $suche = "$ziel\programm\"   # woertlich vergleichen, nicht als Muster
         $laeuft = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
             Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($suche, [StringComparison]::OrdinalIgnoreCase) -ge 0 } |
             Select-Object -First 1
         if ($laeuft) {
-            Stop-Einrichtung "Belegabruf laeuft gerade. Bitte erst beenden (Knopf 'Beenden' im Fenster), dann die Zeile noch einmal."
+            Exit-Einrichtung "Belegabruf laeuft gerade. Bitte erst beenden (Knopf 'Beenden' im Fenster), dann die Zeile noch einmal."
         }
         New-Item -ItemType Directory -Force -Path $ziel | Out-Null
         Restore-Reste $ziel
@@ -176,7 +176,7 @@ function Invoke-BelegabrufEinrichtung {
             }
         } catch {
             Restore-Reste $ziel
-            Stop-Einrichtung 'Das Einspielen hat nicht geklappt; die bisherige Version ist wiederhergestellt.'
+            Exit-Einrichtung 'Das Einspielen hat nicht geklappt; die bisherige Version ist wiederhergestellt.'
         }
         Remove-Item -Recurse -Force -LiteralPath $alt
 

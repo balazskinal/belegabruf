@@ -53,7 +53,10 @@ jobs:
         run: uv run --locked pytest -q -rs
 
   # Die Ein-Zeilen-Einrichtung echt: das Skript aus diesem PR, die neueste veröffentlichte
-  # Version von GitHub. Danach Update (zweiter Lauf) und der Starter bis „Umgebung eingerichtet“.
+  # Version von GitHub; danach Update (zweiter Lauf). Der Starter läuft dann auf dem Stand
+  # dieses PRs (der Ordner wie im ZIP: Starter oben, programm/ daneben) bis „Umgebung
+  # eingerichtet“ — so fällt ein Fehler in Starter, uv.lock oder Python-Version vor dem
+  # Release auf, nicht erst bei Nutzern.
   einrichtung-mac:
     name: Einrichtung Mac
     runs-on: macos-latest
@@ -95,9 +98,9 @@ jobs:
           grep -q "aktualisiert" "$RUNNER_TEMP/update.log"
           test -f "$HOME/Applications/Belegabruf/notiz.txt"
 
-      - name: Starter bis „Umgebung eingerichtet“ (ohne Fenster abzuwarten)
+      - name: Starter (Stand dieses PRs) bis „Umgebung eingerichtet“, ohne Fenster abzuwarten
         run: |
-          Z="$HOME/Applications/Belegabruf"
+          Z="$GITHUB_WORKSPACE"
           PY="$Z/programm/.venv/bin/python"
           "$Z/Belegabruf Mac.command" < /dev/null > "$RUNNER_TEMP/starter.log" 2>&1 &
           STARTER=$!
@@ -171,9 +174,9 @@ jobs:
           if ($aus -notmatch 'aktualisiert') { throw 'kein Update' }
           if (-not (Test-Path -LiteralPath (Join-Path $z 'notiz.txt'))) { throw 'eigene Datei weg' }
 
-      - name: Starter bis „Umgebung eingerichtet“ (ohne Fenster abzuwarten)
+      - name: Starter (Stand dieses PRs) bis „Umgebung eingerichtet“, ohne Fenster abzuwarten
         run: |
-          $z = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\Belegabruf'
+          $z = $env:GITHUB_WORKSPACE
           $py = Join-Path $z 'programm\.venv\Scripts\python.exe'
           $log = "$env:RUNNER_TEMP\starter.log"
           $starter = Start-Process -FilePath cmd.exe -ArgumentList '/c', "`"`"$z\Belegabruf Windows.cmd`" > `"$log`" 2>&1`"" -PassThru -WindowStyle Hidden

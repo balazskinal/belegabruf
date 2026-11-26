@@ -1,10 +1,12 @@
 [project]
 name = "belegabruf"
-version = "2.2.0"
+version = "2.2.1"
 description = "Holt Rechnungen aus eingeloggten Anbieter-Konten per Doppelklick auf den eigenen Rechner."
 license = "MIT"
 authors = [{ name = "Balázs Kinál" }]
-requires-python = ">=3.12"
+# Obergrenze: PyMuPDF zieht onnxruntime nach, das es (Stand 11/2026) nur für Python 3.12–3.14 gibt.
+# Ohne Grenze lud uv auf frischen Rechnern Python 3.15, und die Einrichtung scheiterte.
+requires-python = ">=3.12,<3.15"
 dependencies = [
     "playwright>=1.48",
     "pymupdf>=1.24",

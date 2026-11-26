@@ -6,6 +6,7 @@ Alle Adressen sind erfunden (example.com), das "Passwort" ist ein Platzhalter.
 from __future__ import annotations
 
 import email
+import re
 import smtplib
 from datetime import date
 from email import policy
@@ -166,7 +167,9 @@ class Falsch(Quelle):
             gutschrift = kennung.startswith("g")
             umgebung.abliefern(Beleg(
                 quelle="airbnb", konto=self.konto.name, art="rechnung", schluessel=schluessel,
-                dateiname=f"{datum}_HMX_{nummer}{'_Gutschrift' if gutschrift else ''}.pdf",
+                # Nur sichere Zeichen im Dateinamen (wie die echten Quellen) — sonst scheitert unter
+                # Windows schon das Ablegen, wenn eine Nummer Steuerzeichen oder „:“ enthält.
+                dateiname=f"{datum}_HMX_{re.sub(r'[^A-Za-z0-9_-]', '', nummer)}{'_Gutschrift' if gutschrift else ''}.pdf",
                 inhalt=_pdf(nummer), jahr=int(datum[:4]),
                 rechnungsdatum=date.fromisoformat(datum), rechnungsnummer=nummer,
             ))

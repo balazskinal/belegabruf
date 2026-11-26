@@ -24,7 +24,7 @@ def datenordner(tmp_path, monkeypatch):
 
 
 DATEI = """# Einstellungen für Belegabruf
-belegordner = "{ordner}"
+belegordner = '{ordner}'
 ablage = "jahr"
 ziele = [{ziele}]
 sichtbar = "nein"

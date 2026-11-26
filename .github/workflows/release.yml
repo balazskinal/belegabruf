@@ -43,7 +43,8 @@ jobs:
           cp "Belegabruf Mac.command" "Belegabruf Windows.cmd" "dist/$NAME/"
           cp Fehlersuche/* "dist/$NAME/Fehlersuche/"
           cp README.md LICENSE "dist/$NAME/Doku/"
-          cp -r programm/belegabruf programm/pyproject.toml programm/uv.lock "dist/$NAME/programm/"
+          # .python-version: Die Starter richten genau diese Python-Version ein (nicht die neueste).
+          cp -r programm/belegabruf programm/pyproject.toml programm/uv.lock programm/.python-version "dist/$NAME/programm/"
           find "dist/$NAME" -name "__pycache__" -type d -prune -exec rm -rf {} +
           chmod +x "dist/$NAME/"*.command "dist/$NAME/Fehlersuche/"*.command
           (cd dist && zip -r -X "$NAME.zip" "$NAME")

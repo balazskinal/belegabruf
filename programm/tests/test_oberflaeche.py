@@ -508,7 +508,7 @@ def test_fenster_zu_waehrend_abruf_wartet_und_beendet_sauber(monkeypatch, tmp_pa
     assert code == 0 and not _laeuft_noch(server)  # kein verwaister Server
     ausgabe = capsys.readouterr().out
     assert "Warte, bis der laufende Vorgang fertig ist" in ausgabe and "beendet" in ausgabe
-    assert "Doppelklick auf \"Belegabruf Mac\"" in ausgabe  # sagt, wie man es wieder öffnet
+    assert f"Doppelklick auf \"{pfade.starter()}\"" in ausgabe  # sagt, wie man es wieder öffnet
 
 
 def test_abgestuerztes_fenster_beendet_sauber(monkeypatch, capsys):
@@ -517,14 +517,14 @@ def test_abgestuerztes_fenster_beendet_sauber(monkeypatch, capsys):
 
     code, server = _starten_mit(monkeypatch, fenster)
     assert code == 1 and not _laeuft_noch(server)
-    assert "Doppelklick auf \"Belegabruf Mac\"" in capsys.readouterr().out
+    assert f"Doppelklick auf \"{pfade.starter()}\"" in capsys.readouterr().out
 
 
 def test_eigene_inhalte_warnung_und_sicherung(server, tmp_path):
     datei = pfade.einstellungsdatei()
     datei.parent.mkdir(parents=True, exist_ok=True)
     datei.write_text(
-        f'# Meine Notiz: Konto privat ist das alte\nbelegordner = "{tmp_path / "Belege"}"\n'
+        f'# Meine Notiz: Konto privat ist das alte\nbelegordner = "{(tmp_path / "Belege").as_posix()}"\n'
         'ziele = ["ordner"]\nlieblingsfarbe = "blau"\n\n[[konto]]\nquelle = "airbnb"\nname = "privat"\n'
         'aktiv = "ja"\nadresse = "https://www.airbnb.de"\n', encoding="utf-8")
     zustand = json.loads(_anfrage(server, "GET", "/api/zustand", _mit(server))[1])
@@ -551,7 +551,7 @@ def test_warnung_steht_vor_dem_speichern_in_der_seite(server, tmp_path, monkeypa
         pytest.skip("Chromium nicht installiert")
     datei = pfade.einstellungsdatei()
     datei.parent.mkdir(parents=True, exist_ok=True)
-    datei.write_text(f'# eigene Notiz\nbelegordner = "{tmp_path / "Belege"}"\n', encoding="utf-8")
+    datei.write_text(f'# eigene Notiz\nbelegordner = "{(tmp_path / "Belege").as_posix()}"\n', encoding="utf-8")
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as pw:
@@ -692,7 +692,7 @@ def test_schluessel_nicht_in_der_kommandozeile(monkeypatch):
 
 def _toml(tmp_path, text):
     datei = tmp_path / "e.toml"
-    datei.write_text(f'belegordner = "{tmp_path / "Belege"}"\n' + text, encoding="utf-8")
+    datei.write_text(f'belegordner = "{(tmp_path / "Belege").as_posix()}"\n' + text, encoding="utf-8")
     return datei
 
 

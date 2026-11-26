@@ -215,7 +215,7 @@ def test_skripte_ohne_sudo_und_nur_github():
     for text in (sh, ps):
         assert "api.github.com/repos/$repo/releases" in text.replace("$REPO", "$repo")
         assert "/releases/" in text and "Get-FileHash" in ps
-    assert ps.count("Stop-Einrichtung") > 5 and "Expand-Archive" in ps
+    assert ps.count("Exit-Einrichtung") > 5 and "Expand-Archive" in ps
 
 
 def test_release_baut_festes_zip_mit_pruefsumme_und_skripten():
@@ -390,3 +390,13 @@ def test_skripte_schauen_nicht_in_dokumente():
     # PowerShell: nichts auf Skriptebene außer der Funktion und ihrem Aufruf
     oben = [z for z in ps.splitlines() if z and not z.startswith((" ", "#", "}"))]
     assert oben == ["function Invoke-BelegabrufEinrichtung {", "Invoke-BelegabrufEinrichtung"]
+
+
+def test_python_version_fest_und_im_zip():
+    """2.2.1: Die Starter richten Python 3.12 ein, nicht die neueste Version (3.15 hat für
+    onnxruntime, das PyMuPDF nachzieht, keine Pakete — die Einrichtung scheiterte)."""
+    assert (WURZEL / "programm" / ".python-version").read_text(encoding="utf-8").strip() == "3.12"
+    pyproject = (WURZEL / "programm" / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'requires-python = ">=3.12,<3.15"' in pyproject
+    release = (WURZEL / ".github/workflows/release.yml").read_text(encoding="utf-8")
+    assert "programm/.python-version" in release
