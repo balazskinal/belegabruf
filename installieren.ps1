@@ -17,10 +17,10 @@
 # Was PowerShell selbst laedt, bekommt kein "Mark of the Web" - so erscheint die Warnung
 # "Der Computer wurde durch Windows geschuetzt" nicht, die bei einem im Browser geladenen ZIP kommt.
 
-# Der Installationsordner - die einzige Stelle dafuer.
-$BelegabrufInstallationsort = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\Belegabruf'
-
 function Invoke-BelegabrufEinrichtung {
+    # Der Installationsordner - die einzige Stelle dafuer (in der Funktion, damit nach "irm | iex"
+    # nichts in der Sitzung stehen bleibt).
+    $BelegabrufInstallationsort = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\Belegabruf'
     # Nur in dieser Funktion (mit "irm | iex" liefe es sonst in der Sitzung des Nutzers weiter).
     $ErrorActionPreference = 'Stop'
     $ProgressPreference = 'SilentlyContinue'   # Invoke-WebRequest ist sonst sehr langsam
@@ -198,12 +198,8 @@ function Invoke-BelegabrufEinrichtung {
         if ($kennzeichen) { Write-Host "OK Belegabruf ist auf $tag aktualisiert: $ziel" }
         else { Write-Host "OK Belegabruf $tag ist eingerichtet: $ziel" }
         Write-Host "   Starten kuenftig: Startmenue -> 'Belegabruf' (oder 'Belegabruf Windows' in diesem Ordner)."
-        Write-Host '   Hast du Belegabruf bisher aus dem ZIP gestartet (Ordner belegabruf-v...), kannst du den alten'
-        Write-Host '   Ordner loeschen. Einstellungen und Anmeldungen liegen im Datenordner (%APPDATA%\belegabruf) und bleiben.'
-        $frueher = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Belegabruf'
-        if (($frueher -ne $ziel) -and (Test-Belegabruf $frueher)) {
-            Write-Host "   Eine fruehere Installation liegt noch in $frueher - die brauchst du nicht mehr und kannst sie loeschen."
-        }
+        Write-Host '   Hast du Belegabruf bisher aus einem ZIP-Ordner gestartet, kannst du diesen loeschen.'
+        Write-Host '   Einstellungen und Anmeldungen liegen im Datenordner (%APPDATA%\belegabruf) und bleiben.'
         Write-Host '   Update spaeter: dieselbe Zeile noch einmal in PowerShell.'
 
         # 4. Starten

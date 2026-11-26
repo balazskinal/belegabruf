@@ -364,18 +364,29 @@ def test_installationsort_eine_konstante_je_skript():
 
 
 @nur_mac
-def test_programme_ordner_wird_angelegt_und_frueherer_ort_nur_erwaehnt(tmp_path, netz):
+def test_programme_ordner_und_kein_blick_in_dokumente(tmp_path, netz):
     """N1: Ziel ist ~/Applications/Belegabruf (angelegt, falls es ~/Applications nicht gibt).
-    Eine frühere Installation in ~/Documents/Belegabruf bleibt unangetastet und wird erwähnt."""
+    K1: Das Skript schaut nie in ~/Documents (schon das löste auf dem Mac eine Rückfrage aus);
+    eine frühere Installation dort bleibt unangetastet, der Hinweis ist allgemein."""
     frueher = tmp_path / "heim" / "Documents" / "Belegabruf"
     (frueher / "programm").mkdir(parents=True)
     (frueher / ".belegabruf-version").write_text("v2.1.1\n")
-    (frueher / "Belegabruf Mac.command").write_text("#!/bin/bash\n")
     vorher = sorted(str(p.relative_to(frueher)) for p in frueher.rglob("*"))
     netz.release("v2.0.1")
     lauf, ziel = _starten(tmp_path, netz, "v2.0.1")
     assert lauf.returncode == 0, lauf.stdout + lauf.stderr
     assert ziel == tmp_path / "heim" / "Applications" / "Belegabruf" and (ziel / ".belegabruf-version").exists()
     assert "Spotlight" in lauf.stdout and "Programme" in lauf.stdout
-    assert f"Eine frühere Installation liegt noch in {frueher}" in lauf.stdout
+    assert "aus einem ZIP-Ordner gestartet, kannst du diesen löschen" in lauf.stdout
+    assert "Documents" not in lauf.stdout
     assert sorted(str(p.relative_to(frueher)) for p in frueher.rglob("*")) == vorher
+
+
+def test_skripte_schauen_nicht_in_dokumente():
+    sh = SH.read_text(encoding="utf-8")
+    ps = PS1.read_text(encoding="utf-8")
+    code_sh = "\n".join(z for z in sh.splitlines() if not z.lstrip().startswith("#"))
+    assert "Documents" not in code_sh and "MyDocuments" not in ps
+    # PowerShell: nichts auf Skriptebene außer der Funktion und ihrem Aufruf
+    oben = [z for z in ps.splitlines() if z and not z.startswith((" ", "#", "}"))]
+    assert oben == ["function Invoke-BelegabrufEinrichtung {", "Invoke-BelegabrufEinrichtung"]

@@ -27,8 +27,8 @@ set -euo pipefail
 # Der Installationsordner — die einzige Stelle dafür. ~/Applications zeigt der Finder als
 # „Programme“ im Benutzerordner; es braucht keinen Zugriff auf „Dokumente“ und liegt nicht in iCloud.
 INSTALLATIONSORT="$HOME/Applications/Belegabruf"
-# Hier lag Belegabruf in frühen Tests von 2.2.0 — wird nie angefasst, nur erwähnt.
-FRUEHERER_ORT="$HOME/Documents/Belegabruf"
+# Bewusst kein Blick in ~/Documents o. Ä.: Schon der Zugriff löst auf dem Mac die Rückfrage
+# „Terminal möchte auf Dokumente zugreifen“ aus.
 
 REPO="balazskinal/belegabruf"
 API="https://api.github.com/repos/$REPO/releases"
@@ -226,12 +226,8 @@ main() {
   fi
   meldung "  Starten künftig: Spotlight (⌘ + Leertaste) „Belegabruf“ — oder im Finder unter"
   meldung "  Benutzerordner → Programme → Belegabruf → „Belegabruf Mac“."
-  meldung "  Hast du Belegabruf bisher aus dem ZIP gestartet (Ordner belegabruf-v…), kannst du den alten"
-  meldung "  Ordner löschen. Einstellungen und Anmeldungen liegen im Datenordner und bleiben."
-  if [ "$ziel" != "$FRUEHERER_ORT" ] && ist_belegabruf "$FRUEHERER_ORT"; then
-    meldung "  Eine frühere Installation liegt noch in $FRUEHERER_ORT — die brauchst du nicht mehr"
-    meldung "  und kannst sie löschen (das Skript lässt sie unangetastet)."
-  fi
+  meldung "  Hast du Belegabruf bisher aus einem ZIP-Ordner gestartet, kannst du diesen löschen."
+  meldung "  Einstellungen und Anmeldungen liegen im Datenordner und bleiben."
   meldung "  Update später: dieselbe Zeile noch einmal ins Terminal."
 
   # ── 4. Starten ─────────────────────────────────────────────────────────────

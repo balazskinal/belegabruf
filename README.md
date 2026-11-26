@@ -55,8 +55,7 @@ Nötige (siehe [Erster Start](#erster-start-einmalig-ca-5-minuten), ab Schritt 4
 | Mac | `~/Applications/Belegabruf` — im Finder: Benutzerordner → **Programme** → Belegabruf | **Spotlight** (<kbd>⌘</kbd> + <kbd>Leertaste</kbd>) „Belegabruf“, oder im Finder „Belegabruf Mac“ doppelklicken |
 | Windows | `%LOCALAPPDATA%\Programs\Belegabruf` | **Startmenü → „Belegabruf“** (legt die Zeile an), oder „Belegabruf Windows“ im Ordner |
 
-Dieser Ort braucht keine Rückfrage zum Ordner „Dokumente“ und wird nicht über iCloud bzw. OneDrive
-abgeglichen.
+Der Programmordner liegt nicht in „Dokumente“ und nicht in iCloud bzw. OneDrive.
 
 **Hast du Belegabruf bisher aus dem ZIP gestartet** (Ordner `belegabruf-v…`), kannst du den alten Ordner
 löschen; ab jetzt startest du wie oben. Einstellungen und Anmeldungen bleiben, sie liegen im Datenordner.
