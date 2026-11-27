@@ -336,6 +336,11 @@ def falsches_booking(monkeypatch):
         if pfad.endswith("home.html"):  # mit einem Link auf eine fremde Unterkunft (wie im echten Extranet)
             return html(route, f"<html><body><a href='{start}'>Start</a>"
                                f"<a href='{basis}/x.html?hotel_id=7654321&ses={SES}'>Werbung</a></body></html>")
+        if pfad.endswith("finance_invoices.html") and zustand["verhalten"] == "zwei_faktor_mittendrin":
+            return html(route, "<html><body><h1>Bestätigung</h1><input name=code></body></html>")
+        if pfad.endswith("finance_invoices.html") and zustand["verhalten"] == "kein_zugriff":
+            return html(route, f"<html><body><a href='{start}'>Start</a>"
+                               "<p>Sie haben keinen Zugriff auf diese Seite.</p></body></html>")
         if pfad.endswith("finance_invoices.html"):
             return html(route, _rechnungsseite(int(_q(url).get("year") or 2026),
                                                ohne_filter=zustand["verhalten"] == "ohne_filter",
@@ -695,3 +700,37 @@ def test_normalfall_angemeldet(tmp_path, falsches_booking, monkeypatch):
     quelle = booking.Booking(Konto("booking", "standard"), tmp_path / "profil")
     assert quelle.sitzung_pruefen() is True
     assert quelle.anmelden_lassen(lambda t: None) is True
+
+
+def test_zwei_faktor_mitten_im_abruf(tmp_path, falsches_booking, monkeypatch):
+    """Startseite angemeldet, aber die Finanzseite zeigt eine Bestätigung: „abgelaufen“ mit
+    Hinweis — nicht „0 Belege, alles gut“ und keine Abschnittsfehler."""
+    monkeypatch.setattr(booking, "INHALT_WARTEN_MS", 1500)
+    falsches_booking["verhalten"] = "zwei_faktor_mittendrin"
+    quelle = booking.Booking(Konto("booking", "standard"), tmp_path / "profil")
+    meldungen: list[str] = []
+    erg = quelle.belege_holen(_umgebung(set(), [], meldungen))
+    assert erg.status == "abgelaufen" and erg.neu == 0
+    assert booking.BESTAETIGEN_HINWEIS in erg.hinweise
+    assert erg.abweichungen == []
+    assert not any(SES in m for m in meldungen + erg.hinweise)
+
+
+def test_kein_finanzzugriff(tmp_path, falsches_booking, monkeypatch):
+    monkeypatch.setattr(booking, "INHALT_WARTEN_MS", 1500)
+    falsches_booking["verhalten"] = "kein_zugriff"
+    quelle = booking.Booking(Konto("booking", "standard"), tmp_path / "profil")
+    erg = quelle.belege_holen(_umgebung(set(), [], []))
+    assert erg.status == "fehler" and erg.fehler == booking.KEIN_ZUGRIFF_TEXT
+    assert "keinen Zugriff auf Finanzen" in erg.fehler
+
+
+@pytest.mark.parametrize("status, text, erwartet", [
+    (403, "", True),
+    (200, "Sie haben keinen Zugriff auf diese Seite.", True),
+    (200, "You don't have access to this page", True),
+    (200, "Zahlungen an Booking.com  Nach Jahr filtern 2026", False),
+    (None, "", False),
+])
+def test_ohne_finanz_zugriff(status, text, erwartet):
+    assert booking.ohne_finanz_zugriff(status, text) is erwartet

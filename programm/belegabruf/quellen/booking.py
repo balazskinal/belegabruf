@@ -146,6 +146,13 @@ def angemeldet(url: str, links: list[str]) -> bool:
     return ist_extranet(url) and "ses" in parameter(url) and hat_unterkunft(links)
 
 
+#: Merkmale einer geladenen Finanzseite (Rechnungs-/Übersichts-/Auszahlungslinks, Reiter,
+#: Zeitraumfeld). Mitten im Abruf zählt eine Seite als Extranet mit Inhalt, wenn sie eine
+#: Unterkunft verlinkt oder eines dieser Merkmale zeigt — so gilt ein Jahr ohne Rechnungen
+#: nicht als Bestätigungsseite.
+FINANZ_MERKMALE = ('a[href*="get_document"], a[href*="monthlyStatementPDF"], a[href*="payoutPDF"], '
+                   '#report-period-filter, [role=tablist]')
+
 #: So lange (ms) wartet die Prüfung, bis die Extranet-Seite ihre Unterkünfte zeigt.
 INHALT_WARTEN_MS = 30000
 #: Nach so vielen Sekunden auf einer Extranet-Adresse ohne Inhalt kommt der Zwei-Faktor-Hinweis
@@ -399,6 +406,35 @@ _LADEN_JS = r"""async ([adresse, hoechstens]) => {
 }"""
 
 
+class BestaetigungNoetig(SitzungAbgelaufen):
+    """Mitten im Abruf zeigt Booking.com statt der Finanzseite eine Bestätigung (Zwei-Faktor) oder
+    eine andere Seite ohne Extranet-Inhalt. Booking.com fragt laut seiner Hilfe je nach Aktion
+    erneut nach, auch mehrmals am Tag. Zählt wie ein Ablauf der Anmeldung."""
+
+
+class KeinFinanzZugriff(Exception):
+    """Das Extranet lädt, aber dieses Konto darf die Finanzen nicht sehen (z. B. kein
+    Primary-Konto im Group-Extranet)."""
+
+
+BESTAETIGEN_HINWEIS = ("Booking.com hat mitten im Abruf eine Bestätigung verlangt (Zwei-Faktor). Bitte bei "
+                       "diesem Konto neu anmelden und bestätigen — der nächste Lauf holt den Rest nach.")
+KEIN_ZUGRIFF_TEXT = ("Dieses Booking-Konto hat keinen Zugriff auf Finanzen. Im Group-Extranet sehen nur "
+                     "Primary-Konten Rechnungen und Auszahlungen — bitte mit einem solchen Konto anmelden.")
+
+#: Woran eine Seite ohne Finanzberechtigung zu erkennen ist (nur geprüft, wenn die erwarteten
+#: Rechnungslinks und der Jahresfilter fehlen; der Text wird nie gespeichert oder ausgegeben).
+RE_KEIN_ZUGRIFF = re.compile(
+    r"keinen zugriff|keine berechtigung|nicht berechtigt|zugriff verweigert|"
+    r"(?:don't|do not|doesn't|does not) have (?:access|permission)|no access|access denied|not authori[sz]ed",
+    re.I)
+
+
+def ohne_finanz_zugriff(status: int | None, text: str) -> bool:
+    """403 beim Laden der Finanzseite oder ein eindeutiger Hinweis im Seitentext."""
+    return status == 403 or bool(RE_KEIN_ZUGRIFF.search(text or ""))
+
+
 class DateiFehler(Exception):
     """Eine Datei kam nicht oder nicht brauchbar an (Meldung ohne Adresse)."""
 
@@ -513,8 +549,7 @@ class Booking(Quelle):
         try:
             seite.wait_for_selector(selektor, timeout=warten_ms)
         except Exception:  # noqa: BLE001 - vielleicht gibt es (in diesem Jahr) nichts
-            if ist_anmeldeseite(seite.url):
-                raise SitzungAbgelaufen() from None
+            self._noch_angemeldet(seite)  # oder Booking.com fragt gerade nach einer Bestätigung
             return []
         seite.wait_for_timeout(800)
         roh = seite.evaluate(_LINKS_JS, muster)
@@ -593,9 +628,17 @@ class Booking(Quelle):
                 umgebung.melden(f"{len(hotels)} Unterkunft/Unterkünfte." if mehrere else "Angemeldet.")
                 for hotel in hotels:
                     self._unterkunft_holen(seite, hotel, ses, mehrere, umgebung, erg, zaehler)
+            except BestaetigungNoetig:
+                erg.status = "abgelaufen"
+                erg.hinweise.append(BESTAETIGEN_HINWEIS)
+                umgebung.melden(BESTAETIGEN_HINWEIS)
             except SitzungAbgelaufen:
                 erg.status = "abgelaufen"
                 umgebung.melden("Die Anmeldung ist abgelaufen. Der nächste Lauf holt den Rest nach.")
+            except KeinFinanzZugriff:
+                erg.status = "fehler"
+                erg.fehler = KEIN_ZUGRIFF_TEXT
+                umgebung.melden(KEIN_ZUGRIFF_TEXT)
         teile = []
         if zaehler["auszahlungsuebersicht"]:
             teile.append(f"{zaehler['auszahlungsuebersicht']} Datei(en) Auszahlungsübersicht")
@@ -618,7 +661,7 @@ class Booking(Quelle):
         for name, art, holen in abschnitte:
             try:
                 neu = holen(seite, hotel, ses, mehrere, umgebung, erg, vorsilbe)
-            except SitzungAbgelaufen:
+            except (SitzungAbgelaufen, KeinFinanzZugriff):
                 raise
             except DateiFehler as fehler:
                 self._abweichung(erg, f"{vorsilbe}{name}: abgebrochen ({fehler}).")
@@ -630,9 +673,41 @@ class Booking(Quelle):
                 zaehler[art] += neu or 0
 
     def _seite_oeffnen(self, seite, pfad: str, hotel: str, ses: str, **extra: str) -> None:
-        _aufrufen(seite, seitenadresse(pfad, hotel, ses, **extra))
+        """Öffnet eine Extranet-Seite. Zeigt sie statt des Extranets eine Anmelde- oder
+        Bestätigungsseite, bricht der Abruf als „abgelaufen“ ab (nicht als „0 Belege“)."""
+        antwort = _aufrufen(seite, seitenadresse(pfad, hotel, ses, **extra))
+        self._letzter_status = getattr(antwort, "status", None)
         if ist_anmeldeseite(seite.url):
             raise SitzungAbgelaufen()
+        try:
+            seite.wait_for_selector(f'a[href*="hotel_id="], {FINANZ_MERKMALE}', timeout=INHALT_WARTEN_MS)
+        except Exception:  # noqa: BLE001 - weder Unterkunft noch Finanzinhalt: unten entscheiden
+            pass  # nosec B110
+        self._noch_angemeldet(seite)
+
+    def _noch_angemeldet(self, seite) -> None:
+        """Nach einem Fehlschlag auf der Seite: Anmeldeseite → abgelaufen; Seite ohne Extranet-
+        Inhalt (z. B. Zwei-Faktor-Abfrage mittendrin) → BestaetigungNoetig. Sonst nichts."""
+        if ist_anmeldeseite(seite.url):
+            raise SitzungAbgelaufen()
+        if self._angemeldet(seite):
+            return
+        try:
+            finanzseite = ist_extranet(seite.url) and seite.locator(FINANZ_MERKMALE).count() > 0
+        except Exception:  # noqa: BLE001
+            finanzseite = False
+        if not finanzseite:
+            raise BestaetigungNoetig()
+
+    def _finanzzugriff_pruefen(self, seite) -> None:
+        """Nur aufgerufen, wenn Rechnungslinks und Jahresfilter fehlen: steckt fehlende
+        Berechtigung dahinter? Der Seitentext wird nur durchsucht, nie gespeichert."""
+        try:
+            text = seite.inner_text("body", timeout=5000)
+        except Exception:  # noqa: BLE001
+            text = ""
+        if ohne_finanz_zugriff(getattr(self, "_letzter_status", None), text):
+            raise KeinFinanzZugriff()
 
     # Jahresfilter ----------------------------------------------------------
 
@@ -690,7 +765,8 @@ class Booking(Quelle):
 
     def _rechnungen(self, seite, hotel, ses, mehrere, umgebung: Umgebung, erg: Ergebnis, vorsilbe: str) -> int:
         self._seite_oeffnen(seite, RECHNUNGEN_SEITE, hotel, ses)
-        self._links(seite, [RECHNUNG_LINK])
+        if not self._links(seite, [RECHNUNG_LINK]) and self._jahre_im_filter(seite) is None:
+            self._finanzzugriff_pruefen(seite)
         rechnungen: dict[str, Rechnung] = {}
         for jahr in self._jahre(seite, umgebung, erg, f"{vorsilbe}Rechnungen", vorlauf=1):
             self._seite_oeffnen(seite, RECHNUNGEN_SEITE, hotel, ses, year=str(jahr))
@@ -735,8 +811,7 @@ class Booking(Quelle):
             seite.get_by_role("tab", name=REITER_VON, exact=True).or_(
                 seite.get_by_role("button", name=REITER_VON, exact=True)).first.click(timeout=20000)
         except Exception:  # noqa: BLE001
-            if ist_anmeldeseite(seite.url):
-                raise SitzungAbgelaufen() from None
+            self._noch_angemeldet(seite)
             self._abweichung(erg, f"{vorsilbe}Reiter „{REITER_VON}“ nicht gefunden.")
             return []
         self._links(seite, [UEBERSICHT_PDF])
@@ -805,8 +880,7 @@ class Booking(Quelle):
                 seite.select_option(ZEITRAUM_FELD, zeitraum)
                 seite.wait_for_timeout(3000)
             except Exception:  # noqa: BLE001
-                if ist_anmeldeseite(seite.url):
-                    raise SitzungAbgelaufen() from None
+                self._noch_angemeldet(seite)
                 self._abweichung(erg, f"{vorsilbe}Auszahlungen: Zeitraum nicht wählbar.")
                 continue
             for a in auszahlungen_aus_links(self._links(seite, [AUSZAHLUNG_PDF, AUSZAHLUNG_CSV], erg=erg,

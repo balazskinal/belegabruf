@@ -425,7 +425,10 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
   das Programm ein Booking-Konto schon als angemeldet zeigen, während Booking.com noch auf den Bestätigungscode
   wartete. Jetzt bleibt das Anmeldefenster offen, bis das Extranet wirklich die Unterkunft zeigt; hängt es
   an der Bestätigung, steht in der Oberfläche „Bitte schließ die Bestätigung (Zwei-Faktor) im
-  Booking-Fenster ab“. Dieselbe Prüfung gilt beim „Prüfen“ und vor jedem Abruf.
+  Booking-Fenster ab“. Dieselbe Prüfung gilt beim „Prüfen“ und vor jedem Abruf. Verlangt Booking.com
+  mitten im Abruf eine neue Bestätigung, meldet das Programm das als „Anmeldung abgelaufen“ mit Hinweis
+  (nicht als „nichts Neues“). Darf ein Konto die Finanzen nicht sehen (im Group-Extranet nur
+  Primary-Konten), sagt es „Dieses Booking-Konto hat keinen Zugriff auf Finanzen“.
 - **2.2.1** — **Einrichtung auf Rechnern ohne passendes Python repariert.** Die Starter richten jetzt fest
   Python 3.12 ein; eine schon angelegte Umgebung mit anderer Python-Version wird beim nächsten Start
   neu aufgebaut. Bisher konnte uv auf einem neuen Rechner Python 3.15 laden; dafür gibt es einen von PyMuPDF
