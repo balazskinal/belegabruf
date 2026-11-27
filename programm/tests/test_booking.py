@@ -21,6 +21,7 @@ from belegabruf.quellen.basis import Umgebung
 
 ERFUNDENER_NAME = "Erika Musterfrau"
 HOTEL = "1234567"
+ANDERES_HOTEL = "7654321"  # zweite, erfundene Unterkunft (Co-Hosting)
 SES = "SES-GEHEIM-0815"
 HEUTE = date(2026, 11, 26)
 
@@ -338,7 +339,25 @@ def falsches_booking(monkeypatch):
                                f"<a href='{basis}/x.html?hotel_id=7654321&ses={SES}'>Werbung</a></body></html>")
         if pfad.endswith("finance_invoices.html") and zustand["verhalten"] == "zwei_faktor_mittendrin":
             return html(route, "<html><body><h1>Bestätigung</h1><input name=code></body></html>")
-        if pfad.endswith("finance_invoices.html") and zustand["verhalten"] == "kein_zugriff":
+        if pfad.endswith("finance_invoices.html") and zustand["verhalten"] == "kein_zugriff_403":
+            # 403 ohne Menü: nur ein kurzer Text, kein Unterkunfts-Link, keine Finanzmerkmale.
+            return route.fulfill(status=403, content_type="text/html; charset=utf-8",
+                                 body="<html><body><h1>Forbidden</h1></body></html>")
+        if pfad.endswith("finance_invoices.html") and zustand["verhalten"] == "403_mit_code":
+            # 403, aber Booking.com fragt erneut nach einem Code: Bestätigung, kein Rechteproblem.
+            return route.fulfill(status=403, content_type="text/html; charset=utf-8",
+                                 body="<html><body><p>Bitte bestätigen</p><input name=code></body></html>")
+        if pfad.endswith("finance_invoices.html") and zustand["verhalten"] == "403_sperre":
+            # Sperrseite eines Netzwerkdienstes (erfundene Referenz).
+            return route.fulfill(status=403, content_type="text/html; charset=utf-8",
+                                 body="<html><body><h1>Access Denied</h1><p>You don't have permission to access "
+                                      "this server.</p><p>Reference #18.0000000.0000000000.000000</p></body></html>")
+        if pfad.endswith("payouts.html") and zustand["verhalten"] == "403_auszahlungen":
+            return route.fulfill(status=403, content_type="text/html; charset=utf-8",
+                                 body="<html><body><h1>Forbidden</h1></body></html>")
+        if pfad.endswith("finance_invoices.html") and (
+                zustand["verhalten"] == "kein_zugriff"
+                or (zustand["verhalten"] == "kein_zugriff_teil" and _q(url).get("hotel_id") == ANDERES_HOTEL)):
             return html(route, f"<html><body><a href='{start}'>Start</a>"
                                "<p>Sie haben keinen Zugriff auf diese Seite.</p></body></html>")
         if pfad.endswith("finance_invoices.html"):
@@ -728,9 +747,88 @@ def test_kein_finanzzugriff(tmp_path, falsches_booking, monkeypatch):
 @pytest.mark.parametrize("status, text, erwartet", [
     (403, "", True),
     (200, "Sie haben keinen Zugriff auf diese Seite.", True),
+    (200, "Sie haben keinen\nZugriff auf diese Seite.", True),
     (200, "You don't have access to this page", True),
+    (200, "You don’t have permission to view finance", True),
+    (200, "Access denied.", True),
+    (200, "No access", True),
+    (200, "Not authorized", True),
+    (200, "Zugriff verweigert", True),
     (200, "Zahlungen an Booking.com  Nach Jahr filtern 2026", False),
     (None, "", False),
+    # Fast-Treffer: nur Wortteile, kein Hinweis auf fehlende Rechte
+    (200, "Diese Funktion ist no accessible yet", False),
+    (200, "Einstellungen für nicht berechtigte Zahlungen", False),
+    (200, "Mehr zu keine Berechtigungsstufen", False),
+    (200, "Tab: not_authorizedx", False),
+    (200, "Siehe access deniedlist", False),
+    (200, "Unterkunft keinen Zugriffscode nötig", False),
 ])
 def test_ohne_finanz_zugriff(status, text, erwartet):
     assert booking.ohne_finanz_zugriff(status, text) is erwartet
+
+
+def test_kein_finanzzugriff_bei_einer_unterkunft(tmp_path, falsches_booking, monkeypatch):
+    """Co-Hosting: Für eine der beiden Unterkünfte fehlt das Recht „Finance“. Die andere wird
+    trotzdem geholt, das Konto ist „unvollständig“ mit einem Hinweis zu genau dieser Unterkunft."""
+    monkeypatch.setattr(booking, "INHALT_WARTEN_MS", 1500)
+    falsches_booking["verhalten"] = "kein_zugriff_teil"
+    konto = Konto("booking", "standard", optionen={"unterkunft": f"{HOTEL}, {ANDERES_HOTEL}"})
+    quelle = booking.Booking(konto, tmp_path / "profil")
+    abgeliefert: list = []
+    erg = quelle.belege_holen(_umgebung(set(), abgeliefert, []))
+    assert erg.status == "unvollstaendig" and erg.fehler == ""
+    assert {b.art for b in abgeliefert} == {"rechnung", "auszahlungsuebersicht", "auszahlung"}
+    hinweis = [a for a in erg.abweichungen if "kein Zugriff auf Finanzen" in a]
+    assert len(hinweis) == 1 and ANDERES_HOTEL in hinweis[0] and "Finance" in hinweis[0]
+    assert not any(HOTEL in a for a in erg.abweichungen)
+
+
+def test_kein_finanzzugriff_bei_allen_unterkuenften(tmp_path, falsches_booking, monkeypatch):
+    monkeypatch.setattr(booking, "INHALT_WARTEN_MS", 1500)
+    falsches_booking["verhalten"] = "kein_zugriff"
+    konto = Konto("booking", "standard", optionen={"unterkunft": f"{HOTEL}, {ANDERES_HOTEL}"})
+    erg = booking.Booking(konto, tmp_path / "profil").belege_holen(_umgebung(set(), [], []))
+    assert erg.status == "fehler" and erg.fehler == booking.KEIN_ZUGRIFF_TEXT
+
+
+def test_403_ohne_menue_ist_kein_zugriff(tmp_path, falsches_booking, monkeypatch):
+    """Eine 403-Seite ohne Extranet-Menü heißt „kein Zugriff“ — nicht „Zwei-Faktor verlangt“."""
+    monkeypatch.setattr(booking, "INHALT_WARTEN_MS", 1500)
+    falsches_booking["verhalten"] = "kein_zugriff_403"
+    quelle = booking.Booking(Konto("booking", "standard"), tmp_path / "profil")
+    erg = quelle.belege_holen(_umgebung(set(), [], []))
+    assert erg.status == "fehler" and erg.fehler == booking.KEIN_ZUGRIFF_TEXT
+    assert booking.BESTAETIGEN_HINWEIS not in erg.hinweise
+
+
+def test_403_mit_codefeld_ist_bestaetigung(tmp_path, falsches_booking, monkeypatch):
+    """403 mit Code-Feld: erneute Bestätigung, nicht „Recht Finance holen“."""
+    monkeypatch.setattr(booking, "INHALT_WARTEN_MS", 1500)
+    falsches_booking["verhalten"] = "403_mit_code"
+    erg = booking.Booking(Konto("booking", "standard"), tmp_path / "profil").belege_holen(_umgebung(set(), [], []))
+    assert erg.status == "abgelaufen" and booking.BESTAETIGEN_HINWEIS in erg.hinweise
+    assert erg.fehler == "" and not any("Finance" in a for a in erg.abweichungen)
+
+
+def test_403_sperrseite_ist_kein_rechteproblem(tmp_path, falsches_booking, monkeypatch):
+    """Sperrseite des Netzwerkdienstes („Access Denied … Reference #“): nicht geladen, kein „Finance“-Hinweis."""
+    monkeypatch.setattr(booking, "INHALT_WARTEN_MS", 1500)
+    falsches_booking["verhalten"] = "403_sperre"
+    erg = booking.Booking(Konto("booking", "standard"), tmp_path / "profil").belege_holen(_umgebung(set(), [], []))
+    assert erg.status == "unvollstaendig" and erg.fehler == ""
+    assert any("gesperrt (403)" in a for a in erg.abweichungen)
+    assert not any("Finance" in a for a in erg.abweichungen)
+
+
+def test_403_erst_bei_auszahlungen_nur_dieser_abschnitt(tmp_path, falsches_booking, monkeypatch):
+    """Rechnungen geholt, erst die Auszahlungsseite verweigert: „unvollständig“, nicht „fehler“."""
+    monkeypatch.setattr(booking, "INHALT_WARTEN_MS", 1500)
+    falsches_booking["verhalten"] = "403_auszahlungen"
+    abgeliefert: list = []
+    erg = booking.Booking(Konto("booking", "standard"), tmp_path / "profil").belege_holen(
+        _umgebung(set(), abgeliefert, []))
+    assert erg.status == "unvollstaendig" and erg.fehler == ""
+    assert {b.art for b in abgeliefert} >= {"rechnung", "auszahlungsuebersicht"}
+    assert "auszahlung" not in {b.art for b in abgeliefert}
+    assert erg.abweichungen == ["Auszahlungen: kein Zugriff (Booking.com verweigert diese Seite)."]

@@ -413,20 +413,33 @@ class BestaetigungNoetig(SitzungAbgelaufen):
 
 
 class KeinFinanzZugriff(Exception):
-    """Das Extranet lädt, aber dieses Konto darf die Finanzen nicht sehen (z. B. kein
-    Primary-Konto im Group-Extranet)."""
+    """Das Extranet lädt, aber dieses Konto darf die Finanzen dieser Unterkunft nicht sehen
+    (z. B. ohne das Recht „Finance“)."""
 
 
 BESTAETIGEN_HINWEIS = ("Booking.com hat mitten im Abruf eine Bestätigung verlangt (Zwei-Faktor). Bitte bei "
                        "diesem Konto neu anmelden und bestätigen — der nächste Lauf holt den Rest nach.")
-KEIN_ZUGRIFF_TEXT = ("Dieses Booking-Konto hat keinen Zugriff auf Finanzen. Im Group-Extranet sehen nur "
-                     "Primary-Konten Rechnungen und Auszahlungen — bitte mit einem solchen Konto anmelden.")
+KEIN_ZUGRIFF_TEXT = ("Dieses Booking-Konto hat keinen Zugriff auf Finanzen. Bitte vom Eigentümer für die "
+                     "Unterkunft das Recht „Finance“ (oder Admin) geben lassen oder mit einem Konto anmelden, "
+                     "das die Finanzen sieht.")
+#: Nur einzelne Unterkünfte ohne Finanzrecht (z. B. Co-Hosting): je Unterkunft als Abweichung.
+KEIN_ZUGRIFF_UNTERKUNFT = ("Unterkunft {hotel}: kein Zugriff auf Finanzen für diese Unterkunft — bitte vom "
+                           "Eigentümer das Recht „Finance“ geben lassen. Die übrigen Unterkünfte wurden geholt.")
 
 #: Woran eine Seite ohne Finanzberechtigung zu erkennen ist (nur geprüft, wenn die erwarteten
 #: Rechnungslinks und der Jahresfilter fehlen; der Text wird nie gespeichert oder ausgegeben).
+#: Nur ganze Wörter: „no access“ trifft, „no accessible“ oder „unauthorized_tab“ nicht.
+#: Felder, an denen eine Bestätigungs- oder Anmeldeseite zu erkennen ist.
+EINGABE_MERKMALE = ('input[type=password], input[autocomplete="one-time-code"], input[name*="code" i], '
+                    'input[id*="code" i], input[inputmode=numeric]')
+
+#: Sperrseite eines Netzwerkdienstes (z. B. Akamai „Access Denied … Reference #…“), kein Rechteproblem.
+RE_SPERRSEITE = re.compile(r"\bReference\s+#\s*[0-9a-f.]+|errors\.edgesuite\.net|\bRay ID\b", re.I)
+
 RE_KEIN_ZUGRIFF = re.compile(
-    r"keinen zugriff|keine berechtigung|nicht berechtigt|zugriff verweigert|"
-    r"(?:don't|do not|doesn't|does not) have (?:access|permission)|no access|access denied|not authori[sz]ed",
+    r"\b(?:keinen\s+zugriff|keine\s+berechtigung|nicht\s+berechtigt|zugriff\s+verweigert|"
+    r"(?:don['’]t|do\s+not|doesn['’]t|does\s+not)\s+have\s+(?:access|permission)|no\s+access|"
+    r"access\s+denied|not\s+authori[sz]ed)\b",
     re.I)
 
 
@@ -626,8 +639,12 @@ class Booking(Quelle):
                     return erg
                 mehrere = len(hotels) > 1
                 umgebung.melden(f"{len(hotels)} Unterkunft/Unterkünfte." if mehrere else "Angemeldet.")
-                for hotel in hotels:
-                    self._unterkunft_holen(seite, hotel, ses, mehrere, umgebung, erg, zaehler)
+                ohne_zugriff = [h for h in hotels
+                                if not self._unterkunft_holen(seite, h, ses, mehrere, umgebung, erg, zaehler)]
+                if ohne_zugriff and len(ohne_zugriff) == len(hotels):
+                    raise KeinFinanzZugriff()  # keine einzige Unterkunft: Meldung für das ganze Konto
+                for hotel in ohne_zugriff:
+                    self._abweichung(erg, KEIN_ZUGRIFF_UNTERKUNFT.format(hotel=hotel))
             except BestaetigungNoetig:
                 erg.status = "abgelaufen"
                 erg.hinweise.append(BESTAETIGEN_HINWEIS)
@@ -649,9 +666,11 @@ class Booking(Quelle):
         return erg
 
     def _unterkunft_holen(self, seite, hotel, ses, mehrere, umgebung: Umgebung, erg: Ergebnis,
-                          zaehler: dict[str, int]) -> None:
+                          zaehler: dict[str, int]) -> bool:
         """Die drei Abschnitte einer Unterkunft. Scheitert einer, laufen die anderen (und weitere
-        Unterkünfte) weiter; das Konto ist dann „unvollständig“. Nur ein Ablauf der Anmeldung bricht ab."""
+        Unterkünfte) weiter; das Konto ist dann „unvollständig“. Nur ein Ablauf der Anmeldung bricht ab.
+        False, wenn dieses Konto für die Unterkunft kein Finanzrecht hat — das entscheidet nur der erste
+        Abschnitt (Rechnungen). Fehlt der Zugriff erst bei einem späteren, ist nur dieser Abschnitt betroffen."""
         vorsilbe = f"Unterkunft {hotel}: " if mehrere else ""
         abschnitte = (
             ("Rechnungen", "rechnung", self._rechnungen),
@@ -661,8 +680,13 @@ class Booking(Quelle):
         for name, art, holen in abschnitte:
             try:
                 neu = holen(seite, hotel, ses, mehrere, umgebung, erg, vorsilbe)
-            except (SitzungAbgelaufen, KeinFinanzZugriff):
+            except SitzungAbgelaufen:
                 raise
+            except KeinFinanzZugriff:
+                if art == abschnitte[0][1]:
+                    return False
+                self._abweichung(erg, f"{vorsilbe}{name}: kein Zugriff (Booking.com verweigert diese Seite).")
+                continue
             except DateiFehler as fehler:
                 self._abweichung(erg, f"{vorsilbe}{name}: abgebrochen ({fehler}).")
                 continue
@@ -671,6 +695,7 @@ class Booking(Quelle):
                 continue
             if art in zaehler:
                 zaehler[art] += neu or 0
+        return True
 
     def _seite_oeffnen(self, seite, pfad: str, hotel: str, ses: str, **extra: str) -> None:
         """Öffnet eine Extranet-Seite. Zeigt sie statt des Extranets eine Anmelde- oder
@@ -683,11 +708,13 @@ class Booking(Quelle):
             seite.wait_for_selector(f'a[href*="hotel_id="], {FINANZ_MERKMALE}', timeout=INHALT_WARTEN_MS)
         except Exception:  # noqa: BLE001 - weder Unterkunft noch Finanzinhalt: unten entscheiden
             pass  # nosec B110
-        self._noch_angemeldet(seite)
+        self._noch_angemeldet(seite, status=self._letzter_status)
 
-    def _noch_angemeldet(self, seite) -> None:
+    def _noch_angemeldet(self, seite, status: int | None = None) -> None:
         """Nach einem Fehlschlag auf der Seite: Anmeldeseite → abgelaufen; Seite ohne Extranet-
-        Inhalt (z. B. Zwei-Faktor-Abfrage mittendrin) → BestaetigungNoetig. Sonst nichts."""
+        Inhalt (z. B. Zwei-Faktor-Abfrage mittendrin) → BestaetigungNoetig. Sonst nichts.
+        ``status`` nur direkt nach dem Laden: Ein 403 ohne Menü heißt „kein Zugriff“, nicht
+        „Bestätigung verlangt“."""
         if ist_anmeldeseite(seite.url):
             raise SitzungAbgelaufen()
         if self._angemeldet(seite):
@@ -696,8 +723,30 @@ class Booking(Quelle):
             finanzseite = ist_extranet(seite.url) and seite.locator(FINANZ_MERKMALE).count() > 0
         except Exception:  # noqa: BLE001
             finanzseite = False
-        if not finanzseite:
-            raise BestaetigungNoetig()
+        if finanzseite:
+            return
+        if status == 403 and ist_extranet(seite.url) and not self._eingabefeld(seite):
+            if self._sperrseite(seite):  # z. B. „Access Denied“ des Netzwerkdienstes, kein Rechteproblem
+                raise DateiFehler("Booking.com hat die Seite gesperrt (403)")
+            raise KeinFinanzZugriff()
+        raise BestaetigungNoetig()  # auch 403 mit Code- oder Passwortfeld: erneute Bestätigung
+
+    @staticmethod
+    def _sperrseite(seite) -> bool:
+        """Sperrseite eines Netzwerkdienstes statt einer Booking.com-Seite (Text nur durchsucht)?"""
+        try:
+            return bool(RE_SPERRSEITE.search(seite.inner_text("body", timeout=5000)))
+        except Exception:  # noqa: BLE001
+            return False
+
+    @staticmethod
+    def _eingabefeld(seite) -> bool:
+        """Fragt die Seite nach einem Code oder Passwort (Zwei-Faktor, neue Anmeldung)? Im Zweifel ja —
+        dann lieber „neu anmelden“ als „Recht Finance holen“."""
+        try:
+            return seite.locator(EINGABE_MERKMALE).count() > 0
+        except Exception:  # noqa: BLE001
+            return True
 
     def _finanzzugriff_pruefen(self, seite) -> None:
         """Nur aufgerufen, wenn Rechnungslinks und Jahresfilter fehlen: steckt fehlende
