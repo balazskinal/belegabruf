@@ -243,6 +243,23 @@ eingestellt:
   im Dateinamen. Steht dort etwas anderes als Ziffern, holt das Programm nichts und sagt das in der
   Zusammenfassung.
 
+### Co-Hosting / fremde Unterkünfte
+
+**Booking.com:** Das klappt mit dem eigenen Extranet-Konto, wenn der Eigentümer einen je Unterkunft mit dem
+Recht **„Finance“** (oder als Admin) einlädt. So lädt der Eigentümer ein: Nutzerkonto-Symbol →
+„Create and manage users“ → „Add a user“ → Rechte wählen → „Send invite“. Belegabruf geht dann je
+Unterkunft auf *Finanzen → Rechnungen und Dokumente* (die IDs wie oben bei `unterkunft` eintragen). Im
+Gruppen-Extranet sehen nur Primary-Konten das Finanzmenü — das stört Belegabruf nicht, weil es jede
+Unterkunft einzeln aufruft. Fehlt das Recht nur bei einzelnen Unterkünften, holt das Programm die übrigen
+trotzdem; das Konto steht dann auf „unvollständig“ mit dem Hinweis „kein Zugriff auf Finanzen für diese
+Unterkunft“. Nur wenn keine Unterkunft Finanzen zeigt, heißt es „Dieses Booking-Konto hat keinen Zugriff
+auf Finanzen“.
+
+**Airbnb:** Belegabruf liest bisher nur die Steuerdokumente des eigenen Kontos. Der Weg für Co-Gastgeber
+über *Einkünfte → „Als Co-Gastgeber ansehen“* wird noch nicht unterstützt. Bis dahin: ein eigenes Konto
+des Eigentümers in Belegabruf anlegen (der Eigentümer meldet sich darin selbst an), oder der Eigentümer
+exportiert die Rechnungen selbst.
+
 Das Programm **liest nur und lädt herunter**. Angeklickt werden nur der Reiter „Zahlungen von
 Booking.com“, der Jahresfilter und das Zeitraumfeld bei den Auszahlungen — nichts an Preisen,
 Verfügbarkeit oder Einstellungen. Gespeichert wird nur, was von `https://admin.booking.com` kommt (siehe
@@ -421,6 +438,12 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 
 ## Was neu ist
 
+- **2.2.3** — **Booking.com: Co-Hosting mit einzelnen Unterkünften ohne Finanzrecht.** Fehlt dem Konto bei
+  einer Unterkunft das Recht „Finance“, bricht der Abruf nicht mehr für das ganze Konto ab: Die übrigen
+  Unterkünfte werden geholt, das Konto steht auf „unvollständig“ mit einem Hinweis zu genau dieser
+  Unterkunft. Eine Seite „Zugriff verweigert“ (403) ohne Extranet-Menü gilt als „kein Zugriff“, nicht mehr
+  als „Bestätigung verlangt“. Die Erkennung solcher Hinweise prüft nur noch ganze Wörter. Neu im README:
+  Abschnitt „Co-Hosting / fremde Unterkünfte“ (Booking.com und Airbnb).
 - **2.2.2** — **Booking.com: „angemeldet“ erst nach abgeschlossener Zwei-Faktor-Bestätigung.** Bisher konnte
   das Programm ein Booking-Konto schon als angemeldet zeigen, während Booking.com noch auf den Bestätigungscode
   wartete. Jetzt bleibt das Anmeldefenster offen, bis das Extranet wirklich die Unterkunft zeigt; hängt es
