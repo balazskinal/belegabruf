@@ -329,6 +329,10 @@ def falsches_booking(monkeypatch):
                 return route.fulfill(content_type="text/csv", body=_csv(buchungen[1], datum=buchungen[0] or ""))
             return route.fulfill(content_type="application/pdf", body=_pdf("Booking.com " + pfad))
         zustand["seiten"].append(pfad + ("?year=" + _q(url)["year"] if "year" in _q(url) else ""))
+        if pfad.endswith("home.html") and zustand["verhalten"] == "zwei_faktor":
+            # Extranet-Adresse mit ses, aber die Bestätigung ist noch offen: keine Unterkunft auf der Seite.
+            return html(route, "<html><body><h1>Bestätigung</h1><p>Code eingeben</p>"
+                               "<input name=code><button>Bestätigen</button></body></html>")
         if pfad.endswith("home.html"):  # mit einem Link auf eine fremde Unterkunft (wie im echten Extranet)
             return html(route, f"<html><body><a href='{start}'>Start</a>"
                                f"<a href='{basis}/x.html?hotel_id=7654321&ses={SES}'>Werbung</a></body></html>")
@@ -600,3 +604,94 @@ def test_unterkunft_als_liste_uebersteht_speichern(tmp_path):
     nachher = einstellungen.laden().konten[0].optionen
     assert nachher == vorher == {"unterkunft": ["1234567", "7654321"], "zahl": 3, "schalter": True}
     assert booking.unterkunft_einstellung(nachher["unterkunft"]) == ["1234567", "7654321"]
+
+
+# ── Anmeldung erst mit Inhalt (2.2.2: offene Zwei-Faktor-Bestätigung) ─────────
+
+EXTRANET_URL = f"https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/home.html?hotel_id={HOTEL}&ses={SES}"
+UNTERKUNFT_LINK = f"https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/x.html?hotel_id={HOTEL}&ses={SES}"
+
+
+def test_angemeldet_nur_mit_inhalt():
+    assert booking.angemeldet(EXTRANET_URL, [UNTERKUNFT_LINK])
+    # Zwei-Faktor offen: Adresse wie das Extranet (mit ses), aber keine Unterkunft auf der Seite
+    assert not booking.angemeldet(EXTRANET_URL, [])
+    assert not booking.angemeldet(EXTRANET_URL, ["https://admin.booking.com/hilfe.html"])
+    assert not booking.angemeldet(EXTRANET_URL, [f"https://andere.example/x.html?hotel_id={HOTEL}"])
+    assert not booking.angemeldet(EXTRANET_URL, ["https://admin.booking.com/x.html?hotel_id=abc"])
+    assert not booking.angemeldet(EXTRANET_URL.replace(f"&ses={SES}", ""), [UNTERKUNFT_LINK])
+    assert not booking.angemeldet("https://account.booking.com/sign-in?ses=x", [UNTERKUNFT_LINK])
+
+
+class _AnmeldeSeite:
+    """Attrappe für _angemeldet bzw. den Prüfer im Anmeldefenster."""
+
+    def __init__(self, url, links):
+        self.url, self.links = url, links
+
+    def wait_for_selector(self, selektor, timeout):
+        if not self.links:
+            raise TimeoutError("kein Inhalt")
+
+    def evaluate(self, js, *argumente):
+        return self.links
+
+
+def test_fenster_bleibt_offen_bei_zwei_faktor(monkeypatch):
+    monkeypatch.setattr(booking, "ZWEI_FAKTOR_HINWEIS_NACH_S", 0)
+    q = booking.Booking(Konto("booking", "standard"), None)
+    meldungen: list[str] = []
+    fertig = q._fertig_pruefer(meldungen.append)
+    halb = _AnmeldeSeite(EXTRANET_URL, [])
+    assert fertig(halb) is False and fertig(halb) is False
+    assert meldungen == [booking.ZWEI_FAKTOR_HINWEIS]  # genau einmal
+    assert "Zwei-Faktor" in meldungen[0] and SES not in meldungen[0]
+    assert fertig(_AnmeldeSeite("https://account.booking.com/sign-in", [])) is False
+    assert fertig(_AnmeldeSeite(EXTRANET_URL, [UNTERKUNFT_LINK])) is True
+    assert q._angemeldet(halb, warten_ms=100) is False
+    assert q._angemeldet(_AnmeldeSeite(EXTRANET_URL, [UNTERKUNFT_LINK]), warten_ms=100) is True
+
+
+def test_kein_hinweis_solange_die_seite_kurz_laedt():
+    q = booking.Booking(Konto("booking", "standard"), None)
+    meldungen: list[str] = []
+    fertig = q._fertig_pruefer(meldungen.append)
+    assert fertig(_AnmeldeSeite(EXTRANET_URL, [])) is False
+    assert meldungen == []  # erst nach ZWEI_FAKTOR_HINWEIS_NACH_S
+
+
+def test_zwei_faktor_offen_gilt_nicht_als_angemeldet(tmp_path, falsches_booking, monkeypatch):
+    """Extranet-Adresse mit ses, aber ohne Unterkunft: Prüfung, Abruf und Anmeldefenster sagen
+    „nicht angemeldet“ — das Fenster wartet weiter (hier: bis zum Zeitlimit)."""
+    monkeypatch.setattr(booking, "INHALT_WARTEN_MS", 1500)
+    monkeypatch.setattr(booking, "ZWEI_FAKTOR_HINWEIS_NACH_S", 0)
+    falsches_booking["verhalten"] = "zwei_faktor"
+    quelle = booking.Booking(Konto("booking", "standard"), tmp_path / "profil")
+    assert quelle.sitzung_pruefen() is False
+    erg = quelle.belege_holen(_umgebung(set(), [], []))
+    assert erg.status == "abgelaufen" and erg.neu == 0
+    assert falsches_booking["dateien"] == []
+
+    gesehen: list[bool] = []
+
+    def warten(kontext, seite, fertig, hinweis, **k):
+        assert booking.ist_extranet(seite.url)  # die Adresse sieht schon aus wie das Extranet
+        gesehen.extend([fertig(seite), fertig(seite)])
+        return "zeit"
+
+    monkeypatch.setattr(browser, "auf_mensch_warten", warten)
+    meldungen: list[str] = []
+    assert quelle.anmelden_lassen(meldungen.append) is False
+    assert gesehen == [False, False]
+    assert meldungen.count(booking.ZWEI_FAKTOR_HINWEIS) == 1
+    assert not any(SES in m for m in meldungen)
+
+
+def test_normalfall_angemeldet(tmp_path, falsches_booking, monkeypatch):
+    def warten(*a, **k):
+        raise AssertionError("schon angemeldet: kein Warten")
+
+    monkeypatch.setattr(browser, "auf_mensch_warten", warten)
+    quelle = booking.Booking(Konto("booking", "standard"), tmp_path / "profil")
+    assert quelle.sitzung_pruefen() is True
+    assert quelle.anmelden_lassen(lambda t: None) is True

@@ -219,7 +219,8 @@ aber nur, was neu ist.
 ## Booking.com
 
 Booking.com stellt alles im **Extranet** unter *Finanzen* bereit. Angemeldet wird wie überall im eigenen
-Fenster (Benutzername, Passwort, meist Zwei-Faktor). Das Programm holt drei Arten von Dokumenten und legt
+Fenster (Benutzername, Passwort, meist Zwei-Faktor). Als „angemeldet“ gilt das Konto erst, wenn die
+Zwei-Faktor-Bestätigung abgeschlossen ist und das Extranet die Unterkunft zeigt. Das Programm holt drei Arten von Dokumenten und legt
 jede in einen eigenen Ordner unter `booking/` — nach Jahr bzw. Jahr und Monat, wie bei „Unterordner“
 eingestellt:
 
@@ -420,6 +421,11 @@ Ein automatisches Selbst-Update gibt es bewusst nicht.
 
 ## Was neu ist
 
+- **2.2.2** — **Booking.com: „angemeldet“ erst nach abgeschlossener Zwei-Faktor-Bestätigung.** Bisher konnte
+  das Programm ein Booking-Konto schon als angemeldet zeigen, während Booking.com noch auf den Bestätigungscode
+  wartete. Jetzt bleibt das Anmeldefenster offen, bis das Extranet wirklich die Unterkunft zeigt; hängt es
+  an der Bestätigung, steht in der Oberfläche „Bitte schließ die Bestätigung (Zwei-Faktor) im
+  Booking-Fenster ab“. Dieselbe Prüfung gilt beim „Prüfen“ und vor jedem Abruf.
 - **2.2.1** — **Einrichtung auf Rechnern ohne passendes Python repariert.** Die Starter richten jetzt fest
   Python 3.12 ein; eine schon angelegte Umgebung mit anderer Python-Version wird beim nächsten Start
   neu aufgebaut. Bisher konnte uv auf einem neuen Rechner Python 3.15 laden; dafür gibt es einen von PyMuPDF

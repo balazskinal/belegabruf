@@ -2,6 +2,9 @@
 
 Alles liegt im Extranet (``https://admin.booking.com``). Nach der Anmeldung tragen alle
 Seiten ``hotel_id`` (die Unterkunft) und ``ses`` (den Sitzungsschlüssel) in der Adresse.
+Als angemeldet gilt ein Konto aber erst, wenn das Extranet Inhalt zeigt (Links auf eine
+Unterkunft) — die Adresse allein reicht nicht, sie kann schon während der Zwei-Faktor-
+Bestätigung so aussehen (siehe ``angemeldet``).
 ``ses`` liest das Programm nur aus der aktuellen Seite und hält es im Speicher — es
 steht nie in Protokoll, Ausgaben, Fehlermeldungen oder Dateinamen.
 
@@ -47,6 +50,7 @@ import calendar
 import csv
 import io
 import re
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
@@ -126,6 +130,29 @@ def ist_anmeldeseite(url: str) -> bool:
 def ist_extranet(url: str) -> bool:
     teile = urlsplit(url or "")
     return teile.netloc.endswith("admin.booking.com") and "/hoteladmin/" in teile.path and not ist_anmeldeseite(url)
+
+
+def hat_unterkunft(links: list[str]) -> bool:
+    """Zeigt die Seite Inhalt einer Unterkunft? Mindestens ein Link auf admin.booking.com mit
+    gültiger ``hotel_id`` (Menü bzw. Unterkunftsauswahl des Extranets)."""
+    return any(ist_eigene_adresse(str(link)) and RE_HOTEL.fullmatch(parameter(str(link)).get("hotel_id", ""))
+               for link in links or [])
+
+
+def angemeldet(url: str, links: list[str]) -> bool:
+    """Angemeldet ist ein Konto erst, wenn eine geschützte Extranet-Seite wirklich Inhalt zeigt:
+    Extranet-Adresse mit ``ses`` **und** mindestens eine Unterkunft in den Links. Die Adresse allein
+    reicht nicht — während der Zwei-Faktor-Bestätigung kann sie schon wie das Extranet aussehen."""
+    return ist_extranet(url) and "ses" in parameter(url) and hat_unterkunft(links)
+
+
+#: So lange (ms) wartet die Prüfung, bis die Extranet-Seite ihre Unterkünfte zeigt.
+INHALT_WARTEN_MS = 30000
+#: Nach so vielen Sekunden auf einer Extranet-Adresse ohne Inhalt kommt der Zwei-Faktor-Hinweis
+#: (vorher nicht — sonst sähe ihn jeder kurz, solange die Seite nach der Anmeldung lädt).
+ZWEI_FAKTOR_HINWEIS_NACH_S = 5.0
+ZWEI_FAKTOR_HINWEIS = ("Noch nicht angemeldet: Bitte schließ die Bestätigung (Zwei-Faktor) im Booking-Fenster ab. "
+                       "Danach geht es von allein weiter.")
 
 
 def sauber(text: str) -> str:
@@ -394,14 +421,54 @@ class Booking(Quelle):
     anzeigename = "Booking.com"
 
     # 1. Sitzung prüfen ------------------------------------------------------
+    def _angemeldet(self, seite, warten_ms: int = 0) -> bool:
+        """Zeigt diese Seite das Extranet mit Inhalt (siehe ``angemeldet``)? Mit ``warten_ms``
+        wartet sie so lange auf die Unterkunfts-Links. Liest nur Adressen, nichts ins Protokoll."""
+        try:
+            if not ist_extranet(seite.url) or "ses" not in parameter(seite.url):
+                return False
+            if warten_ms:
+                try:
+                    seite.wait_for_selector('a[href*="hotel_id="]', timeout=warten_ms)
+                except Exception:  # noqa: BLE001 - kein Inhalt (z. B. Zwei-Faktor offen)
+                    return False
+            return angemeldet(seite.url, seite.evaluate(_HOTEL_LINKS_JS))
+        except Exception:  # noqa: BLE001 - Seite lädt gerade neu oder ist zu
+            return False
+
+    def _fertig_pruefer(self, melden: Callable[[str], None]) -> Callable[[object], bool]:
+        """Bedingung fürs Anmeldefenster: fertig erst mit Extranet-Inhalt. Steht das Fenster eine
+        Weile auf einer Extranet-Adresse ohne Inhalt (offene Zwei-Faktor-Bestätigung), kommt einmal
+        der Hinweis — das Fenster bleibt offen."""
+        stand = {"seit": None, "gemeldet": False}
+
+        def fertig(seite) -> bool:
+            if self._angemeldet(seite):
+                return True
+            try:
+                halb = ist_extranet(seite.url)
+            except Exception:  # noqa: BLE001
+                halb = False
+            if not halb:
+                stand["seit"] = None
+                return False
+            jetzt = time.monotonic()
+            stand["seit"] = stand["seit"] if stand["seit"] is not None else jetzt
+            if not stand["gemeldet"] and jetzt - stand["seit"] >= ZWEI_FAKTOR_HINWEIS_NACH_S:
+                melden(ZWEI_FAKTOR_HINWEIS)
+                stand["gemeldet"] = True
+            return False
+
+        return fertig
+
     def _startseite(self, seite) -> bool:
-        """Öffnet das Extranet; True, wenn angemeldet (die Seite trägt hotel_id/ses)."""
+        """Öffnet das Extranet; True nur, wenn es angemeldet mit Inhalt da ist (siehe ``angemeldet``)."""
         _aufrufen(seite, ADRESSE + "/")
         try:
             seite.wait_for_url(lambda u: ist_extranet(u) or ist_anmeldeseite(u), timeout=30000)
         except Exception:  # noqa: BLE001
             return False
-        return ist_extranet(seite.url) and "ses" in parameter(seite.url)
+        return self._angemeldet(seite, warten_ms=INHALT_WARTEN_MS)
 
     def sitzung_pruefen(self) -> bool:
         with browser.profil_oeffnen(self.profil, sichtbar=False) as kontext:
@@ -430,9 +497,11 @@ class Booking(Quelle):
             seite = browser.neue_seite(kontext)
             seite.goto(ADRESSE + "/", wait_until="domcontentloaded")
             seite.wait_for_timeout(3000)
-            if ist_extranet(seite.url):
+            if ist_extranet(seite.url) and self._angemeldet(seite, warten_ms=min(5000, INHALT_WARTEN_MS)):
                 return True
-            browser.auf_mensch_warten(kontext, seite, lambda s: ist_extranet(s.url), melden)
+            browser.auf_mensch_warten(kontext, seite, self._fertig_pruefer(melden), melden)
+        # Unabhängig davon, wie das Fenster endete (erkannt, Enter, zu, Zeitlimit): unsichtbar
+        # mit derselben strengen Prüfung nachsehen.
         return self.sitzung_pruefen()
 
     # 3. Belege holen --------------------------------------------------------

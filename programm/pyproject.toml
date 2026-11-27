@@ -1,6 +1,6 @@
 [project]
 name = "belegabruf"
-version = "2.2.1"
+version = "2.2.2"
 description = "Holt Rechnungen aus eingeloggten Anbieter-Konten per Doppelklick auf den eigenen Rechner."
 license = "MIT"
 authors = [{ name = "Balázs Kinál" }]
