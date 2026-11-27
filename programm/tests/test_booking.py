@@ -343,6 +343,18 @@ def falsches_booking(monkeypatch):
             # 403 ohne Menü: nur ein kurzer Text, kein Unterkunfts-Link, keine Finanzmerkmale.
             return route.fulfill(status=403, content_type="text/html; charset=utf-8",
                                  body="<html><body><h1>Forbidden</h1></body></html>")
+        if pfad.endswith("finance_invoices.html") and zustand["verhalten"] == "403_mit_code":
+            # 403, aber Booking.com fragt erneut nach einem Code: Bestätigung, kein Rechteproblem.
+            return route.fulfill(status=403, content_type="text/html; charset=utf-8",
+                                 body="<html><body><p>Bitte bestätigen</p><input name=code></body></html>")
+        if pfad.endswith("finance_invoices.html") and zustand["verhalten"] == "403_sperre":
+            # Sperrseite eines Netzwerkdienstes (erfundene Referenz).
+            return route.fulfill(status=403, content_type="text/html; charset=utf-8",
+                                 body="<html><body><h1>Access Denied</h1><p>You don't have permission to access "
+                                      "this server.</p><p>Reference #18.0000000.0000000000.000000</p></body></html>")
+        if pfad.endswith("payouts.html") and zustand["verhalten"] == "403_auszahlungen":
+            return route.fulfill(status=403, content_type="text/html; charset=utf-8",
+                                 body="<html><body><h1>Forbidden</h1></body></html>")
         if pfad.endswith("finance_invoices.html") and (
                 zustand["verhalten"] == "kein_zugriff"
                 or (zustand["verhalten"] == "kein_zugriff_teil" and _q(url).get("hotel_id") == ANDERES_HOTEL)):
@@ -788,3 +800,35 @@ def test_403_ohne_menue_ist_kein_zugriff(tmp_path, falsches_booking, monkeypatch
     erg = quelle.belege_holen(_umgebung(set(), [], []))
     assert erg.status == "fehler" and erg.fehler == booking.KEIN_ZUGRIFF_TEXT
     assert booking.BESTAETIGEN_HINWEIS not in erg.hinweise
+
+
+def test_403_mit_codefeld_ist_bestaetigung(tmp_path, falsches_booking, monkeypatch):
+    """403 mit Code-Feld: erneute Bestätigung, nicht „Recht Finance holen“."""
+    monkeypatch.setattr(booking, "INHALT_WARTEN_MS", 1500)
+    falsches_booking["verhalten"] = "403_mit_code"
+    erg = booking.Booking(Konto("booking", "standard"), tmp_path / "profil").belege_holen(_umgebung(set(), [], []))
+    assert erg.status == "abgelaufen" and booking.BESTAETIGEN_HINWEIS in erg.hinweise
+    assert erg.fehler == "" and not any("Finance" in a for a in erg.abweichungen)
+
+
+def test_403_sperrseite_ist_kein_rechteproblem(tmp_path, falsches_booking, monkeypatch):
+    """Sperrseite des Netzwerkdienstes („Access Denied … Reference #“): nicht geladen, kein „Finance“-Hinweis."""
+    monkeypatch.setattr(booking, "INHALT_WARTEN_MS", 1500)
+    falsches_booking["verhalten"] = "403_sperre"
+    erg = booking.Booking(Konto("booking", "standard"), tmp_path / "profil").belege_holen(_umgebung(set(), [], []))
+    assert erg.status == "unvollstaendig" and erg.fehler == ""
+    assert any("gesperrt (403)" in a for a in erg.abweichungen)
+    assert not any("Finance" in a for a in erg.abweichungen)
+
+
+def test_403_erst_bei_auszahlungen_nur_dieser_abschnitt(tmp_path, falsches_booking, monkeypatch):
+    """Rechnungen geholt, erst die Auszahlungsseite verweigert: „unvollständig“, nicht „fehler“."""
+    monkeypatch.setattr(booking, "INHALT_WARTEN_MS", 1500)
+    falsches_booking["verhalten"] = "403_auszahlungen"
+    abgeliefert: list = []
+    erg = booking.Booking(Konto("booking", "standard"), tmp_path / "profil").belege_holen(
+        _umgebung(set(), abgeliefert, []))
+    assert erg.status == "unvollstaendig" and erg.fehler == ""
+    assert {b.art for b in abgeliefert} >= {"rechnung", "auszahlungsuebersicht"}
+    assert "auszahlung" not in {b.art for b in abgeliefert}
+    assert erg.abweichungen == ["Auszahlungen: kein Zugriff (Booking.com verweigert diese Seite)."]

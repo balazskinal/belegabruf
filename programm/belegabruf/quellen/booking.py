@@ -413,14 +413,15 @@ class BestaetigungNoetig(SitzungAbgelaufen):
 
 
 class KeinFinanzZugriff(Exception):
-    """Das Extranet lädt, aber dieses Konto darf die Finanzen nicht sehen (z. B. kein
-    Primary-Konto im Group-Extranet)."""
+    """Das Extranet lädt, aber dieses Konto darf die Finanzen dieser Unterkunft nicht sehen
+    (z. B. ohne das Recht „Finance“)."""
 
 
 BESTAETIGEN_HINWEIS = ("Booking.com hat mitten im Abruf eine Bestätigung verlangt (Zwei-Faktor). Bitte bei "
                        "diesem Konto neu anmelden und bestätigen — der nächste Lauf holt den Rest nach.")
-KEIN_ZUGRIFF_TEXT = ("Dieses Booking-Konto hat keinen Zugriff auf Finanzen. Im Group-Extranet sehen nur "
-                     "Primary-Konten Rechnungen und Auszahlungen — bitte mit einem solchen Konto anmelden.")
+KEIN_ZUGRIFF_TEXT = ("Dieses Booking-Konto hat keinen Zugriff auf Finanzen. Bitte vom Eigentümer für die "
+                     "Unterkunft das Recht „Finance“ (oder Admin) geben lassen oder mit einem Konto anmelden, "
+                     "das die Finanzen sieht.")
 #: Nur einzelne Unterkünfte ohne Finanzrecht (z. B. Co-Hosting): je Unterkunft als Abweichung.
 KEIN_ZUGRIFF_UNTERKUNFT = ("Unterkunft {hotel}: kein Zugriff auf Finanzen für diese Unterkunft — bitte vom "
                            "Eigentümer das Recht „Finance“ geben lassen. Die übrigen Unterkünfte wurden geholt.")
@@ -428,6 +429,13 @@ KEIN_ZUGRIFF_UNTERKUNFT = ("Unterkunft {hotel}: kein Zugriff auf Finanzen für d
 #: Woran eine Seite ohne Finanzberechtigung zu erkennen ist (nur geprüft, wenn die erwarteten
 #: Rechnungslinks und der Jahresfilter fehlen; der Text wird nie gespeichert oder ausgegeben).
 #: Nur ganze Wörter: „no access“ trifft, „no accessible“ oder „unauthorized_tab“ nicht.
+#: Felder, an denen eine Bestätigungs- oder Anmeldeseite zu erkennen ist.
+EINGABE_MERKMALE = ('input[type=password], input[autocomplete="one-time-code"], input[name*="code" i], '
+                    'input[id*="code" i], input[inputmode=numeric]')
+
+#: Sperrseite eines Netzwerkdienstes (z. B. Akamai „Access Denied … Reference #…“), kein Rechteproblem.
+RE_SPERRSEITE = re.compile(r"\bReference\s+#\s*[0-9a-f.]+|errors\.edgesuite\.net|\bRay ID\b", re.I)
+
 RE_KEIN_ZUGRIFF = re.compile(
     r"\b(?:keinen\s+zugriff|keine\s+berechtigung|nicht\s+berechtigt|zugriff\s+verweigert|"
     r"(?:don['’]t|do\s+not|doesn['’]t|does\s+not)\s+have\s+(?:access|permission)|no\s+access|"
@@ -661,7 +669,8 @@ class Booking(Quelle):
                           zaehler: dict[str, int]) -> bool:
         """Die drei Abschnitte einer Unterkunft. Scheitert einer, laufen die anderen (und weitere
         Unterkünfte) weiter; das Konto ist dann „unvollständig“. Nur ein Ablauf der Anmeldung bricht ab.
-        False, wenn dieses Konto für die Unterkunft kein Finanzrecht hat (dann bleibt sie ganz aus)."""
+        False, wenn dieses Konto für die Unterkunft kein Finanzrecht hat — das entscheidet nur der erste
+        Abschnitt (Rechnungen). Fehlt der Zugriff erst bei einem späteren, ist nur dieser Abschnitt betroffen."""
         vorsilbe = f"Unterkunft {hotel}: " if mehrere else ""
         abschnitte = (
             ("Rechnungen", "rechnung", self._rechnungen),
@@ -674,7 +683,10 @@ class Booking(Quelle):
             except SitzungAbgelaufen:
                 raise
             except KeinFinanzZugriff:
-                return False
+                if art == abschnitte[0][1]:
+                    return False
+                self._abweichung(erg, f"{vorsilbe}{name}: kein Zugriff (Booking.com verweigert diese Seite).")
+                continue
             except DateiFehler as fehler:
                 self._abweichung(erg, f"{vorsilbe}{name}: abgebrochen ({fehler}).")
                 continue
@@ -713,9 +725,28 @@ class Booking(Quelle):
             finanzseite = False
         if finanzseite:
             return
-        if status == 403 and ist_extranet(seite.url):
+        if status == 403 and ist_extranet(seite.url) and not self._eingabefeld(seite):
+            if self._sperrseite(seite):  # z. B. „Access Denied“ des Netzwerkdienstes, kein Rechteproblem
+                raise DateiFehler("Booking.com hat die Seite gesperrt (403)")
             raise KeinFinanzZugriff()
-        raise BestaetigungNoetig()
+        raise BestaetigungNoetig()  # auch 403 mit Code- oder Passwortfeld: erneute Bestätigung
+
+    @staticmethod
+    def _sperrseite(seite) -> bool:
+        """Sperrseite eines Netzwerkdienstes statt einer Booking.com-Seite (Text nur durchsucht)?"""
+        try:
+            return bool(RE_SPERRSEITE.search(seite.inner_text("body", timeout=5000)))
+        except Exception:  # noqa: BLE001
+            return False
+
+    @staticmethod
+    def _eingabefeld(seite) -> bool:
+        """Fragt die Seite nach einem Code oder Passwort (Zwei-Faktor, neue Anmeldung)? Im Zweifel ja —
+        dann lieber „neu anmelden“ als „Recht Finance holen“."""
+        try:
+            return seite.locator(EINGABE_MERKMALE).count() > 0
+        except Exception:  # noqa: BLE001
+            return True
 
     def _finanzzugriff_pruefen(self, seite) -> None:
         """Nur aufgerufen, wenn Rechnungslinks und Jahresfilter fehlen: steckt fehlende
